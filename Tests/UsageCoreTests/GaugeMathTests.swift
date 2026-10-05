@@ -37,4 +37,33 @@ final class GaugeMathTests: XCTestCase {
         XCTAssertEqual(Double(remaining ?? 0), 1_873_000, accuracy: 5_000)
         XCTAssertNil(GaugeMath.remainingTokens(base: 3, windowTokens: 100, tokensSince: 0))
     }
+
+    func testReadingUsesOfficialBaseWhenPresent() {
+        let reading = GaugeMath.reading(officialBase: 40, windowTokens: 1_100_000,
+                                        tokensSince: 100_000, estimatedLimit: 500_000)
+        XCTAssertTrue(reading.isOfficial)
+        XCTAssertTrue(reading.isInterpolating)
+        XCTAssertEqual(reading.percent, 44, accuracy: 0.001)   // 1% = 25,000 tokens
+    }
+
+    func testReadingFallsBackToEstimatedLimit() {
+        let reading = GaugeMath.reading(officialBase: nil, windowTokens: 250_000,
+                                        tokensSince: 0, estimatedLimit: 500_000)
+        XCTAssertFalse(reading.isOfficial)
+        XCTAssertEqual(reading.percent, 50, accuracy: 0.001)
+        XCTAssertEqual(GaugeMath.reading(officialBase: nil, windowTokens: 10, tokensSince: 0,
+                                         estimatedLimit: 0).percent, 0)
+    }
+
+    func testImpliedLimit() {
+        XCTAssertEqual(GaugeMath.impliedLimit(base: 40, windowTokens: 1_100_000, tokensSince: 100_000), 2_500_000)
+        XCTAssertNil(GaugeMath.impliedLimit(base: 2, windowTokens: 1_000, tokensSince: 0))
+    }
+
+    func testMinutesUntilFull() {
+        XCTAssertEqual(GaugeMath.minutesUntilFull(remainingTokens: 600_000, burnRate: 10_000), 60)
+        XCTAssertNil(GaugeMath.minutesUntilFull(remainingTokens: 600_000, burnRate: 0))
+        XCTAssertNil(GaugeMath.minutesUntilFull(remainingTokens: 0, burnRate: 10_000))
+        XCTAssertNil(GaugeMath.minutesUntilFull(remainingTokens: nil, burnRate: 10_000))
+    }
 }

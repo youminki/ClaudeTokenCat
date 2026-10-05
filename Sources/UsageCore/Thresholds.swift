@@ -64,6 +64,14 @@ public struct Thresholds: Sendable {
 
     public enum Sensitivity: String, CaseIterable, Sendable {
         case low, normal, high
+        public var displayName: String {
+            switch self {
+            case .low: return "낮음"
+            case .normal: return "보통"
+            case .high: return "높음"
+            }
+        }
+
         var multiplier: Double {
             switch self {
             case .low: return 2.0

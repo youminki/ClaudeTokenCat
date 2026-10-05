@@ -1,5 +1,24 @@
 import Foundation
 
+/// 게이지 하나(세션 또는 주간)의 표시값.
+public struct GaugeReading: Equatable, Sendable {
+    public let percent: Double
+    /// 마지막 공식 조회값. nil이면 추정 한도로 계산한 값이다.
+    public let officialBase: Double?
+
+    public init(percent: Double, officialBase: Double?) {
+        self.percent = percent
+        self.officialBase = officialBase
+    }
+
+    public var isOfficial: Bool { officialBase != nil }
+
+    /// 공식 조회 이후 로컬 소모분이 얹혀 있는지.
+    public var isInterpolating: Bool {
+        officialBase.map { percent > $0 + 0.05 } ?? false
+    }
+}
+
 /// 보간 게이지 계산 (§F3 갱신 전략).
 ///
 /// 공식 %에 얹을 보간분을 플랜 추정 한도로 환산하면 안 된다 — JSONL 토큰은
@@ -36,5 +55,29 @@ public enum GaugeMath {
                                                 tokensSince: tokensSince) else { return nil }
         let pct = interpolated(base: base, windowTokens: windowTokens, tokensSince: tokensSince)
         return Int((100 - pct) * perPercent)
+    }
+
+    /// 공식 %가 있으면 보간값, 없으면 추정 한도 대비 비율. 엔진과 팝오버가 같은 값을 쓰도록 한곳에서 계산한다.
+    public static func reading(officialBase: Double?, windowTokens: Int, tokensSince: Int,
+                               estimatedLimit: Int) -> GaugeReading {
+        if let base = officialBase {
+            return GaugeReading(percent: interpolated(base: base, windowTokens: windowTokens,
+                                                      tokensSince: tokensSince),
+                                officialBase: base)
+        }
+        let percent = estimatedLimit > 0 ? Double(windowTokens) / Double(estimatedLimit) * 100 : 0
+        return GaugeReading(percent: percent, officialBase: nil)
+    }
+
+    /// 공식 %로 역산한 창 전체 한도(로컬 토큰 단위). 추정 모드 자동 보정에 쓴다.
+    public static func impliedLimit(base: Double, windowTokens: Int, tokensSince: Int) -> Int? {
+        tokensPerPercent(base: base, windowTokens: windowTokens, tokensSince: tokensSince)
+            .map { Int($0 * 100) }
+    }
+
+    /// 현재 속도로 남은 토큰을 다 쓰는 데 걸리는 분. 속도가 없거나 남은 양이 없으면 nil.
+    public static func minutesUntilFull(remainingTokens: Int?, burnRate: Double) -> Int? {
+        guard let remaining = remainingTokens, remaining > 0, burnRate >= 1 else { return nil }
+        return Int(Double(remaining) / burnRate)
     }
 }

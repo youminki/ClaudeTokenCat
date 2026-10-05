@@ -19,4 +19,12 @@ public enum WeeklyWindow {
     public static func rollingStart(now: Date = Date()) -> Date {
         now.addingTimeInterval(-7 * 24 * 60 * 60)
     }
+
+    /// 알려진 리셋 시각(공식 응답)을 7일 단위로 굴려 `now` 이후 첫 리셋을 구한다.
+    /// 공식 조회가 끊겨도 주간 창을 공식 창과 맞춰 두기 위해 쓴다.
+    public static func nextReset(from knownReset: Date, now: Date = Date()) -> Date {
+        let week: TimeInterval = 7 * 24 * 60 * 60
+        let weeksPassed = (now.timeIntervalSince(knownReset) / week).rounded(.down)
+        return knownReset.addingTimeInterval((weeksPassed + 1) * week)
+    }
 }
