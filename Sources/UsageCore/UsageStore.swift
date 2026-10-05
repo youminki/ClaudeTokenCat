@@ -35,8 +35,12 @@ public final class UsageStore {
     private var events: [UsageEvent] = []
     private var seenKeys: Set<String> = []
     private var sorted = true
+    /// 이보다 오래된 이벤트는 스냅샷 때 버린다. 장기 실행 시 메모리·틱 비용이 계속 늘지 않게.
+    private let retention: TimeInterval
 
-    public init() {}
+    public init(retention: TimeInterval = 8 * 24 * 60 * 60) {
+        self.retention = retention
+    }
 
     /// 이벤트 추가. dedupKey 기준 최초 1회만 반영. 추가된 건수 반환.
     @discardableResult
@@ -68,6 +72,7 @@ public final class UsageStore {
                 events.sort { $0.timestamp < $1.timestamp }
                 sorted = true
             }
+            pruneEvents(before: now.addingTimeInterval(-retention))
             let dayStart = calendar.startOfDay(for: now)
             let weekStart = weeklySince ?? WeeklyWindow.rollingStart(now: now)
             let sparkStart = now.addingTimeInterval(-Double(Self.sparklineMinutes) * 60)
@@ -83,14 +88,15 @@ public final class UsageStore {
 
             for event in events where event.timestamp <= now {
                 let tokens = event.totalTokens
+                let cost = PricingTable.cost(of: event)
                 if event.timestamp >= dayStart {
                     todayTokens += tokens
-                    todayCost += PricingTable.cost(of: event)
+                    todayCost += cost
                     if event.isProgrammatic { todayProgrammatic += tokens }
                 }
                 let eventDay = calendar.startOfDay(for: event.timestamp)
                 daily[eventDay, default: (0, 0)].tokens += tokens
-                daily[eventDay]!.cost += PricingTable.cost(of: event)
+                daily[eventDay]!.cost += cost
                 if event.timestamp > now.addingTimeInterval(-60) {
                     last60s += tokens
                 }
@@ -124,4 +130,15 @@ public final class UsageStore {
         }
     }
 
+    /// 정렬된 상태에서 호출. queue 안에서만 사용.
+    private func pruneEvents(before cutoff: Date) {
+        guard let keep = events.firstIndex(where: { $0.timestamp >= cutoff }) else {
+            events.removeAll()
+            seenKeys.removeAll()
+            return
+        }
+        guard keep > 0 else { return }
+        for event in events[..<keep] { seenKeys.remove(event.dedupKey) }
+        events.removeFirst(keep)
+    }
 }

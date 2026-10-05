@@ -142,4 +142,15 @@ final class UsageStoreTests: XCTestCase {
         XCTAssertEqual(PricingTable.cost(of: e), 4.2, accuracy: 0.001)
     }
 
+    func testPrunesEventsOlderThanRetention() {
+        let store = UsageStore(retention: 24 * 60 * 60)
+        let now = Date()
+        store.add([
+            event(minutesAgo: 60, tokens: 100, id: "keep", now: now),
+            event(minutesAgo: 2 * 24 * 60, tokens: 999, id: "drop", now: now),
+        ])
+        let snap = store.snapshot(now: now)
+        XCTAssertEqual(snap.totalEventCount, 1)
+        XCTAssertEqual(snap.dailyTotals.map(\.tokens).reduce(0, +), 100)
+    }
 }
