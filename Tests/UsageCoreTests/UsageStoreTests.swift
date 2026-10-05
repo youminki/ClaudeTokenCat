@@ -153,4 +153,17 @@ final class UsageStoreTests: XCTestCase {
         XCTAssertEqual(snap.totalEventCount, 1)
         XCTAssertEqual(snap.dailyTotals.map(\.tokens).reduce(0, +), 100)
     }
+
+    func testLatestClientVersionComesFromNewestEvent() {
+        let store = UsageStore()
+        let now = Date()
+        func versioned(_ minutesAgo: Double, _ id: String, _ version: String?) -> UsageEvent {
+            UsageEvent(timestamp: now.addingTimeInterval(-minutesAgo * 60), model: "claude-sonnet-5",
+                       requestId: "req_\(id)", messageId: "msg_\(id)", inputTokens: 1, outputTokens: 0,
+                       cacheCreationTokens: 0, cacheReadTokens: 0, clientVersion: version)
+        }
+        // 늦게 읽힌 옛 기록이 최신 버전을 덮지 않아야 한다
+        store.add([versioned(1, "new", "2.1.285"), versioned(2, "nil", nil), versioned(30, "old", "2.1.200")])
+        XCTAssertEqual(store.snapshot(now: now).latestClientVersion, "2.1.285")
+    }
 }

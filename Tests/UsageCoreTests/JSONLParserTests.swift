@@ -79,4 +79,19 @@ final class JSONLParserTests: XCTestCase {
         let event = try XCTUnwrap(JSONLParser.parse(line: line))
         XCTAssertEqual(event.totalTokens, 42)
     }
+
+    func testParsesClientVersion() throws {
+        let line = Self.validLine.replacingOccurrences(of: #""entrypoint":"cli","#,
+                                                       with: #""entrypoint":"cli","version":"2.1.283","#)
+        XCTAssertEqual(try XCTUnwrap(JSONLParser.parse(line: line)).clientVersion, "2.1.283")
+        XCTAssertNil(try XCTUnwrap(JSONLParser.parse(line: Self.validLine)).clientVersion)
+    }
+
+    func testNonStringVersionKeepsUsage() throws {
+        let line = Self.validLine.replacingOccurrences(of: #""entrypoint":"cli","#,
+                                                       with: #""entrypoint":"cli","version":2,"#)
+        let event = try XCTUnwrap(JSONLParser.parse(line: line))
+        XCTAssertNil(event.clientVersion)
+        XCTAssertEqual(event.inputTokens, 12804)
+    }
 }

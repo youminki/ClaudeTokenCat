@@ -23,6 +23,8 @@ public final class UsageStore {
         public let todayProgrammaticTokens: Int
         /// 일별 합계 (최신 날짜부터). 일별 상세 시트용.
         public let dailyTotals: [DailyTotal]
+        /// 가장 최근 기록의 Claude Code 버전.
+        public let latestClientVersion: String?
     }
 
     public struct DailyTotal: Equatable, Sendable {
@@ -125,7 +127,8 @@ public final class UsageStore {
                 todayProgrammaticTokens: todayProgrammatic,
                 dailyTotals: daily
                     .map { DailyTotal(dayStart: $0.key, tokens: $0.value.tokens, costUSD: $0.value.cost) }
-                    .sorted { $0.dayStart > $1.dayStart }
+                    .sorted { $0.dayStart > $1.dayStart },
+                latestClientVersion: events.last { $0.clientVersion != nil }?.clientVersion
             )
         }
     }

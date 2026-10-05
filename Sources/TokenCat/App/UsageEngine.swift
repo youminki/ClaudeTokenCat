@@ -55,6 +55,7 @@ final class UsageEngine: ObservableObject {
 
     // 이하 상태는 workQueue 전용
     private var pollInterval: TimeInterval = 3
+    private var clientVersion: String?
     private var alertTracker = LimitAlertTracker()
     private var lastBlockStart: Date?
     private var lastTickAt: Date?
@@ -170,6 +171,7 @@ final class UsageEngine: ObservableObject {
 
         store.add(watcher.scan(now: now))
         let snap = store.snapshot(now: now, weeklySince: weeklyStart)
+        if let version = snap.latestClientVersion { clientVersion = version }
         let rate = meter.update(tokensInLastMinute: snap.tokensLast60s)
         let idle = snap.lastEventDate.map { now.timeIntervalSince($0) } ?? .infinity
         let state = Thresholds.preset(sensitivity: main.sensitivity)
@@ -299,11 +301,12 @@ final class UsageEngine: ObservableObject {
         lastOfficialAttempt = now
         officialInFlight = true
 
+        let version = clientVersion
         Task { [weak self] in
             guard let self else { return }
             let result: Result<OfficialUsage, Error>
             do {
-                result = .success(try await self.provider.fetch())
+                result = .success(try await self.provider.fetch(clientVersion: version))
             } catch {
                 result = .failure(error)
             }

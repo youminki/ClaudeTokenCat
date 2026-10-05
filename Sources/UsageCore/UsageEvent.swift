@@ -12,6 +12,8 @@ public struct UsageEvent: Equatable, Sendable {
     public let cacheReadTokens: Int
     /// 레코드 최상위 entrypoint (실측: "cli", "claude-desktop"). 프로그래매틱 구분용.
     public let entrypoint: String?
+    /// 기록한 Claude Code 버전 (실측: "2.1.283"). 공식 조회 User-Agent에 쓴다.
+    public let clientVersion: String?
 
     /// 프로그래매틱 사용 추정 (Agent SDK 등 — 2026-06-15부터 별도 크레딧 풀).
     /// 실측 데이터에 SDK 레코드가 없어 "sdk" 포함 여부로 관용 판별 (docs/jsonl-schema.md).
@@ -30,7 +32,7 @@ public struct UsageEvent: Equatable, Sendable {
     public init(timestamp: Date, model: String, requestId: String, messageId: String,
                 inputTokens: Int, outputTokens: Int,
                 cacheCreationTokens: Int, cacheReadTokens: Int,
-                entrypoint: String? = nil) {
+                entrypoint: String? = nil, clientVersion: String? = nil) {
         self.timestamp = timestamp
         self.model = model
         self.requestId = requestId
@@ -40,5 +42,6 @@ public struct UsageEvent: Equatable, Sendable {
         self.cacheCreationTokens = cacheCreationTokens
         self.cacheReadTokens = cacheReadTokens
         self.entrypoint = entrypoint
+        self.clientVersion = clientVersion
     }
 }

@@ -38,7 +38,8 @@ public final class OAuthUsageProvider {
 
     static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
     /// User-Agent 필수 — 없으면 공격적 레이트리밋 버킷(429 지속). docs/usage-endpoint.md.
-    static let userAgent = "claude-code/2.1.207"
+    /// JSONL에서 설치된 Claude Code 버전을 알기 전까지 쓰는 값.
+    static let fallbackClientVersion = "2.1.283"
 
     /// expiresAt이 없을 때의 보수적 토큰 수명 (~60분 만료 가정).
     static let defaultTokenLifetime: TimeInterval = 55 * 60
@@ -57,22 +58,35 @@ public final class OAuthUsageProvider {
 
     public init() {}
 
-    public func fetch() async throws -> OfficialUsage {
+    /// - clientVersion: JSONL에 기록된 Claude Code 버전. User-Agent에 넣는다.
+    public func fetch(clientVersion: String? = nil) async throws -> OfficialUsage {
+        let userAgent = Self.userAgent(clientVersion: clientVersion)
         do {
-            return try await fetchOnce()
+            return try await fetchOnce(userAgent: userAgent)
         } catch ProviderError.http(401) {
             // 토큰 만료/회전 — 캐시 무효화 후 새로 읽어 1회 재시도
             invalidateCachedToken()
-            return try await fetchOnce()
+            return try await fetchOnce(userAgent: userAgent)
         }
     }
 
-    private func fetchOnce() async throws -> OfficialUsage {
+    /// 버전 문자열은 로그 파일에서 온 값이라 숫자와 점으로만 된 경우에만 헤더에 넣는다.
+    static func userAgent(clientVersion: String?) -> String {
+        let valid = clientVersion.flatMap { version -> String? in
+            guard !version.isEmpty, version.count <= 20,
+                  version.allSatisfy({ $0.isASCII && ($0.isNumber || $0 == ".") })
+            else { return nil }
+            return version
+        }
+        return "claude-code/\(valid ?? fallbackClientVersion)"
+    }
+
+    private func fetchOnce(userAgent: String) async throws -> OfficialUsage {
         guard let token = await accessToken() else { throw ProviderError.tokenNotFound }
         var request = URLRequest(url: Self.endpoint)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
-        request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 30
 

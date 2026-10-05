@@ -75,4 +75,13 @@ final class OAuthUsageProviderTests: XCTestCase {
         XCTAssertNil(OAuthUsageProvider.parseCredentials(Data(#"{"claudeAiOauth":{"accessToken":""}}"#.utf8)))
         XCTAssertNil(OAuthUsageProvider.parseCredentials(Data("garbage".utf8)))
     }
+
+    func testUserAgentUsesClientVersion() {
+        XCTAssertEqual(OAuthUsageProvider.userAgent(clientVersion: "2.1.285"), "claude-code/2.1.285")
+        let fallback = "claude-code/\(OAuthUsageProvider.fallbackClientVersion)"
+        XCTAssertEqual(OAuthUsageProvider.userAgent(clientVersion: nil), fallback)
+        // 로그에서 온 값이라 숫자와 점이 아니면 헤더에 넣지 않는다
+        XCTAssertEqual(OAuthUsageProvider.userAgent(clientVersion: "2.1\r\nX-Evil: 1"), fallback)
+        XCTAssertEqual(OAuthUsageProvider.userAgent(clientVersion: ""), fallback)
+    }
 }

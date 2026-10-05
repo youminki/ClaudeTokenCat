@@ -25,7 +25,7 @@ if CommandLine.arguments.contains("--report") {
     let semaphore = DispatchSemaphore(value: 0)
     Task {
         do {
-            let usage = try await OAuthUsageProvider().fetch()
+            let usage = try await OAuthUsageProvider().fetch(clientVersion: snap.latestClientVersion)
             print("official: session \(usage.sessionPercent.map { "\($0)%" } ?? "-")"
                 + " (resets \(usage.sessionResetsAt.map { ISO8601DateFormatter().string(from: $0) } ?? "-"))"
                 + ", weekly \(usage.weeklyPercent.map { "\($0)%" } ?? "-")")
