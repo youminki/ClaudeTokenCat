@@ -47,6 +47,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] label in self?.applyStatusLabel(label) }
             .store(in: &cancellables)
 
+        // 잠자기 동안 공식 값이 유예 시간을 넘겼을 수 있다. 네트워크가 붙을 틈을 두고 다시 읽는다.
+        NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)
+            .delay(for: .seconds(5), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in self?.engine.refreshNow(forceOfficial: true) }
+            .store(in: &cancellables)
+
         // 러너 색상 변경 → 프레임 다시 그리기
         engine.settings.$spriteTheme
             .dropFirst()
