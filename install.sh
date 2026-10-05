@@ -29,6 +29,8 @@ if [ ! -w "$TARGET" ]; then
   mkdir -p "$TARGET"
 fi
 pkill -x TokenCat 2>/dev/null || true
+# 종료가 끝나기 전에 open하면 LaunchServices가 -600으로 실행을 거부한다
+for _ in $(seq 1 50); do pgrep -x TokenCat > /dev/null || break; sleep 0.1; done
 rm -rf "$TARGET/TokenCat.app"
 cp -R dist/TokenCat.app "$TARGET/"
 
