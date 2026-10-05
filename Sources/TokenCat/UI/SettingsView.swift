@@ -103,11 +103,12 @@ struct SettingsView: View {
             }
 
             Section("러너") {
-                Picker("색상 테마", selection: $settings.spriteTheme) {
+                RunnerPicker(selection: $settings.runner, theme: settings.spriteTheme)
+                Picker("색상", selection: $settings.spriteTheme) {
                     ForEach(SpriteTheme.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                Picker("고양이 옆 사용률", selection: $settings.menuBarLabel) {
+                Picker("메뉴바 사용률", selection: $settings.menuBarLabel) {
                     ForEach(MenuBarLabel.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.segmented)
@@ -115,7 +116,7 @@ struct SettingsView: View {
                     ForEach(Thresholds.Sensitivity.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                Text("민감도가 높을수록 적은 토큰에도 고양이가 빨리 뜁니다. 사용률 앞의 ~는 추정값입니다.")
+                Text("민감도가 높을수록 적은 사용량에도 빨리 달립니다. 메뉴바 사용률 앞의 ~는 추정값입니다.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
