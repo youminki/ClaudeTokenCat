@@ -36,7 +36,7 @@
 | 집계 정확도 | 검증 도구 `ccusage blocks`와 동시점 대조 **오차 0.00%** (샌드위치 검증: 측정→대조→측정)        |
 | 공식 게이지 | 비문서화 OAuth usage 엔드포인트 실측 연동 — Claude Code `/usage`와 동일 값                     |
 | 성능        | 유휴 CPU **0.1~0.2%** (예산 0.5%), 메모리 **12MB** (예산 50MB) — 격리 환경 실측                |
-| 품질        | 단위 테스트 **53개** (파서·중복제거·블록·보간·알림 정책·캘리브레이션)                          |
+| 품질        | 단위 테스트 **60개** (파서·중복제거·블록·보간·알림 정책·캘리브레이션)                          |
 | 데이터 검증 | 실물 JSONL 1,432건 분석 → **중복 기록(최대 6줄) 발견**, 중복제거 미적용 시 2.9배 과대집계 확인 |
 | 배포        | `git clone` + `./install.sh` 3줄 설치 (로컬 빌드 → Gatekeeper 차단 없음), MIT 오픈소스         |
 
@@ -151,7 +151,7 @@ SPM. 테스트 가능한 코어(`UsageCore` 라이브러리)와 앱 계층 분�
 
 ```
 TokenCat/
-├── Sources/UsageCore/          # 순수 로직 — 단위 테스트 53개의 대상
+├── Sources/UsageCore/          # 순수 로직 — 단위 테스트 60개의 대상
 │   ├── JSONLWatcher.swift      #   ~/.claude/projects 재귀 감시, 파일별 오프셋 증분 파싱
 │   ├── JSONLParser.swift       #   스키마-관용 파싱, <synthetic> 스킵
 │   ├── UsageStore.swift        #   중복제거(message.id+requestId) + 집계(오늘/주간/모델/스파크라인)
