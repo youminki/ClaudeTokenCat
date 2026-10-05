@@ -125,13 +125,21 @@ final class UsageStoreTests: XCTestCase {
     func testCostUsesPricingTable() {
         let store = UsageStore()
         let now = Date()
-        // sonnet: input $3/MTok → 1M input = $3
+        // sonnet 5: input $2/MTok → 1M input = $2
         let e = UsageEvent(timestamp: now.addingTimeInterval(-60), model: "claude-sonnet-5",
                            requestId: "r", messageId: "m",
                            inputTokens: 1_000_000, outputTokens: 0,
                            cacheCreationTokens: 0, cacheReadTokens: 0)
         store.add([e])
-        XCTAssertEqual(store.snapshot(now: now).todayCostUSD, 3.0, accuracy: 0.001)
+        XCTAssertEqual(store.snapshot(now: now).todayCostUSD, 2.0, accuracy: 0.001)
+    }
+
+    func testOpus55PricingIsNotZero() {
+        let e = UsageEvent(timestamp: Date(), model: "claude-opus-5-5",
+                           requestId: "r", messageId: "m",
+                           inputTokens: 1_000_000, outputTokens: 0,
+                           cacheCreationTokens: 0, cacheReadTokens: 1_000_000)
+        XCTAssertEqual(PricingTable.cost(of: e), 4.2, accuracy: 0.001)
     }
 
 }
