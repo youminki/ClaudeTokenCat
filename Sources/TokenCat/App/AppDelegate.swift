@@ -26,6 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         animator.appearanceProvider = { [weak self] in
             self?.statusItem.button?.effectiveAppearance
         }
+        animator.runnerProvider = { [weak self] in
+            self?.engine.settings.runner ?? .cat
+        }
         animator.themeProvider = { [weak self] in
             self?.engine.settings.spriteTheme ?? .auto
         }
@@ -53,9 +56,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] _ in self?.engine.refreshNow(forceOfficial: true) }
             .store(in: &cancellables)
 
-        // 러너 색상 변경 → 프레임 다시 그리기
-        engine.settings.$spriteTheme
-            .dropFirst()
+        // 러너·색상 변경 → 프레임 다시 그리기
+        engine.settings.$spriteTheme.dropFirst().map { _ in }
+            .merge(with: engine.settings.$runner.dropFirst().map { _ in })
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.animator.reloadFrames() }
             .store(in: &cancellables)

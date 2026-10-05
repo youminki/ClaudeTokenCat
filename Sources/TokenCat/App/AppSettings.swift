@@ -14,7 +14,7 @@ final class AppSettings: ObservableObject {
         case autoSessionLimit, autoWeeklyLimit
         case weeklyResetEnabled, weeklyResetWeekday, weeklyResetHour
         case sensitivity, pollInterval, limitAlertsEnabled, newSessionAlertEnabled, spriteTheme
-        case menuBarLabel
+        case menuBarLabel, runner
     }
 
     /// 추정 한도가 어디서 왔는지 (설정 화면 표시용).
@@ -65,7 +65,8 @@ final class AppSettings: ObservableObject {
     /// 5시간 블록 리셋 알림 (§F4 — 기본 off).
     @Published var newSessionAlertEnabled: Bool { didSet { save(newSessionAlertEnabled, .newSessionAlertEnabled) } }
 
-    /// 러너 색상 테마 (v1.1 — 고양이 1종 + 색상 3종, 코드 생성 스프라이트에만 적용).
+    /// 메뉴바 러너 종류와 색상 (색은 코드로 그린 러너에만 적용).
+    @Published var runner: Runner { didSet { save(runner.rawValue, .runner) } }
     @Published var spriteTheme: SpriteTheme { didSet { save(spriteTheme.rawValue, .spriteTheme) } }
 
     /// 메뉴바 고양이 옆에 띄울 사용률 (기본 끔).
@@ -101,6 +102,7 @@ final class AppSettings: ObservableObject {
         pollInterval = poll > 0 ? poll : 3.0
         limitAlertsEnabled = bool(.limitAlertsEnabled, true)
         newSessionAlertEnabled = bool(.newSessionAlertEnabled, false)
+        runner = Runner(rawValue: string(.runner)) ?? .cat
         spriteTheme = SpriteTheme(rawValue: string(.spriteTheme)) ?? .auto
         menuBarLabel = MenuBarLabel(rawValue: string(.menuBarLabel)) ?? .off
         launchAtLogin = LaunchAtLogin.isEnabled

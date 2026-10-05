@@ -204,12 +204,22 @@ struct PopoverView: View {
 
     private var buttonColumn: some View {
         VStack(spacing: 8) {
-            Button {
-                settings.spriteTheme = settings.spriteTheme.next   // 🐾 색상 3종 순환
+            Menu {
+                Picker("러너", selection: $settings.runner) {
+                    ForEach(Runner.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                }
+                .pickerStyle(.inline)
+                Picker("색상", selection: $settings.spriteTheme) {
+                    ForEach(SpriteTheme.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                }
+                .pickerStyle(.inline)
             } label: {
-                Label("러너 색상: \(settings.spriteTheme.displayName)", systemImage: "pawprint")
+                Label("러너", systemImage: "pawprint")
             }
-            .help("러너 색상 바꾸기 (지금: \(settings.spriteTheme.displayName))")
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("러너·색상 바꾸기 (지금: \(settings.runner.displayName), \(settings.spriteTheme.displayName))")
             Button(action: openDailyDetail) {
                 Label("일별 상세", systemImage: "chart.bar")
             }

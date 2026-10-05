@@ -8,7 +8,8 @@ final class SpriteAnimator {
     var onFrame: ((NSImage) -> Void)?
     /// 래스터라이즈에 사용할 appearance 공급자 (상태바 버튼의 effectiveAppearance).
     var appearanceProvider: () -> NSAppearance? = { nil }
-    /// 러너 색상 테마 공급자 (설정).
+    /// 러너 종류·색상 공급자 (설정).
+    var runnerProvider: () -> Runner = { .cat }
     var themeProvider: () -> SpriteTheme = { .auto }
 
     private var timer: Timer?
@@ -36,7 +37,7 @@ final class SpriteAnimator {
         DispatchQueue.main.async { [self] in reloadFrames() }
     }
 
-    /// 캐시를 비우고 현재 표시 상태의 프레임을 다시 만든다 (macOS 테마·러너 색상 변경 시).
+    /// 캐시를 비우고 현재 표시 상태의 프레임을 다시 만든다 (macOS 테마·러너·색상 변경 시).
     func reloadFrames() {
         rasterCache.removeAll()
         guard let current = display else { return }
@@ -45,10 +46,11 @@ final class SpriteAnimator {
 
     private func rasterizedFrames(for display: SpriteDisplay) -> [NSImage] {
         let appearance = appearanceProvider()
+        let runner = runnerProvider()
         let theme = themeProvider()
-        let cacheKey = "\(display.key)|\(theme.rawValue)|\(appearance?.name.rawValue ?? "default")"
+        let cacheKey = "\(display.key)|\(runner.rawValue)|\(theme.rawValue)|\(appearance?.name.rawValue ?? "default")"
         if let cached = rasterCache[cacheKey] { return cached }
-        let rasterized = SpriteFrames.frames(for: display, theme: theme).map {
+        let rasterized = SpriteFrames.frames(for: display, runner: runner, theme: theme).map {
             SpriteRasterizer.rasterize($0, size: SpriteFrames.spriteSize, appearance: appearance)
         }
         rasterCache[cacheKey] = rasterized
