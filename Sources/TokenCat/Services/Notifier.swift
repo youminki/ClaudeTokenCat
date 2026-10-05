@@ -10,15 +10,12 @@ final class Notifier {
     /// 번들 앱(.app)으로 실행 중일 때만 사용 가능.
     let available = Bundle.main.bundleIdentifier != nil
 
-    private var authorized = false
-
     private init() {}
 
     func requestAuthorization() {
         guard available else { return }
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
-            self.authorized = granted
-        }
+        // 거부돼도 send는 그대로 둔다. 시스템이 표시하지 않을 뿐이다.
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
     func send(title: String, body: String) {
