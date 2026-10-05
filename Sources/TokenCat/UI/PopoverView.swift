@@ -9,6 +9,8 @@ struct PopoverView: View {
     var openSettings: () -> Void = {}
     var openDailyDetail: () -> Void = {}
 
+    @StateObject private var sparklineHover = HoverIndex()
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             infoCard
@@ -133,9 +135,14 @@ struct PopoverView: View {
                 Text("\(Int(engine.burnRate).formatted()) tok/min")
                     .font(.system(size: 12, weight: .bold)).monospacedDigit()
             }
-            Sparkline(values: sparkline)
+            Sparkline(values: sparkline, hoverIndex: $sparklineHover.index)
             HStack {
-                captionRow("상태: \(engine.catState.label) \(engine.catState.emoji) · 최근 30분")
+                if let i = sparklineHover.index, sparkline.indices.contains(i) {
+                    let minutesAgo = sparkline.count - 1 - i
+                    captionRow("\(minutesAgo == 0 ? "지금" : "\(minutesAgo)분 전") · \(Format.tokens(sparkline[i]))/분")
+                } else {
+                    captionRow("상태: \(engine.catState.label) \(engine.catState.emoji) · 최근 30분")
+                }
                 Spacer()
                 if let peak = sparkline.max(), peak > 0 {
                     captionRow("최고 \(Format.tokens(peak))/분")
@@ -271,4 +278,9 @@ struct PopoverView: View {
             .font(.system(size: 10, weight: emphasized ? .semibold : .regular))
             .foregroundStyle(emphasized ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
     }
+}
+
+/// 스파크라인에서 마우스가 가리키는 분. `@State`를 못 쓰는 이유는 CalibrationForm 참고.
+final class HoverIndex: ObservableObject {
+    @Published var index: Int?
 }
