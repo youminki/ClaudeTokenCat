@@ -31,6 +31,8 @@ public final class UsageStore {
         public let dayStart: Date
         public let tokens: Int
         public let costUSD: Double
+        /// 모델별 토큰 (일별 상세의 모델 구성 막대용).
+        public let modelTokens: [String: Int]
     }
 
     private let queue = DispatchQueue(label: "tokencat.usagestore")
@@ -86,7 +88,7 @@ public final class UsageStore {
             var weeklyTokens = 0
             var weeklyModelTokens: [String: Int] = [:]
             var sparkline = [Int](repeating: 0, count: Self.sparklineMinutes)
-            var daily: [Date: (tokens: Int, cost: Double)] = [:]
+            var daily: [Date: (tokens: Int, cost: Double, models: [String: Int])] = [:]
 
             for event in events where event.timestamp <= now {
                 let tokens = event.totalTokens
@@ -97,8 +99,9 @@ public final class UsageStore {
                     if event.isProgrammatic { todayProgrammatic += tokens }
                 }
                 let eventDay = calendar.startOfDay(for: event.timestamp)
-                daily[eventDay, default: (0, 0)].tokens += tokens
+                daily[eventDay, default: (0, 0, [:])].tokens += tokens
                 daily[eventDay]!.cost += cost
+                daily[eventDay]!.models[event.model, default: 0] += tokens
                 if event.timestamp > now.addingTimeInterval(-60) {
                     last60s += tokens
                 }
@@ -126,7 +129,8 @@ public final class UsageStore {
                 sparkline: sparkline,
                 todayProgrammaticTokens: todayProgrammatic,
                 dailyTotals: daily
-                    .map { DailyTotal(dayStart: $0.key, tokens: $0.value.tokens, costUSD: $0.value.cost) }
+                    .map { DailyTotal(dayStart: $0.key, tokens: $0.value.tokens, costUSD: $0.value.cost,
+                                      modelTokens: $0.value.models) }
                     .sorted { $0.dayStart > $1.dayStart },
                 latestClientVersion: events.last { $0.clientVersion != nil }?.clientVersion
             )

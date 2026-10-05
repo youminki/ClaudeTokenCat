@@ -154,6 +154,20 @@ final class UsageStoreTests: XCTestCase {
         XCTAssertEqual(snap.dailyTotals.map(\.tokens).reduce(0, +), 100)
     }
 
+    func testDailyTotalsSplitByModel() {
+        let store = UsageStore()
+        let now = Date()
+        store.add([
+            event(minutesAgo: 1, tokens: 300, id: "s", now: now),
+            UsageEvent(timestamp: now.addingTimeInterval(-120), model: "claude-opus-5-5",
+                       requestId: "req_o", messageId: "msg_o", inputTokens: 700, outputTokens: 0,
+                       cacheCreationTokens: 0, cacheReadTokens: 0),
+        ])
+        let today = store.snapshot(now: now).dailyTotals[0]
+        XCTAssertEqual(today.modelTokens, ["claude-sonnet-5": 300, "claude-opus-5-5": 700])
+        XCTAssertEqual(today.tokens, 1000)
+    }
+
     func testLatestClientVersionComesFromNewestEvent() {
         let store = UsageStore()
         let now = Date()
