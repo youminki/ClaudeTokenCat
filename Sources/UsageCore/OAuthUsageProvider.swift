@@ -50,8 +50,10 @@ public final class OAuthUsageProvider {
         let expiresAt: Date
     }
 
+    /// 키체인 프롬프트가 떠 있으면 `security`는 사용자가 답할 때까지 끝나지 않는다.
+    /// 그동안 Swift 동시성 스레드를 붙잡지 않도록 자격증명은 이 큐에서만 읽고, 캐시도 이 큐에서만 만진다.
+    private let credentialQueue = DispatchQueue(label: "tokencat.credentials")
     private var cachedToken: CachedToken?
-    private let tokenLock = NSLock()
 
     public init() {}
 
@@ -66,7 +68,7 @@ public final class OAuthUsageProvider {
     }
 
     private func fetchOnce() async throws -> OfficialUsage {
-        guard let token = accessToken() else { throw ProviderError.tokenNotFound }
+        guard let token = await accessToken() else { throw ProviderError.tokenNotFound }
         var request = URLRequest(url: Self.endpoint)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
@@ -83,9 +85,16 @@ public final class OAuthUsageProvider {
 
     // MARK: - 토큰 캐시
 
-    private func accessToken(now: Date = Date()) -> String? {
-        tokenLock.lock()
-        defer { tokenLock.unlock() }
+    private func accessToken() async -> String? {
+        await withCheckedContinuation { continuation in
+            credentialQueue.async {
+                continuation.resume(returning: self.loadAccessToken(now: Date()))
+            }
+        }
+    }
+
+    /// credentialQueue 전용.
+    private func loadAccessToken(now: Date) -> String? {
         if let cached = cachedToken, now < cached.expiresAt.addingTimeInterval(-Self.expiryMargin) {
             return cached.token
         }
@@ -96,10 +105,9 @@ public final class OAuthUsageProvider {
         return parsed.token
     }
 
+    /// 직렬 큐라 뒤이어 들어오는 accessToken()보다 먼저 처리된다.
     private func invalidateCachedToken() {
-        tokenLock.lock()
-        cachedToken = nil
-        tokenLock.unlock()
+        credentialQueue.async { self.cachedToken = nil }
     }
 
     // MARK: - 응답 파싱 (스키마-관용적: 필드 누락 시 nil, 둘 다 없으면 실패)
@@ -188,3 +196,6 @@ public final class OAuthUsageProvider {
         return Data(text.utf8)
     }
 }
+
+/// 가변 상태(cachedToken)는 credentialQueue에서만 만진다.
+extension OAuthUsageProvider: @unchecked Sendable {}
