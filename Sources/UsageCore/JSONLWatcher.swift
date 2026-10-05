@@ -12,11 +12,7 @@ public final class JSONLWatcher {
     private let fileManager = FileManager.default
 
     public init(rootDirectory: URL? = nil) {
-        // CLAUDE_CONFIG_DIR은 Claude Code 자체 관례 (credentials 로드와 동일 규칙)
-        let configDir = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"]
-            .map { URL(fileURLWithPath: $0) }
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
-        self.rootDirectory = rootDirectory ?? configDir.appendingPathComponent("projects")
+        self.rootDirectory = rootDirectory ?? ClaudePaths.configDirectory.appendingPathComponent("projects")
     }
 
     /// 1회 스캔: 새로 추가된 줄에서 파싱된 이벤트를 반환. (중복 제거는 UsageStore 담당)

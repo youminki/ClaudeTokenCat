@@ -27,18 +27,6 @@ public enum JSONLParser {
 
     private static let decoder = JSONDecoder()
 
-    private static let isoFormatter: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
-
-    private static let isoFormatterNoFraction: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f
-    }()
-
     public static func parse(line: Data) -> UsageEvent? {
         guard let record = try? decoder.decode(Record.self, from: line) else { return nil }
         guard record.type == "assistant",
@@ -48,8 +36,7 @@ public enum JSONLParser {
               let messageId = message.id,
               let requestId = record.requestId,
               let timestampString = record.timestamp,
-              let timestamp = isoFormatter.date(from: timestampString)
-                ?? isoFormatterNoFraction.date(from: timestampString)
+              let timestamp = ISODate.parse(timestampString)
         else { return nil }
 
         return UsageEvent(

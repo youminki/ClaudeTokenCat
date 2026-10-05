@@ -104,31 +104,8 @@ public final class OAuthUsageProvider {
 
     // MARK: - 응답 파싱 (스키마-관용적: 필드 누락 시 nil, 둘 다 없으면 실패)
 
-    static let isoFormatter: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
-
-    static let isoFormatterNoFraction: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f
-    }()
-
-    /// 실측 응답은 마이크로초 6자리("…00.300459+00:00") — ISO8601DateFormatter가 못 읽는 경우 대비.
-    static let microsecondsFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXXXX"
-        return f
-    }()
-
     private static func date(_ any: Any?) -> Date? {
-        guard let s = any as? String else { return nil }
-        return isoFormatter.date(from: s)
-            ?? isoFormatterNoFraction.date(from: s)
-            ?? microsecondsFormatter.date(from: s)
+        (any as? String).flatMap(ISODate.parse)
     }
 
     private static func percent(_ any: Any?) -> Double? {
@@ -179,10 +156,7 @@ public final class OAuthUsageProvider {
     }
 
     static func fileCredentials() -> Data? {
-        let configDir = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"]
-            .map { URL(fileURLWithPath: $0) }
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
-        return try? Data(contentsOf: configDir.appendingPathComponent(".credentials.json"))
+        try? Data(contentsOf: ClaudePaths.configDirectory.appendingPathComponent(".credentials.json"))
     }
 
     /// `/usr/bin/security find-generic-password -s "Claude Code-credentials" -a $USER -w`
