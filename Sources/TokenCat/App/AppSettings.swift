@@ -138,11 +138,4 @@ final class AppSettings: ObservableObject {
         if autoWeeklyLimit > 0 { return .official }
         return sessionLimitSource
     }
-
-    /// 주간 창 시작 (사용자 리셋 or 롤링 7일).
-    func weeklyWindowStart(now: Date = Date()) -> Date {
-        weeklyResetEnabled
-            ? WeeklyWindow.lastReset(weekday: weeklyResetWeekday, hour: weeklyResetHour, now: now)
-            : WeeklyWindow.rollingStart(now: now)
-    }
 }
