@@ -1,7 +1,7 @@
 #!/bin/bash
 # TokenCat 원클릭 설치: 서명 identity 준비 → 빌드 → 응용 프로그램 폴더로 복사 → 실행.
 #
-#   git clone https://github.com/dbalsrl7648/TokenCat.git && cd TokenCat && ./install.sh
+#   git clone https://github.com/youminki/ClaudeTokenCat.git && cd ClaudeTokenCat && ./install.sh
 #
 # 로컬에서 빌드하므로 Gatekeeper 격리(quarantine) 없이 바로 실행된다.
 set -euo pipefail

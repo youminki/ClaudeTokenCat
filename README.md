@@ -14,7 +14,7 @@
 | **기간**        | 2026.07 (이틀 — 기획안 작성 → M0~M3 → v1.1 → 오픈소스 배포)                          |
 | **스택**        | Swift 5.9 · SwiftUI + AppKit(NSStatusItem) · SPM · macOS 13+                         |
 | **레퍼런스 UX** | RunCat(메뉴바 러너 + 다크 팝오버) × 냥캣(픽셀 아트 + 무지개 트레일)                  |
-| **저장소**      | https://github.com/dbalsrl7648/TokenCat (MIT, 소스 배포 — `./install.sh` 한 줄 설치) |
+| **저장소**      | https://github.com/youminki/ClaudeTokenCat (MIT, 소스 배포 — `./install.sh` 한 줄 설치) |
 
 ---
 
@@ -292,8 +292,8 @@ Claude Code는 macOS에서 OAuth 토큰을 키체인 항목 `Claude Code-credent
 **설치 (터미널 3줄)** — 로컬 빌드라 Gatekeeper "확인되지 않은 개발자" 차단이 없다:
 
 ```bash
-git clone https://github.com/dbalsrl7648/TokenCat.git
-cd TokenCat
+git clone https://github.com/youminki/ClaudeTokenCat.git
+cd ClaudeTokenCat
 ./install.sh     # 서명 identity 준비 → 빌드 → /Applications 설치 → 실행
 ```
 
