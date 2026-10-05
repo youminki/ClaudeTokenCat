@@ -118,10 +118,29 @@ struct SettingsView: View {
                 Text("민감도가 높을수록 적은 토큰에도 고양이가 빨리 뜁니다. 사용률 앞의 ~는 추정값입니다.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+
+            Section("정보") {
+                LabeledContent("버전", value: Self.versionText)
+                LabeledContent("데이터 폴더") {
+                    Button("Finder에서 열기") { NSWorkspace.shared.open(Self.projectsDirectory) }
+                        .controlSize(.small)
+                }
+                .help(Self.projectsDirectory.path)
+                Link("GitHub 저장소", destination: URL(string: "https://github.com/youminki/ClaudeTokenCat")!)
+            }
         }
         .formStyle(.grouped)   // 내용이 넘치면 Form이 스스로 스크롤
         .frame(width: 420)
         .frame(minHeight: 340, idealHeight: 520, maxHeight: 720)
+    }
+
+    private static let projectsDirectory = ClaudePaths.configDirectory.appendingPathComponent("projects")
+
+    /// install.sh로 설치한 빌드가 어느 커밋인지 (build-app.sh가 Info.plist에 남긴다).
+    private static var versionText: String {
+        let info = Bundle.main.infoDictionary
+        guard let version = info?["CFBundleShortVersionString"] as? String else { return "개발 실행" }
+        return (info?["TokenCatCommit"] as? String).map { "\(version) (\($0))" } ?? version
     }
 
     private var officialStatusText: String {

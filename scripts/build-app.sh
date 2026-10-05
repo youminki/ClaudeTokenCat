@@ -37,6 +37,11 @@ if [ -d .build/release/TokenCat_TokenCat.bundle ]; then
   cp -R .build/release/TokenCat_TokenCat.bundle "$APP/Contents/Resources/"
 fi
 cp scripts/Info.plist "$APP/Contents/Info.plist"
+# 설정 화면에서 지금 설치된 빌드가 어느 커밋인지 확인할 수 있게 남긴다 (+ = 커밋 안 된 변경 포함)
+if COMMIT=$(git rev-parse --short HEAD 2>/dev/null); then
+  [ -z "$(git status --porcelain 2>/dev/null)" ] || COMMIT="$COMMIT+"
+  /usr/libexec/PlistBuddy -c "Add :TokenCatCommit string $COMMIT" "$APP/Contents/Info.plist"
+fi
 cp assets/AppIcon.icns "$APP/Contents/Resources/"
 
 echo "▸ 서명: $CODESIGN_IDENTITY"
