@@ -66,4 +66,28 @@ final class GaugeMathTests: XCTestCase {
         XCTAssertNil(GaugeMath.minutesUntilFull(remainingTokens: 0, burnRate: 10_000))
         XCTAssertNil(GaugeMath.minutesUntilFull(remainingTokens: nil, burnRate: 10_000))
     }
+
+    func testElapsedFraction() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let fiveHours: TimeInterval = 5 * 3600
+        // 리셋까지 2시간 남은 5시간 창 → 60% 경과
+        XCTAssertEqual(GaugeMath.elapsedFraction(resetsAt: now.addingTimeInterval(2 * 3600),
+                                                 duration: fiveHours, now: now), 0.6, accuracy: 0.0001)
+        // 리셋이 지났거나 창보다 멀면 0~1로 자른다
+        XCTAssertEqual(GaugeMath.elapsedFraction(resetsAt: now.addingTimeInterval(-60), duration: fiveHours, now: now), 1)
+        XCTAssertEqual(GaugeMath.elapsedFraction(resetsAt: now.addingTimeInterval(9 * 3600), duration: fiveHours, now: now), 0)
+    }
+
+    func testLimitOutlookComparesWithReset() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let reset = now.addingTimeInterval(90 * 60)
+        XCTAssertEqual(GaugeMath.limitOutlook(minutesLeft: 40, resetsAt: reset, now: now), .reachesLimit(minutes: 40))
+        // 한도보다 리셋이 먼저 오면 "N분 뒤 한도"는 의미가 없다
+        XCTAssertEqual(GaugeMath.limitOutlook(minutesLeft: 120, resetsAt: reset, now: now), .clearUntilReset)
+        XCTAssertEqual(GaugeMath.limitOutlook(minutesLeft: 40, resetsAt: nil, now: now), .reachesLimit(minutes: 40))
+        XCTAssertNil(GaugeMath.limitOutlook(minutesLeft: nil, resetsAt: reset, now: now))
+        // 리셋이 지났는데 새 공식 값을 아직 못 받았으면 리셋 시각을 모르는 것으로 본다
+        XCTAssertEqual(GaugeMath.limitOutlook(minutesLeft: 40, resetsAt: now.addingTimeInterval(-60), now: now),
+                       .reachesLimit(minutes: 40))
+    }
 }

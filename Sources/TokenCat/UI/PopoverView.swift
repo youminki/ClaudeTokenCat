@@ -43,7 +43,8 @@ struct PopoverView: View {
 
         return VStack(alignment: .leading, spacing: 4) {
             gaugeHeader(title: "🐱 세션 (5시간)", gauge: gauge)
-            GaugeBar(percent: gauge.percent, basePercent: gauge.officialBase)
+            GaugeBar(percent: gauge.percent, basePercent: gauge.officialBase,
+                     elapsed: elapsed(until: engine.sessionResetsAt, duration: BlockCalculator.blockDuration))
             if let official = engine.official, gauge.isOfficial {
                 captionRow(officialCaption(resetsAt: official.sessionResetsAt, fetchedAt: official.fetchedAt,
                                            interpolating: gauge.isInterpolating))
@@ -56,8 +57,16 @@ struct PopoverView: View {
                     captionRow("활성 세션 없음, 다음 활동 때 새 5시간 창 시작")
                 }
             }
-            if let minutes = engine.sessionMinutesLeft, gauge.percent < 100 {
-                captionRow("⏱ 지금 속도면 약 \(Format.minutes(minutes)) 뒤 한도", emphasized: gauge.percent >= 80)
+            if gauge.percent < 100,
+               let outlook = GaugeMath.limitOutlook(minutesLeft: engine.sessionMinutesLeft,
+                                                    resetsAt: engine.sessionResetsAt, now: Date()) {
+                switch outlook {
+                case .reachesLimit(let minutes):
+                    captionRow("⏱ 지금 속도면 약 \(Format.minutes(minutes)) 뒤 한도 (리셋 전)",
+                               emphasized: gauge.percent >= 80)
+                case .clearUntilReset:
+                    captionRow("⏱ 지금 속도로는 리셋까지 한도 여유")
+                }
             }
         }
     }
@@ -70,7 +79,8 @@ struct PopoverView: View {
 
         return VStack(alignment: .leading, spacing: 4) {
             gaugeHeader(title: "📅 주간 사용량", gauge: gauge)
-            GaugeBar(percent: gauge.percent, basePercent: gauge.officialBase)
+            GaugeBar(percent: gauge.percent, basePercent: gauge.officialBase,
+                     elapsed: elapsed(until: weeklyResetsAt, duration: WeeklyWindow.duration))
             if gauge.isOfficial {
                 if let reset = engine.nextWeeklyReset {
                     captionRow("\(Format.weekdayTime(reset)) 리셋 · \(Format.duration(reset.timeIntervalSinceNow)) 남음")
@@ -82,6 +92,14 @@ struct PopoverView: View {
                 captionRow("\(shares) (모델 비중, JSONL 기준)")
             }
         }
+    }
+
+    /// 주간 창의 다음 리셋. 공식 값을 모르고 롤링 7일이면 창 경계가 없어 nil.
+    private var weeklyResetsAt: Date? {
+        if let reset = engine.nextWeeklyReset { return reset }
+        guard settings.weeklyResetEnabled else { return nil }
+        return WeeklyWindow.lastReset(weekday: settings.weeklyResetWeekday, hour: settings.weeklyResetHour)
+            .addingTimeInterval(WeeklyWindow.duration)
     }
 
     private var weeklyWindowNote: String {
@@ -233,6 +251,10 @@ struct PopoverView: View {
                 .font(.system(size: 12, weight: .bold)).monospacedDigit()
                 .foregroundStyle(gauge.percent >= 80 ? GaugeBar.color(for: gauge.percent) : .primary)
         }
+    }
+
+    private func elapsed(until resetsAt: Date?, duration: TimeInterval) -> Double? {
+        resetsAt.map { GaugeMath.elapsedFraction(resetsAt: $0, duration: duration, now: Date()) }
     }
 
     private func officialCaption(resetsAt: Date?, fetchedAt: Date, interpolating: Bool) -> String {

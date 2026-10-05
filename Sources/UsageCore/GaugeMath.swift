@@ -80,4 +80,27 @@ public enum GaugeMath {
         guard let remaining = remainingTokens, remaining > 0, burnRate >= 1 else { return nil }
         return Int(Double(remaining) / burnRate)
     }
+
+    /// 창이 지난 비율(0~1). 게이지에 경과 시간 표시선을 그려 사용량이 시간보다 앞서는지 보이게 한다.
+    public static func elapsedFraction(resetsAt: Date, duration: TimeInterval, now: Date) -> Double {
+        guard duration > 0 else { return 0 }
+        return min(max(1 - resetsAt.timeIntervalSince(now) / duration, 0), 1)
+    }
+
+    public enum LimitOutlook: Equatable, Sendable {
+        /// 리셋 전에 한도에 닿는다. 남은 분.
+        case reachesLimit(minutes: Int)
+        /// 지금 속도로도 리셋이 먼저 온다.
+        case clearUntilReset
+    }
+
+    /// 한도에 닿는 시점과 리셋 시점 비교. 리셋이 먼저면 "N분 뒤 한도"는 의미가 없다. 속도가 없으면 nil.
+    /// 리셋 시각이 이미 지났으면(새 공식 값을 받기 전) 모르는 것으로 본다.
+    public static func limitOutlook(minutesLeft: Int?, resetsAt: Date?, now: Date) -> LimitOutlook? {
+        guard let minutesLeft else { return nil }
+        if let resetsAt, resetsAt > now, now.addingTimeInterval(Double(minutesLeft) * 60) >= resetsAt {
+            return .clearUntilReset
+        }
+        return .reachesLimit(minutes: minutesLeft)
+    }
 }

@@ -30,6 +30,8 @@ final class UsageEngine: ObservableObject {
     @Published var weeklyGauge = GaugeReading(percent: 0, officialBase: nil)
     /// 현재 속도로 세션 한도에 닿기까지 남은 분. 속도가 없으면 nil.
     @Published var sessionMinutesLeft: Int?
+    /// 세션 게이지가 기준으로 삼는 창의 리셋 시각. 공식 값이면 공식 리셋, 추정이면 로컬 5시간 블록 끝.
+    @Published var sessionResetsAt: Date?
     /// 공식 응답에서 알아낸 다음 주간 리셋. 조회가 끊겨도 7일 단위로 굴려 유지한다.
     @Published var nextWeeklyReset: Date?
 
@@ -245,6 +247,7 @@ final class UsageEngine: ObservableObject {
 
         log.debug("tick: today=\(snap.todayTokens) block=\(blockTokens) last60s=\(snap.tokensLast60s) rate=\(Int(rate)) state=\(state.rawValue, privacy: .public) 세션%=\(String(format: "%.1f", result.session.percent), privacy: .public)")
 
+        let sessionResetsAt = result.session.isOfficial ? official?.sessionResetsAt : snap.currentBlock?.end
         DispatchQueue.main.async {
             self.snapshot = snap
             self.burnRate = rate
@@ -253,6 +256,7 @@ final class UsageEngine: ObservableObject {
             self.sessionGauge = result.session
             self.weeklyGauge = result.weekly
             self.sessionMinutesLeft = result.sessionMinutesLeft
+            self.sessionResetsAt = sessionResetsAt
             self.nextWeeklyReset = nextWeeklyReset
         }
     }
