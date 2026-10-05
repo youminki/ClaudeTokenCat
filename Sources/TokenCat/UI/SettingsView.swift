@@ -6,10 +6,7 @@ struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var engine: UsageEngine
 
-    @State private var sessionCalibrationInput = ""
-    @State private var weeklyCalibrationInput = ""
-    @State private var calibrationMessage: String?
-    @State private var calibrationMessageIsError = false
+    @ObservedObject private var form = CalibrationForm()
 
     var body: some View {
         Form {
@@ -34,12 +31,12 @@ struct SettingsView: View {
                 Text("Claude Code /usage에 보이는 %를 입력하면 추정 한도를 역산합니다. 공식 연동이 켜져 있는 동안 게이지는 공식 %를 그대로 쓰므로, 이 값은 연동을 끄거나 조회에 실패했을 때 사용됩니다.")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
-                    TextField("세션 % (예: 61)", text: $sessionCalibrationInput)
+                    TextField("세션 % (예: 61)", text: $form.sessionInput)
                         .onSubmit { calibrateSession() }
                     Button("보정") { calibrateSession() }
                 }
                 HStack {
-                    TextField("주간 % (예: 42)", text: $weeklyCalibrationInput)
+                    TextField("주간 % (예: 42)", text: $form.weeklyInput)
                         .onSubmit { calibrateWeekly() }
                     Button("보정") { calibrateWeekly() }
                 }
@@ -55,14 +52,14 @@ struct SettingsView: View {
                         Button("초기화") {
                             settings.calibratedSessionLimit = 0
                             settings.calibratedWeeklyLimit = 0
-                            calibrationMessage = nil
+                            form.message = nil
                         }
                         .controlSize(.mini)
                     }
                 }
-                if let message = calibrationMessage {
+                if let message = form.message {
                     Text(message).font(.caption)
-                        .foregroundStyle(calibrationMessageIsError ? .orange : .green)
+                        .foregroundStyle(form.messageIsError ? .orange : .green)
                 }
             }
 
@@ -123,14 +120,14 @@ struct SettingsView: View {
     }
 
     private func calibrateSession() {
-        guard let percent = parsePercent(sessionCalibrationInput) else {
+        guard let percent = parsePercent(form.sessionInput) else {
             showCalibration(error: "숫자를 입력해주세요 (예: 61)")
             return
         }
         let blockTokens = engine.snapshot?.currentBlock?.totalTokens ?? 0
         if let limit = PlanLimits.calibratedLimit(windowTokens: blockTokens, usagePercent: percent) {
             settings.calibratedSessionLimit = limit
-            sessionCalibrationInput = ""
+            form.sessionInput = ""
             showCalibration(success: "세션 한도 보정됨: \(Format.tokens(limit)) (추정)")
         } else {
             showCalibration(error: blockTokens == 0
@@ -140,14 +137,14 @@ struct SettingsView: View {
     }
 
     private func calibrateWeekly() {
-        guard let percent = parsePercent(weeklyCalibrationInput) else {
+        guard let percent = parsePercent(form.weeklyInput) else {
             showCalibration(error: "숫자를 입력해주세요 (예: 42)")
             return
         }
         let weeklyTokens = engine.snapshot?.weeklyTokens ?? 0
         if let limit = PlanLimits.calibratedLimit(windowTokens: weeklyTokens, usagePercent: percent) {
             settings.calibratedWeeklyLimit = limit
-            weeklyCalibrationInput = ""
+            form.weeklyInput = ""
             showCalibration(success: "주간 한도 보정됨: \(Format.tokens(limit)) (추정)")
         } else {
             showCalibration(error: weeklyTokens == 0
@@ -157,7 +154,16 @@ struct SettingsView: View {
     }
 
     private func showCalibration(success: String? = nil, error: String? = nil) {
-        calibrationMessage = success ?? error
-        calibrationMessageIsError = (error != nil)
+        form.message = success ?? error
+        form.messageIsError = (error != nil)
     }
+}
+
+/// macOS 27 SDK의 `@State`는 매크로라 Command Line Tools만으로는 빌드되지 않는다.
+/// install.sh가 Xcode 없이도 돌도록 입력 상태를 ObservableObject로 둔다.
+final class CalibrationForm: ObservableObject {
+    @Published var sessionInput = ""
+    @Published var weeklyInput = ""
+    @Published var message: String?
+    @Published var messageIsError = false
 }
