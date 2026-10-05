@@ -14,6 +14,7 @@ final class AppSettings: ObservableObject {
         case autoSessionLimit, autoWeeklyLimit
         case weeklyResetEnabled, weeklyResetWeekday, weeklyResetHour
         case sensitivity, pollInterval, limitAlertsEnabled, newSessionAlertEnabled, spriteTheme
+        case menuBarLabel
     }
 
     /// 추정 한도가 어디서 왔는지 (설정 화면 표시용).
@@ -67,6 +68,9 @@ final class AppSettings: ObservableObject {
     /// 러너 색상 테마 (v1.1 — 고양이 1종 + 색상 3종, 코드 생성 스프라이트에만 적용).
     @Published var spriteTheme: SpriteTheme { didSet { save(spriteTheme.rawValue, .spriteTheme) } }
 
+    /// 메뉴바 고양이 옆에 띄울 사용률 (기본 끔).
+    @Published var menuBarLabel: MenuBarLabel { didSet { save(menuBarLabel.rawValue, .menuBarLabel) } }
+
     /// 로그인 시 자동 시작 (SMAppService, 번들 앱에서만 동작). 시스템 상태가 원본이라 저장하지 않는다.
     @Published var launchAtLogin: Bool {
         didSet {
@@ -98,6 +102,7 @@ final class AppSettings: ObservableObject {
         limitAlertsEnabled = bool(.limitAlertsEnabled, true)
         newSessionAlertEnabled = bool(.newSessionAlertEnabled, false)
         spriteTheme = SpriteTheme(rawValue: string(.spriteTheme)) ?? .auto
+        menuBarLabel = MenuBarLabel(rawValue: string(.menuBarLabel)) ?? .off
         launchAtLogin = LaunchAtLogin.isEnabled
     }
 
@@ -137,5 +142,19 @@ final class AppSettings: ObservableObject {
         if calibratedWeeklyLimit > 0 { return .manual }
         if autoWeeklyLimit > 0 { return .official }
         return sessionLimitSource
+    }
+}
+
+/// 메뉴바 고양이 옆 사용률 표시.
+enum MenuBarLabel: String, CaseIterable {
+    case off, session, weekly, higher
+
+    var displayName: String {
+        switch self {
+        case .off: return "끔"
+        case .session: return "세션"
+        case .weekly: return "주간"
+        case .higher: return "높은 쪽"
+        }
     }
 }

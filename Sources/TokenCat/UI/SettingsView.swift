@@ -107,11 +107,15 @@ struct SettingsView: View {
                     ForEach(SpriteTheme.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                Picker("고양이 옆 사용률", selection: $settings.menuBarLabel) {
+                    ForEach(MenuBarLabel.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                }
+                .pickerStyle(.segmented)
                 Picker("민감도", selection: $settings.sensitivity) {
                     ForEach(Thresholds.Sensitivity.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                Text("민감도가 높을수록 적은 토큰에도 고양이가 빨리 뜁니다.")
+                Text("민감도가 높을수록 적은 토큰에도 고양이가 빨리 뜁니다. 사용률 앞의 ~는 추정값입니다.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
