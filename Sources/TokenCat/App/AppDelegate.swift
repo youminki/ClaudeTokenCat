@@ -30,6 +30,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.engine.settings.spriteTheme ?? .auto
         }
         animator.set(display: .normal(.sleeping))
+        statusItem.button?.setAccessibilityLabel("TokenCat 사용량")
+
+        Publishers.CombineLatest(engine.$sessionGauge, engine.$weeklyGauge)
+            .map { Self.tooltip(session: $0, weekly: $1) }
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] text in self?.statusItem.button?.toolTip = text }
+            .store(in: &cancellables)
 
         // 러너 색상 변경 → 프레임 다시 그리기
         engine.settings.$spriteTheme
@@ -76,33 +84,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openSettings() {
-        popover?.performClose(nil)
-        if settingsWindow == nil {
-            let hosting = NSHostingController(
-                rootView: SettingsView(settings: engine.settings, engine: engine))
-            let window = NSWindow(contentViewController: hosting)
-            window.title = "TokenCat 설정"
-            window.styleMask = [.titled, .closable, .resizable]   // 세로 드래그로 크기 조절
-            window.isReleasedWhenClosed = false
-            window.center()
-            settingsWindow = window
+        settingsWindow = showWindow(settingsWindow, title: "TokenCat 설정",
+                                    style: [.titled, .closable, .resizable]) {   // 세로 드래그로 크기 조절
+            SettingsView(settings: engine.settings, engine: engine)
         }
-        settingsWindow?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func openDailyDetail() {
+        dailyDetailWindow = showWindow(dailyDetailWindow, title: "일별 사용 내역", style: [.titled, .closable]) {
+            DailyDetailView(engine: engine)
+        }
+    }
+
+    /// 창은 한 번만 만들고 다시 열 때는 앞으로 가져온다.
+    private func showWindow<Content: View>(_ existing: NSWindow?, title: String, style: NSWindow.StyleMask,
+                                           content: () -> Content) -> NSWindow {
         popover?.performClose(nil)
-        if dailyDetailWindow == nil {
-            let hosting = NSHostingController(rootView: DailyDetailView(engine: engine))
-            let window = NSWindow(contentViewController: hosting)
-            window.title = "일별 사용 내역"
-            window.styleMask = [.titled, .closable]
+        let window = existing ?? {
+            let window = NSWindow(contentViewController: NSHostingController(rootView: content()))
+            window.title = title
+            window.styleMask = style
             window.isReleasedWhenClosed = false
             window.center()
-            dailyDetailWindow = window
-        }
-        dailyDetailWindow?.makeKeyAndOrderFront(nil)
+            return window
+        }()
+        window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        return window
+    }
+
+    /// 메뉴바 아이콘에 마우스를 올리면 현재 사용률을 보여준다.
+    private static func tooltip(session: GaugeReading, weekly: GaugeReading) -> String {
+        func line(_ name: String, _ gauge: GaugeReading) -> String {
+            "\(name) \(Format.percent(gauge.percent))\(gauge.isOfficial ? "" : " (추정)")"
+        }
+        return "TokenCat · \(line("세션", session)) · \(line("주간", weekly))"
     }
 }

@@ -8,11 +8,16 @@ struct SettingsView: View {
 
     @ObservedObject private var form = CalibrationForm()
 
+    private enum CalibrationTarget { case session, weekly }
+
     var body: some View {
         Form {
             Section("데이터 소스") {
                 Toggle("공식 사용량 연동 (Anthropic 계정 기준)", isOn: $settings.officialEnabled)
-                Text("끄거나 조회에 실패하면 아래 플랜 기반 추정 모드로 폴백합니다.")
+                LabeledContent("상태") {
+                    Text(officialStatusText).foregroundStyle(officialStatusColor)
+                }
+                Text("끄거나 조회에 실패하면 아래 추정 한도로 계산합니다. 공식 조회가 성공할 때마다 추정 한도도 자동으로 맞춰집니다.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
@@ -23,23 +28,17 @@ struct SettingsView: View {
                 if settings.plan == .custom {
                     TextField("세션 한도 (tokens)", value: $settings.customSessionLimit, format: .number)
                 }
-                LabeledContent("추정 세션 한도", value: Format.tokens(settings.estimatedSessionLimit) + " (추정)")
-                LabeledContent("추정 주간 한도", value: Format.tokens(settings.estimatedWeeklyLimit) + " (추정)")
+                LabeledContent("추정 세션 한도",
+                               value: "\(Format.tokens(settings.estimatedSessionLimit)) (\(settings.sessionLimitSource.label))")
+                LabeledContent("추정 주간 한도",
+                               value: "\(Format.tokens(settings.estimatedWeeklyLimit)) (\(settings.weeklyLimitSource.label))")
             }
 
             Section("한도 캘리브레이션 (추정 모드용)") {
-                Text("Claude Code /usage에 보이는 %를 입력하면 추정 한도를 역산합니다. 공식 연동이 켜져 있는 동안 게이지는 공식 %를 그대로 쓰므로, 이 값은 연동을 끄거나 조회에 실패했을 때 사용됩니다.")
+                Text("Claude Code /usage에 보이는 %를 입력하면 추정 한도를 역산합니다. 직접 넣은 값이 공식 자동 보정보다 우선합니다.")
                     .font(.caption).foregroundStyle(.secondary)
-                HStack {
-                    TextField("세션 % (예: 61)", text: $form.sessionInput)
-                        .onSubmit { calibrateSession() }
-                    Button("보정") { calibrateSession() }
-                }
-                HStack {
-                    TextField("주간 % (예: 42)", text: $form.weeklyInput)
-                        .onSubmit { calibrateWeekly() }
-                    Button("보정") { calibrateWeekly() }
-                }
+                calibrationRow("세션 % (예: 61)", text: $form.sessionInput, target: .session)
+                calibrationRow("주간 % (예: 42)", text: $form.weeklyInput, target: .weekly)
                 if settings.calibratedSessionLimit > 0 || settings.calibratedWeeklyLimit > 0 {
                     HStack {
                         Text([
@@ -47,7 +46,7 @@ struct SettingsView: View {
                                 ? "세션 \(Format.tokens(settings.calibratedSessionLimit))" : nil,
                             settings.calibratedWeeklyLimit > 0
                                 ? "주간 \(Format.tokens(settings.calibratedWeeklyLimit))" : nil,
-                        ].compactMap { $0 }.joined(separator: " · ") + " (보정됨)")
+                        ].compactMap { $0 }.joined(separator: " · ") + " (직접 보정)")
                             .font(.caption).foregroundStyle(.secondary)
                         Button("초기화") {
                             settings.calibratedSessionLimit = 0
@@ -70,8 +69,12 @@ struct SettingsView: View {
                         ForEach(1...7, id: \.self) { Text(Format.weekdayName($0)).tag($0) }
                     }
                     Picker("시각", selection: $settings.weeklyResetHour) {
-                        ForEach(0..<24, id: \.self) { Text(String(format: "%02d:00", $0)).tag($0) }
+                        ForEach(0..<24, id: \.self) { Text(Format.hour($0)).tag($0) }
                     }
+                }
+                if engine.nextWeeklyReset != nil {
+                    Text("공식 응답에서 리셋 시각을 알고 있으면 그 값을 먼저 씁니다.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
 
@@ -91,6 +94,12 @@ struct SettingsView: View {
                     Text("자동 시작은 빌드된 TokenCat.app에서만 설정할 수 있습니다.")
                         .font(.caption).foregroundStyle(.orange)
                 }
+                Picker("JSONL 확인 주기", selection: $settings.pollInterval) {
+                    ForEach(AppSettings.pollIntervalOptions, id: \.self) {
+                        Text(String(format: "%.0f초", $0)).tag($0)
+                    }
+                }
+                .pickerStyle(.segmented)
             }
 
             Section("러너") {
@@ -99,19 +108,44 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 Picker("민감도", selection: $settings.sensitivity) {
-                    Text("낮음").tag(Thresholds.Sensitivity.low)
-                    Text("보통").tag(Thresholds.Sensitivity.normal)
-                    Text("높음").tag(Thresholds.Sensitivity.high)
+                    ForEach(Thresholds.Sensitivity.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                LabeledContent("폴링 주기", value: String(format: "%.0f초", settings.pollInterval))
-                Text("폴링 주기 변경은 앱 재시작 후 적용됩니다.")
+                Text("민감도가 높을수록 적은 토큰에도 고양이가 빨리 뜁니다.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)   // 내용이 넘치면 Form이 스스로 스크롤
-        .frame(width: 400)
-        .frame(minHeight: 340, idealHeight: 460, maxHeight: 600)
+        .frame(width: 420)
+        .frame(minHeight: 340, idealHeight: 520, maxHeight: 720)
+    }
+
+    private var officialStatusText: String {
+        switch engine.officialStatus {
+        case .live:
+            let age = engine.official.map { Int(Date().timeIntervalSince($0.fetchedAt) / 60) } ?? 0
+            return age < 1 ? "연동 중 (방금 조회)" : "연동 중 (\(age)분 전 조회)"
+        case .waiting: return "조회 중…"
+        case .stale(let reason): return "조회 실패, 직전 값 사용 중 (\(reason))"
+        case .failed(let reason): return "조회 실패, 추정 모드 (\(reason))"
+        case .disabled: return "꺼짐"
+        }
+    }
+
+    private var officialStatusColor: Color {
+        switch engine.officialStatus {
+        case .live: return .green
+        case .waiting, .disabled: return .secondary
+        case .stale, .failed: return .orange
+        }
+    }
+
+    private func calibrationRow(_ placeholder: String, text: Binding<String>, target: CalibrationTarget) -> some View {
+        HStack {
+            TextField(placeholder, text: text)
+                .onSubmit { calibrate(target) }
+            Button("보정") { calibrate(target) }
+        }
     }
 
     /// "61%", " 61 " 같은 입력도 허용.
@@ -119,37 +153,34 @@ struct SettingsView: View {
         Double(input.filter { $0.isNumber || $0 == "." })
     }
 
-    private func calibrateSession() {
-        guard let percent = parsePercent(form.sessionInput) else {
-            showCalibration(error: "숫자를 입력해주세요 (예: 61)")
+    private func calibrate(_ target: CalibrationTarget) {
+        let input = target == .session ? form.sessionInput : form.weeklyInput
+        guard let percent = parsePercent(input) else {
+            showCalibration(error: "숫자를 입력해주세요 (예: \(target == .session ? 61 : 42))")
             return
         }
-        let blockTokens = engine.snapshot?.currentBlock?.totalTokens ?? 0
-        if let limit = PlanLimits.calibratedLimit(windowTokens: blockTokens, usagePercent: percent) {
+        let tokens = target == .session
+            ? engine.snapshot?.currentBlock?.totalTokens ?? 0
+            : engine.snapshot?.weeklyTokens ?? 0
+        guard let limit = PlanLimits.calibratedLimit(windowTokens: tokens, usagePercent: percent) else {
+            if tokens == 0 {
+                showCalibration(error: target == .session
+                    ? "활성 세션이 없어 보정할 수 없습니다. Claude Code 사용 직후 시도해주세요."
+                    : "주간 사용 기록이 없어 보정할 수 없습니다.")
+            } else {
+                showCalibration(error: "%는 0 초과 100 이하로 입력해주세요.")
+            }
+            return
+        }
+        switch target {
+        case .session:
             settings.calibratedSessionLimit = limit
             form.sessionInput = ""
             showCalibration(success: "세션 한도 보정됨: \(Format.tokens(limit)) (추정)")
-        } else {
-            showCalibration(error: blockTokens == 0
-                ? "활성 세션이 없어 보정할 수 없습니다 — Claude Code 사용 직후 시도해주세요."
-                : "%는 0 초과 100 이하로 입력해주세요.")
-        }
-    }
-
-    private func calibrateWeekly() {
-        guard let percent = parsePercent(form.weeklyInput) else {
-            showCalibration(error: "숫자를 입력해주세요 (예: 42)")
-            return
-        }
-        let weeklyTokens = engine.snapshot?.weeklyTokens ?? 0
-        if let limit = PlanLimits.calibratedLimit(windowTokens: weeklyTokens, usagePercent: percent) {
+        case .weekly:
             settings.calibratedWeeklyLimit = limit
             form.weeklyInput = ""
             showCalibration(success: "주간 한도 보정됨: \(Format.tokens(limit)) (추정)")
-        } else {
-            showCalibration(error: weeklyTokens == 0
-                ? "주간 사용 기록이 없어 보정할 수 없습니다."
-                : "%는 0 초과 100 이하로 입력해주세요.")
         }
     }
 

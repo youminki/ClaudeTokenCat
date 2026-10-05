@@ -38,29 +38,26 @@ struct PopoverView: View {
     // MARK: 세션 (5시간)
 
     private var sessionSection: some View {
+        let gauge = engine.sessionGauge
         let blockTokens = engine.snapshot?.currentBlock?.totalTokens ?? 0
 
         return VStack(alignment: .leading, spacing: 4) {
-            if let official = engine.official, let basePct = official.sessionPercent {
-                let pct = GaugeMath.interpolated(base: basePct, windowTokens: blockTokens,
-                                                 tokensSince: engine.tokensSinceOfficial)
-                gaugeHeader(title: "🐱 세션 (5시간)", percent: pct, official: true)
-                GaugeBar(fraction: pct / 100)
-                captionRow(officialCaption(resetsAt: official.sessionResetsAt,
-                                           fetchedAt: official.fetchedAt,
-                                           interpolating: pct > basePct + 0.05))
+            gaugeHeader(title: "🐱 세션 (5시간)", gauge: gauge)
+            GaugeBar(percent: gauge.percent, basePercent: gauge.officialBase)
+            if let official = engine.official, gauge.isOfficial {
+                captionRow(officialCaption(resetsAt: official.sessionResetsAt, fetchedAt: official.fetchedAt,
+                                           interpolating: gauge.isInterpolating))
                 captionRow("Claude Code 소모: \(Format.tokens(blockTokens)) tokens (JSONL 집계)")
             } else {
-                let limit = settings.estimatedSessionLimit
-                let pct = Double(blockTokens) / Double(limit) * 100
-                gaugeHeader(title: "🐱 세션 (5시간)", percent: pct, official: false)
-                GaugeBar(fraction: pct / 100)
-                captionRow("토큰: \(Format.tokens(blockTokens)) / 한도 \(Format.tokens(limit)) (추정)")
+                captionRow("토큰: \(Format.tokens(blockTokens)) / 한도 \(Format.tokens(settings.estimatedSessionLimit)) (추정)")
                 if let block = engine.snapshot?.currentBlock {
                     captionRow(Format.resetCountdown(until: block.end))
                 } else {
-                    captionRow("활성 세션 없음 — 다음 활동 시 새 5시간 창 시작")
+                    captionRow("활성 세션 없음, 다음 활동 때 새 5시간 창 시작")
                 }
+            }
+            if let minutes = engine.sessionMinutesLeft, gauge.percent < 100 {
+                captionRow("⏱ 지금 속도면 약 \(Format.minutes(minutes)) 뒤 한도", emphasized: gauge.percent >= 80)
             }
         }
     }
@@ -68,30 +65,33 @@ struct PopoverView: View {
     // MARK: 주간
 
     private var weeklySection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let official = engine.official, let basePct = official.weeklyPercent {
-                let pct = GaugeMath.interpolated(base: basePct,
-                                                 windowTokens: engine.snapshot?.weeklyTokens ?? 0,
-                                                 tokensSince: engine.tokensSinceOfficial)
-                gaugeHeader(title: "📅 주간 사용량", percent: pct, official: true)
-                GaugeBar(fraction: pct / 100)
-                if let resetsAt = official.weeklyResetsAt {
-                    captionRow("\(Format.weekdayTime(resetsAt)) 리셋 (공식)")
+        let gauge = engine.weeklyGauge
+        let weeklyTokens = engine.snapshot?.weeklyTokens ?? 0
+
+        return VStack(alignment: .leading, spacing: 4) {
+            gaugeHeader(title: "📅 주간 사용량", gauge: gauge)
+            GaugeBar(percent: gauge.percent, basePercent: gauge.officialBase)
+            if gauge.isOfficial {
+                if let reset = engine.nextWeeklyReset {
+                    captionRow("\(Format.weekdayTime(reset)) 리셋 · \(Format.duration(reset.timeIntervalSinceNow)) 남음")
                 }
             } else {
-                let weeklyTokens = engine.snapshot?.weeklyTokens ?? 0
-                let pct = Double(weeklyTokens) / Double(settings.estimatedWeeklyLimit) * 100
-                gaugeHeader(title: "📅 주간 사용량", percent: pct, official: false)
-                GaugeBar(fraction: pct / 100)
-                let windowNote = settings.weeklyResetEnabled
-                    ? "\(Format.weekdayName(settings.weeklyResetWeekday)) \(String(format: "%02d:00", settings.weeklyResetHour)) 리셋 (사용자 설정)"
-                    : "롤링 7일 합계"
-                captionRow("\(Format.tokens(weeklyTokens)) tokens · \(windowNote) (추정)")
+                captionRow("\(Format.tokens(weeklyTokens)) tokens · \(weeklyWindowNote) (추정)")
             }
             if let shares = modelShares {
                 captionRow("\(shares) (모델 비중, JSONL 기준)")
             }
         }
+    }
+
+    private var weeklyWindowNote: String {
+        if let reset = engine.nextWeeklyReset {
+            return "\(Format.weekdayTime(reset)) 리셋 (마지막 공식 기준)"
+        }
+        if settings.weeklyResetEnabled {
+            return "\(Format.weekdayName(settings.weeklyResetWeekday)) \(Format.hour(settings.weeklyResetHour)) 리셋 (사용자 설정)"
+        }
+        return "롤링 7일 합계"
     }
 
     private var modelShares: String? {
@@ -107,15 +107,22 @@ struct PopoverView: View {
     // MARK: 속도 / 오늘 / 푸터
 
     private var burnRateSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let sparkline = engine.snapshot?.sparkline ?? []
+        return VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text("🔥 현재 속도").font(.system(size: 12, weight: .semibold))
                 Spacer()
                 Text("\(Int(engine.burnRate).formatted()) tok/min")
                     .font(.system(size: 12, weight: .bold)).monospacedDigit()
             }
-            Sparkline(values: engine.snapshot?.sparkline ?? [])
-            captionRow("상태: \(engine.catState.label) \(engine.catState.emoji) · 최근 30분")
+            Sparkline(values: sparkline)
+            HStack {
+                captionRow("상태: \(engine.catState.label) \(engine.catState.emoji) · 최근 30분")
+                Spacer()
+                if let peak = sparkline.max(), peak > 0 {
+                    captionRow("최고 \(Format.tokens(peak))/분")
+                }
+            }
         }
     }
 
@@ -128,7 +135,7 @@ struct PopoverView: View {
                     .font(.system(size: 11)).monospacedDigit()
             }
             if let programmatic = engine.snapshot?.todayProgrammaticTokens, programmatic > 0 {
-                captionRow("프로그래매틱(SDK) \(Format.tokens(programmatic)) tokens 포함 — 별도 크레딧 풀")
+                captionRow("프로그래매틱(SDK) \(Format.tokens(programmatic)) tokens 포함, 별도 크레딧 풀")
             }
         }
     }
@@ -137,15 +144,9 @@ struct PopoverView: View {
         Button(action: openSettings) {
             HStack(spacing: 4) {
                 Text("📦 데이터:")
-                if engine.official != nil {
-                    Text("공식 연동 ✓").foregroundStyle(.green)
-                } else if settings.officialEnabled {
-                    Text("추정 모드 (공식 조회 실패)").foregroundStyle(.orange)
-                } else {
-                    Text("추정 모드").foregroundStyle(.orange)
-                }
-                Text("· 플랜: \(settings.plan.displayName)")
-                Spacer()
+                Text(statusText).foregroundStyle(statusColor).lineLimit(1)
+                Text("· 플랜: \(settings.plan.displayName)").lineLimit(1)
+                Spacer(minLength: 0)
                 Image(systemName: "chevron.right").font(.system(size: 9))
             }
             .font(.system(size: 10))
@@ -153,6 +154,25 @@ struct PopoverView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help("설정 열기")
+    }
+
+    private var statusText: String {
+        switch engine.officialStatus {
+        case .live: return "공식 연동 ✓"
+        case .waiting: return "공식 조회 중…"
+        case .stale(let reason): return "공식 (최근 조회 실패: \(reason))"
+        case .failed(let reason): return "추정 모드 (\(reason))"
+        case .disabled: return "추정 모드"
+        }
+    }
+
+    private var statusColor: Color {
+        switch engine.officialStatus {
+        case .live: return .green
+        case .waiting: return .secondary
+        case .stale, .failed, .disabled: return .orange
+        }
     }
 
     // MARK: 우측 버튼 열
@@ -164,18 +184,26 @@ struct PopoverView: View {
             } label: {
                 Label("러너 색상: \(settings.spriteTheme.displayName)", systemImage: "pawprint")
             }
+            .help("러너 색상 바꾸기 (지금: \(settings.spriteTheme.displayName))")
             Button(action: openDailyDetail) {
                 Label("일별 상세", systemImage: "chart.bar")
             }
+            .help("일별 사용 내역")
             Button { engine.refreshNow(forceOfficial: true) } label: {
                 Label("새로고침", systemImage: "arrow.clockwise")
             }
+            .keyboardShortcut("r")
+            .help("새로고침 (⌘R)")
             Button(action: openSettings) {
                 Label("설정", systemImage: "gearshape")
             }
+            .keyboardShortcut(",")
+            .help("설정 (⌘,)")
             Button(role: .destructive) { NSApp.terminate(nil) } label: {
                 Label("종료", systemImage: "power")
             }
+            .keyboardShortcut("q")
+            .help("TokenCat 종료 (⌘Q)")
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
@@ -184,19 +212,26 @@ struct PopoverView: View {
 
     // MARK: 헬퍼
 
-    private func gaugeHeader(title: String, percent: Double, official: Bool) -> some View {
+    private func gaugeHeader(title: String, gauge: GaugeReading) -> some View {
         HStack(spacing: 4) {
             Text(title).font(.system(size: 12, weight: .semibold))
-            if official {
+            if gauge.isOfficial {
                 Text("✓공식")
                     .font(.system(size: 9, weight: .bold))
                     .padding(.horizontal, 4).padding(.vertical, 1)
                     .background(Color.green.opacity(0.2), in: Capsule())
                     .foregroundStyle(.green)
+            } else {
+                Text("추정")
+                    .font(.system(size: 9, weight: .bold))
+                    .padding(.horizontal, 4).padding(.vertical, 1)
+                    .background(Color.orange.opacity(0.2), in: Capsule())
+                    .foregroundStyle(.orange)
             }
             Spacer()
-            Text(String(format: "%.1f%%", percent))
+            Text(gauge.percent > 999 ? ">999%" : Format.percent(gauge.percent))
                 .font(.system(size: 12, weight: .bold)).monospacedDigit()
+                .foregroundStyle(gauge.percent >= 80 ? GaugeBar.color(for: gauge.percent) : .primary)
         }
     }
 
@@ -205,11 +240,13 @@ struct PopoverView: View {
         if let resetsAt { parts.append(Format.resetCountdown(until: resetsAt)) }
         let age = Int(Date().timeIntervalSince(fetchedAt) / 60)
         parts.append(age < 1 ? "공식 방금 전" : "공식 \(age)분 전")
-        if interpolating { parts.append("보간 중") }
+        if interpolating { parts.append("이후 사용분 반영") }
         return parts.joined(separator: " · ")
     }
 
-    private func captionRow(_ text: String) -> some View {
-        Text(text).font(.system(size: 10)).foregroundStyle(.secondary)
+    private func captionRow(_ text: String, emphasized: Bool = false) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: emphasized ? .semibold : .regular))
+            .foregroundStyle(emphasized ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
     }
 }
