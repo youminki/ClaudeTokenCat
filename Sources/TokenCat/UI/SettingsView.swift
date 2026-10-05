@@ -6,7 +6,7 @@ struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var engine: UsageEngine
 
-    @ObservedObject private var form = CalibrationForm()
+    @StateObject private var form = CalibrationForm()
 
     private enum CalibrationTarget { case session, weekly }
 
