@@ -63,7 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] _ in self?.animator.reloadFrames() }
             .store(in: &cancellables)
 
-        // 한도 오버라이드(§F2): 80%+ 🥵, 95%+ ⚠️ — 속도 상태보다 우선
+        // 한도 오버라이드(§F2): 80% 이상 지침, 95% 이상 경고. 속도 상태보다 우선
         Publishers.CombineLatest(engine.$catState, engine.$alertLevel)
             .map { state, level -> SpriteDisplay in
                 switch level {
@@ -108,7 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openDailyDetail() {
-        dailyDetailWindow = showWindow(dailyDetailWindow, title: "일별 사용 내역", style: [.titled, .closable]) {
+        dailyDetailWindow = showWindow(dailyDetailWindow, title: "일별 사용량", style: [.titled, .closable]) {
             DailyDetailView(engine: engine)
         }
     }

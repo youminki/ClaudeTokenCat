@@ -1,14 +1,14 @@
 import SwiftUI
 import UsageCore
 
-/// 📊 일별 사용 내역 (v1.1 — 최근 8일, JSONL 집계 기준).
+/// 일별 사용량 (최근 8일, JSONL 집계 기준).
 struct DailyDetailView: View {
     @ObservedObject var engine: UsageEngine
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("일별 사용 내역").font(.headline)
-            Text("로컬 JSONL 집계 (Claude Code분, 최근 8일) · 비용은 API 단가 환산 추정")
+            Text("일별 사용량").font(.headline)
+            Text("최근 8일, Claude Code 로컬 기록 기준. 비용은 API 단가로 환산한 추정치입니다.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -35,7 +35,7 @@ struct DailyDetailView: View {
                 Text("날짜")
                 Text("")
                 Text("토큰").gridColumnAlignment(.trailing)
-                Text("비용(추정)").gridColumnAlignment(.trailing)
+                Text("추정 비용").gridColumnAlignment(.trailing)
             }
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(.secondary)

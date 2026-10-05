@@ -19,7 +19,7 @@ public struct OfficialUsage: Equatable, Sendable {
 }
 
 /// 비문서화 OAuth usage 엔드포인트 폴링 (180초 간격 준수).
-/// ⚠ 토큰은 읽기 전용, Anthropic 외 어디에도 전송·로깅 금지.
+/// 토큰은 읽기 전용, Anthropic 외 어디에도 전송·로깅 금지.
 /// 실패 시 호출측(엔진)이 추정 모드로 폴백한다.
 ///
 /// 키체인 접근 설계 (프롬프트 최소화):

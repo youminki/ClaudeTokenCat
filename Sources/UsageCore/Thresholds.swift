@@ -2,11 +2,11 @@ import Foundation
 
 /// 고양이 상태 (§F2 5단계 상태 머신).
 public enum CatState: String, CaseIterable, Sendable {
-    case sleeping   // 😴 0 tok/min, 5분 이상 무활동
-    case walking    // 🚶 1 ~ 2,000
-    case running    // 🏃 2,000 ~ 10,000
-    case dashing    // 💨 10,000 ~ 30,000
-    case rainbow    // 🌈 30,000+
+    case sleeping   // 0 tok/min, 5분 이상 무활동
+    case walking    // 1 ~ 2,000
+    case running    // 2,000 ~ 10,000
+    case dashing    // 10,000 ~ 30,000
+    case rainbow    // 30,000+
 
     /// 프레임 간격 (§F2 표).
     public var frameInterval: TimeInterval {
@@ -19,23 +19,13 @@ public enum CatState: String, CaseIterable, Sendable {
         }
     }
 
-    public var emoji: String {
-        switch self {
-        case .sleeping: return "😴"
-        case .walking:  return "🚶"
-        case .running:  return "🏃"
-        case .dashing:  return "💨"
-        case .rainbow:  return "🌈"
-        }
-    }
-
     public var label: String {
         switch self {
-        case .sleeping: return "잠자기"
-        case .walking:  return "산책"
-        case .running:  return "달리기"
-        case .dashing:  return "질주"
-        case .rainbow:  return "무지개 모드"
+        case .sleeping: return "쉬는 중"
+        case .walking:  return "걷는 중"
+        case .running:  return "달리는 중"
+        case .dashing:  return "질주 중"
+        case .rainbow:  return "전력 질주"
         }
     }
 }

@@ -34,7 +34,7 @@ struct SettingsView: View {
                                value: "\(Format.tokens(settings.estimatedWeeklyLimit)) (\(settings.weeklyLimitSource.label))")
             }
 
-            Section("한도 캘리브레이션 (추정 모드용)") {
+            Section("한도 보정 (추정 모드)") {
                 Text("Claude Code /usage에 보이는 %를 입력하면 추정 한도를 역산합니다. 직접 넣은 값이 공식 자동 보정보다 우선합니다.")
                     .font(.caption).foregroundStyle(.secondary)
                 calibrationRow("세션 % (예: 61)", text: $form.sessionInput, target: .session)
@@ -62,8 +62,8 @@ struct SettingsView: View {
                 }
             }
 
-            Section("주간 리셋 (추정 모드용)") {
-                Toggle("리셋 요일·시각 수동 설정 (off면 롤링 7일)", isOn: $settings.weeklyResetEnabled)
+            Section("주간 초기화 (추정 모드)") {
+                Toggle("초기화 요일·시각 직접 지정 (끄면 최근 7일)", isOn: $settings.weeklyResetEnabled)
                 if settings.weeklyResetEnabled {
                     Picker("요일", selection: $settings.weeklyResetWeekday) {
                         ForEach(1...7, id: \.self) { Text(Format.weekdayName($0)).tag($0) }
@@ -73,14 +73,14 @@ struct SettingsView: View {
                     }
                 }
                 if engine.nextWeeklyReset != nil {
-                    Text("공식 응답에서 리셋 시각을 알고 있으면 그 값을 먼저 씁니다.")
+                    Text("공식 응답에서 초기화 시각을 알면 그 값을 먼저 씁니다.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
 
             Section("알림") {
                 Toggle("한도 임박 알림 (80% / 95%, 각 1회)", isOn: $settings.limitAlertsEnabled)
-                Toggle("새 세션 시작 알림 (5시간 창 리셋)", isOn: $settings.newSessionAlertEnabled)
+                Toggle("세션 초기화 알림 (5시간)", isOn: $settings.newSessionAlertEnabled)
                 if !Notifier.shared.available {
                     Text("알림은 빌드된 TokenCat.app에서만 동작합니다 (swift run 개발 실행 제외).")
                         .font(.caption).foregroundStyle(.orange)
@@ -94,7 +94,7 @@ struct SettingsView: View {
                     Text("자동 시작은 빌드된 TokenCat.app에서만 설정할 수 있습니다.")
                         .font(.caption).foregroundStyle(.orange)
                 }
-                Picker("JSONL 확인 주기", selection: $settings.pollInterval) {
+                Picker("로컬 기록 확인 주기", selection: $settings.pollInterval) {
                     ForEach(AppSettings.pollIntervalOptions, id: \.self) {
                         Text(String(format: "%.0f초", $0)).tag($0)
                     }

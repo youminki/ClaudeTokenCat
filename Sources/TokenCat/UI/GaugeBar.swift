@@ -47,9 +47,16 @@ struct GaugeBar: View {
         }
         .frame(height: 10)
         .animation(.easeOut(duration: 0.3), value: percent)
-        .help(elapsed.map { "세로선: 이번 창 시간의 \(Int(($0 * 100).rounded()))% 경과" } ?? "")
+        .help(helpText)
         .accessibilityElement()
         .accessibilityValue(accessibilityText)
+    }
+
+    private var helpText: String {
+        var lines: [String] = []
+        if let elapsed { lines.append("세로선: 이번 창 시간의 \(Int((elapsed * 100).rounded()))% 경과") }
+        if let basePercent, percent > basePercent + 0.05 { lines.append("옅은 부분: 마지막 갱신 이후 로컬 기록으로 더한 사용량") }
+        return lines.joined(separator: "\n")
     }
 
     private var accessibilityText: String {

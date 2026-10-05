@@ -1,6 +1,6 @@
 import Foundation
 
-/// 한도 임박 단계 (§F2 오버라이드: 80% 🥵 지침, 95% ⚠️ 경고).
+/// 한도 임박 단계 (§F2 오버라이드: 80% 지침, 95% 경고).
 public enum UsageAlertLevel: Int, Comparable, Sendable {
     case normal = 0
     case tired = 1      // 사용률 80% 이상

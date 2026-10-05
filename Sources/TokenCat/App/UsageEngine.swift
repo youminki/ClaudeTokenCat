@@ -19,7 +19,7 @@ final class UsageEngine: ObservableObject {
     @Published var snapshot: UsageStore.Snapshot?
     @Published var burnRate: Double = 0
     @Published var catState: CatState = .sleeping
-    /// 한도 임박 오버라이드 (§F2: 80% 🥵, 95% ⚠️). 세션/주간 중 높은 쪽 기준.
+    /// 한도 임박 오버라이드 (§F2: 80% 지침, 95% 경고). 세션/주간 중 높은 쪽 기준.
     @Published var alertLevel: UsageAlertLevel = .normal
 
     /// 마지막 공식 usage 성공 응답. nil = 미조회/실패/연동 off → 추정 모드 폴백.
@@ -292,7 +292,7 @@ final class UsageEngine: ObservableObject {
         for threshold in alertTracker.alertsToFire(kind: .session, percent: result.session.percent,
                                                    windowId: sessionWindow) {
             notify(threshold: threshold, kind: "세션",
-                   remaining: result.sessionMinutesLeft.map { "약 \(Format.minutes($0)) 분량 남음(현재 속도 기준)" })
+                   remaining: result.sessionMinutesLeft.map { "현재 속도로 약 \(Format.minutes($0)) 뒤 한도에 닿습니다." })
         }
         for threshold in alertTracker.alertsToFire(kind: .weekly, percent: result.weekly.percent,
                                                    windowId: weeklyWindow) {
@@ -301,9 +301,8 @@ final class UsageEngine: ObservableObject {
     }
 
     private func notify(threshold: LimitAlertTracker.Threshold, kind: String, remaining: String?) {
-        let emoji = threshold == .ninetyFive ? "⚠️" : "🥵"
-        let title = "\(emoji) \(kind) 한도 \(threshold.rawValue)%"
-        let body = remaining ?? "Claude Code /usage에서 정확한 잔여량을 확인하세요."
+        let title = "\(kind) 사용량 \(threshold.rawValue)%"
+        let body = remaining ?? "Claude Code에서 /usage로 남은 양을 확인할 수 있습니다."
         DispatchQueue.main.async { Notifier.shared.send(title: title, body: body) }
     }
 
@@ -313,7 +312,7 @@ final class UsageEngine: ObservableObject {
         defer { lastBlockStart = start ?? lastBlockStart }
         guard enabled, let start, let previous = lastBlockStart, start != previous else { return }
         DispatchQueue.main.async {
-            Notifier.shared.send(title: "🐱 새 세션 시작!", body: "5시간 사용량 창이 리셋되었습니다.")
+            Notifier.shared.send(title: "세션 초기화", body: "5시간 사용량이 초기화되었습니다.")
         }
     }
 
