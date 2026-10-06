@@ -1,18 +1,19 @@
-import XCTest
+import Foundation
+import Testing
 @testable import UsageCore
 
-final class JSONLWatcherTests: XCTestCase {
+final class JSONLWatcherTests {
 
     private var tempDir: URL!
 
-    override func setUpWithError() throws {
+    init() throws {
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("tokencat-test-\(UUID().uuidString)/proj-a")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
     }
 
-    override func tearDownWithError() throws {
-        try FileManager.default.removeItem(at: tempDir.deletingLastPathComponent())
+    deinit {
+        try? FileManager.default.removeItem(at: tempDir.deletingLastPathComponent())
     }
 
     private func line(id: String, tokens: Int) -> String {
@@ -21,7 +22,7 @@ final class JSONLWatcherTests: XCTestCase {
         """
     }
 
-    func testIncrementalScan() throws {
+    @Test func incrementalScan() throws {
         let file = tempDir.appendingPathComponent("session.jsonl")
         try (line(id: "1", tokens: 100) + "\n").write(to: file, atomically: true, encoding: .utf8)
 
@@ -29,11 +30,11 @@ final class JSONLWatcherTests: XCTestCase {
         watcher.maxFileAge = .infinity  // 테스트 픽스처 mtime 무관하게 스캔
 
         let first = watcher.scan()
-        XCTAssertEqual(first.count, 1)
-        XCTAssertEqual(first[0].inputTokens, 100)
+        #expect(first.count == 1)
+        #expect(first[0].inputTokens == 100)
 
         // 같은 내용 재스캔 → 새 이벤트 없음 (오프셋 기억)
-        XCTAssertTrue(watcher.scan().isEmpty)
+        #expect(watcher.scan().isEmpty)
 
         // 줄 추가 → 새 줄만 읽힘
         let handle = try FileHandle(forWritingTo: file)
@@ -42,11 +43,11 @@ final class JSONLWatcherTests: XCTestCase {
         try handle.close()
 
         let second = watcher.scan()
-        XCTAssertEqual(second.count, 1)
-        XCTAssertEqual(second[0].inputTokens, 200)
+        #expect(second.count == 1)
+        #expect(second[0].inputTokens == 200)
     }
 
-    func testPartialLastLineNotConsumed() throws {
+    @Test func partialLastLineNotConsumed() throws {
         let file = tempDir.appendingPathComponent("session.jsonl")
         let full = line(id: "1", tokens: 100) + "\n"
         let partial = String(line(id: "2", tokens: 200).prefix(40)) // 개행 없는 불완전 줄
@@ -54,7 +55,7 @@ final class JSONLWatcherTests: XCTestCase {
 
         let watcher = JSONLWatcher(rootDirectory: tempDir.deletingLastPathComponent())
         watcher.maxFileAge = .infinity
-        XCTAssertEqual(watcher.scan().count, 1)
+        #expect(watcher.scan().count == 1)
 
         // 불완전 줄의 나머지가 마저 써지면 다음 스캔에서 읽힌다
         let handle = try FileHandle(forWritingTo: file)
@@ -63,7 +64,7 @@ final class JSONLWatcherTests: XCTestCase {
         try handle.close()
 
         let second = watcher.scan()
-        XCTAssertEqual(second.count, 1)
-        XCTAssertEqual(second[0].inputTokens, 200)
+        #expect(second.count == 1)
+        #expect(second[0].inputTokens == 200)
     }
 }

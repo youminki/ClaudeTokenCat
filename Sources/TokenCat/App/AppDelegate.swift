@@ -146,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .weekly: gauge = weekly
         case .higher: gauge = session.percent >= weekly.percent ? session : weekly
         }
-        let percent = Int(min(gauge.percent, 999).rounded())
+        let percent = gauge.displayPercent
         return StatusLabel(text: "\(gauge.isOfficial ? "" : "~")\(percent)%",
                            level: min(UsageAlertLevel.level(percent: gauge.percent), alertLevel))
     }
@@ -178,7 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 메뉴바 아이콘에 마우스를 올리면 현재 사용률을 보여준다.
     private static func tooltip(session: GaugeReading, weekly: GaugeReading) -> String {
         func line(_ name: String, _ gauge: GaugeReading) -> String {
-            "\(name) \(Format.percent(gauge.percent))\(gauge.isOfficial ? "" : " (추정)")"
+            "\(name) \(gauge.displayPercent)%\(gauge.isOfficial ? "" : " (추정)")"
         }
         return "TokenCat · \(line("세션", session)) · \(line("주간", weekly))"
     }

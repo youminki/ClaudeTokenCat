@@ -1,73 +1,82 @@
-import XCTest
+import Foundation
+import Testing
 @testable import UsageCore
 
-final class UsageEvaluatorTests: XCTestCase {
+struct UsageEvaluatorTests {
 
     private let now = Date(timeIntervalSince1970: 1_000_000)
 
-    private func official(session: Double?, weekly: Double?, minutesAgo: Double = 1) -> OfficialUsage {
-        OfficialUsage(sessionPercent: session, sessionResetsAt: nil, weeklyPercent: weekly, weeklyResetsAt: nil,
+    private func official(session: Double?, weekly: Double?, minutesAgo: Double = 1,
+                          sessionResetsIn: Double? = 180, weeklyResetsIn: Double? = 3 * 24 * 60) -> OfficialUsage {
+        OfficialUsage(sessionPercent: session, sessionResetsAt: sessionResetsIn.map { now.addingTimeInterval($0 * 60) },
+                      weeklyPercent: weekly, weeklyResetsAt: weeklyResetsIn.map { now.addingTimeInterval($0 * 60) },
                       fetchedAt: now.addingTimeInterval(-minutesAgo * 60))
     }
 
-    func testUsableOfficialRespectsToggleAndGrace() {
+    private func input(_ official: OfficialUsage?, enabled: Bool = true, rate: Double? = nil, blockTokens: Int = 0,
+                       weeklyTokens: Int = 0, tokenBurnRate: Double = 0) -> UsageEvaluator.Input {
+        UsageEvaluator.Input(official: official, officialEnabled: enabled, now: now, sessionRatePerMinute: rate,
+                             blockTokens: blockTokens, weeklyTokens: weeklyTokens,
+                             sessionLimit: 500_000, weeklyLimit: 4_000_000, tokenBurnRate: tokenBurnRate)
+    }
+
+    @Test func usableOfficialRespectsToggleAndGrace() {
         let grace: TimeInterval = 15 * 60
         let fresh = official(session: 40, weekly: 20, minutesAgo: 10)
-        XCTAssertEqual(UsageEvaluator.usableOfficial(fresh, enabled: true, now: now, grace: grace), fresh)
-        XCTAssertNil(UsageEvaluator.usableOfficial(fresh, enabled: false, now: now, grace: grace))
+        #expect(UsageEvaluator.usableOfficial(fresh, enabled: true, now: now, grace: grace) == fresh)
+        #expect(UsageEvaluator.usableOfficial(fresh, enabled: false, now: now, grace: grace) == nil)
         let old = official(session: 40, weekly: 20, minutesAgo: 16)
-        XCTAssertNil(UsageEvaluator.usableOfficial(old, enabled: true, now: now, grace: grace))
+        #expect(UsageEvaluator.usableOfficial(old, enabled: true, now: now, grace: grace) == nil)
     }
 
-    func testOfficialValuesDriveGaugesAndLevel() {
-        let result = UsageEvaluator.evaluate(official: official(session: 40, weekly: 96), officialEnabled: true,
-                                             blockTokens: 1_100_000, weeklyTokens: 5_000_000,
-                                             tokensSinceOfficial: 100_000,
-                                             sessionLimit: 500_000, weeklyLimit: 4_000_000, burnRate: 0)
-        XCTAssertTrue(result.authoritative)
-        XCTAssertEqual(result.session.percent, 44, accuracy: 0.001)   // 1% = 25,000 tokens
-        XCTAssertTrue(result.weekly.isOfficial)
-        XCTAssertEqual(result.level, .critical)                      // 주간 96%+ 보간
+    // 게이지는 공식 값만: 로컬 사용량(blockTokens)이 아무리 많아도 공식 %를 그대로 보여 준다.
+    @Test func gaugesShowOfficialValuesOnly() {
+        let result = UsageEvaluator.evaluate(input(official(session: 40, weekly: 96), blockTokens: 9_000_000))
+        #expect(result.authoritative)
+        #expect(result.session.percent == 40)
+        #expect(result.session.source == .official)
+        #expect(result.weekly.percent == 96)
+        #expect(result.level == .critical)
+        #expect(result.sessionResetsAt == now.addingTimeInterval(180 * 60))
+        #expect(!result.needsRefresh)
     }
 
-    func testHoldsLevelWhileWaitingForOfficial() {
+    @Test func holdsLevelWhileWaitingForOfficial() {
         // 연동 on인데 공식 값이 아직 없으면 추정 %가 튀어도 경고 단계로 올리지 않는다
-        let result = UsageEvaluator.evaluate(official: nil, officialEnabled: true,
-                                             blockTokens: 900_000, weeklyTokens: 0, tokensSinceOfficial: 0,
-                                             sessionLimit: 500_000, weeklyLimit: 4_000_000, burnRate: 0)
-        XCTAssertFalse(result.authoritative)
-        XCTAssertEqual(result.session.percent, 180, accuracy: 0.001)
-        XCTAssertEqual(result.level, .normal)
+        let result = UsageEvaluator.evaluate(input(nil, blockTokens: 900_000))
+        #expect(!result.authoritative)
+        #expect(abs(result.session.percent - 180) < 0.001)
+        #expect(result.level == .normal)
     }
 
-    func testDisabledOfficialUsesEstimateAndIsAuthoritative() {
-        let result = UsageEvaluator.evaluate(official: nil, officialEnabled: false,
-                                             blockTokens: 425_000, weeklyTokens: 1_000_000,
-                                             tokensSinceOfficial: 50_000,
-                                             sessionLimit: 500_000, weeklyLimit: 4_000_000, burnRate: 0)
-        XCTAssertTrue(result.authoritative)
-        XCTAssertFalse(result.session.isOfficial)
-        XCTAssertEqual(result.session.percent, 85, accuracy: 0.001)   // 공식 이후분은 추정에 쓰지 않는다
-        XCTAssertEqual(result.weekly.percent, 25, accuracy: 0.001)
-        XCTAssertEqual(result.level, .tired)
+    @Test func disabledOfficialUsesEstimateAndIsAuthoritative() {
+        let result = UsageEvaluator.evaluate(input(nil, enabled: false, blockTokens: 425_000, weeklyTokens: 1_000_000))
+        #expect(result.authoritative)
+        #expect(!result.session.isOfficial)
+        #expect(abs(result.session.percent - 85) < 0.001)
+        #expect(abs(result.weekly.percent - 25) < 0.001)
+        #expect(result.level == .tired)
     }
 
-    func testMinutesLeft() {
-        // 공식 40%, 1% = 25,000 → 남은 56% = 1.4M, 분당 14,000이면 100분
-        let live = UsageEvaluator.evaluate(official: official(session: 40, weekly: 10), officialEnabled: true,
-                                           blockTokens: 1_100_000, weeklyTokens: 2_000_000,
-                                           tokensSinceOfficial: 100_000,
-                                           sessionLimit: 500_000, weeklyLimit: 4_000_000, burnRate: 14_000)
-        XCTAssertEqual(live.sessionMinutesLeft, 100)
-        // 공식 %가 작아 역산할 수 없으면 추정 한도로 계산한다
-        let lowBase = UsageEvaluator.evaluate(official: official(session: 2, weekly: 10), officialEnabled: true,
-                                              blockTokens: 100_000, weeklyTokens: 2_000_000, tokensSinceOfficial: 0,
-                                              sessionLimit: 500_000, weeklyLimit: 4_000_000, burnRate: 10_000)
-        XCTAssertEqual(lowBase.sessionMinutesLeft, 40)
-        // 속도가 없으면 nil
-        let idle = UsageEvaluator.evaluate(official: nil, officialEnabled: false,
-                                           blockTokens: 100_000, weeklyTokens: 0, tokensSinceOfficial: 0,
-                                           sessionLimit: 500_000, weeklyLimit: 4_000_000, burnRate: 0)
-        XCTAssertNil(idle.sessionMinutesLeft)
+    @Test func rolledOverWindowAsksForRefresh() {
+        // 세션 창이 30초 전에 초기화됐는데 공식 값은 그 전에 받았다
+        let stale = official(session: 97, weekly: 30, minutesAgo: 2, sessionResetsIn: -0.5)
+        let result = UsageEvaluator.evaluate(input(stale, rate: 1))
+        #expect(result.session.source == .rolledOver)
+        #expect(result.session.percent == 0)
+        #expect(result.sessionResetsAt == nil)
+        #expect(result.sessionMinutesLeft == nil)
+        #expect(result.needsRefresh)
+        #expect(result.level == .normal)   // 예전 97%로 빨간 경고를 띄우지 않는다
+    }
+
+    @Test func minutesLeft() {
+        // 공식 40%가 분당 0.6%p씩 오르면 100분
+        #expect(UsageEvaluator.evaluate(input(official(session: 40, weekly: 10), rate: 0.6)).sessionMinutesLeft == 100)
+        #expect(UsageEvaluator.evaluate(input(official(session: 40, weekly: 10))).sessionMinutesLeft == nil)
+        // 추정 모드는 토큰 한도 기준
+        let estimated = UsageEvaluator.evaluate(input(nil, enabled: false, blockTokens: 100_000, tokenBurnRate: 10_000))
+        #expect(estimated.sessionMinutesLeft == 40)
+        #expect(UsageEvaluator.evaluate(input(nil, enabled: false, blockTokens: 100_000)).sessionMinutesLeft == nil)
     }
 }
