@@ -2,7 +2,8 @@ import SwiftUI
 
 /// 사용률 게이지 바 (§F3). 80% 전까지는 무채색, 80% 주황, 95% 빨강.
 struct GaugeBar: View {
-    let percent: Double
+    /// 공식 값이 없으면 nil. 막대를 비우고 접근성 값도 "값 없음"으로 둔다.
+    let percent: Double?
     /// 창이 지난 비율(0~1). 눈금으로 그려 사용량이 시간보다 앞서는지 보이게 한다.
     var elapsed: Double? = nil
 
@@ -11,6 +12,7 @@ struct GaugeBar: View {
     }
 
     var body: some View {
+        let percent = self.percent ?? 0
         let color = Theme.level(percent)
         GeometryReader { geo in
             let total = geo.size.width
@@ -45,7 +47,7 @@ struct GaugeBar: View {
     }
 
     private var accessibilityText: String {
-        let value = "\(Int(percent.rounded(.down)))%"
+        let value = percent.map { "\(Int($0.rounded(.down)))%" } ?? "값 없음"
         guard let elapsed else { return value }
         return "\(value), 시간 \(Int((elapsed * 100).rounded()))% 경과"
     }

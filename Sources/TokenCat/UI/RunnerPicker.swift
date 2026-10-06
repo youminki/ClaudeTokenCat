@@ -210,7 +210,7 @@ struct CharacterCanvas: View {
     }
 }
 
-/// 마우스가 올라간 러너. `@State`를 못 쓰는 이유는 CalibrationForm 참고.
+/// 마우스가 올라간 러너. `@State`를 못 쓰는 이유는 HoverFlag 참고.
 final class HoveredRunner: ObservableObject {
     @Published var key: String?
 

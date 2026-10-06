@@ -30,7 +30,7 @@ if CommandLine.arguments.contains("--report") {
                 + " (resets \(usage.sessionResetsAt.map { ISO8601DateFormatter().string(from: $0) } ?? "-"))"
                 + ", weekly \(usage.weeklyPercent.map { "\($0)%" } ?? "-")")
         } catch {
-            print("official: FAILED (\(error)) → 추정 모드 폴백")
+            print("official: FAILED (\(error)) → 게이지 비움")
         }
         semaphore.signal()
     }

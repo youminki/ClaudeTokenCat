@@ -89,17 +89,6 @@ struct UsageStoreTests {
         #expect(spark.reduce(0, +) == 60)
     }
 
-    @Test func tokensSince() {
-        let store = UsageStore()
-        let now = Date()
-        store.add([
-            event(minutesAgo: 1, tokens: 100, id: "new", now: now),
-            event(minutesAgo: 10, tokens: 200, id: "old", now: now),
-        ])
-        #expect(store.tokens(since: now.addingTimeInterval(-300), now: now) == 100)
-        #expect(store.tokens(since: now.addingTimeInterval(-3600), now: now) == 300)
-    }
-
     @Test func dailyTotalsAndProgrammaticSplit() {
         let store = UsageStore()
         let calendar = Calendar.current

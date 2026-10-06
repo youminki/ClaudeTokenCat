@@ -9,14 +9,13 @@ struct GaugeMathTests {
 
     private func window(_ percent: Double, resetsInMinutes: Double?, fetchedMinutesAgo: Double = 2) -> OfficialWindow {
         OfficialWindow(percent: percent, resetsAt: resetsInMinutes.map { now.addingTimeInterval($0 * 60) },
-                       fetchedAt: now.addingTimeInterval(-fetchedMinutesAgo * 60), duration: fiveHours)
+                       fetchedAt: now.addingTimeInterval(-fetchedMinutesAgo * 60))
     }
 
     @Test func showsOfficialValueAsIs() {
         let reading = GaugeMath.reading(official: window(42, resetsInMinutes: 120), now: now)
         #expect(reading.percent == 42)
         #expect(reading.source == .official)
-        #expect(reading.isOfficial)
     }
 
     // 회귀: 조회 뒤 창이 초기화되면 다음 조회까지 이전 창의 높은 %를 그대로 보여 줬다.
@@ -41,20 +40,7 @@ struct GaugeMathTests {
 
     @Test func displayPercentIsWhole() {
         #expect(GaugeReading(percent: 42.9, source: .official).displayPercent == 42)
-        #expect(GaugeReading.estimated(1500).displayPercent == 999)
-        #expect(GaugeReading.estimated(-3).displayPercent == 0)
-    }
-
-    @Test func estimatedReading() {
-        #expect(GaugeMath.estimated(windowTokens: 250_000, limit: 500_000).percent == 50)
-        #expect(GaugeMath.estimated(windowTokens: 10, limit: 0).percent == 0)
-        #expect(!GaugeMath.estimated(windowTokens: 1, limit: 2).isOfficial)
-    }
-
-    @Test func impliedLimit() {
-        #expect(GaugeMath.impliedLimit(percent: 40, windowTokens: 1_000_000) == 2_500_000)
-        #expect(GaugeMath.impliedLimit(percent: 2, windowTokens: 1_000) == nil)
-        #expect(GaugeMath.impliedLimit(percent: 40, windowTokens: 0) == nil)
+        #expect(GaugeReading(percent: 100, source: .official).displayPercent == 100)
     }
 
     @Test func minutesUntilFull() {
@@ -63,9 +49,6 @@ struct GaugeMathTests {
         #expect(GaugeMath.minutesUntilFull(percent: 40, ratePerMinute: nil) == nil)
         #expect(GaugeMath.minutesUntilFull(percent: 40, ratePerMinute: 0) == nil)
         #expect(GaugeMath.minutesUntilFull(percent: 100, ratePerMinute: 1) == nil)
-        #expect(GaugeMath.minutesUntilFull(remainingTokens: 600_000, burnRate: 10_000) == 60)
-        #expect(GaugeMath.minutesUntilFull(remainingTokens: 0, burnRate: 10_000) == nil)
-        #expect(GaugeMath.minutesUntilFull(remainingTokens: nil, burnRate: 10_000) == nil)
     }
 
     @Test func elapsedFraction() {
@@ -93,7 +76,7 @@ struct OfficialTrendTests {
 
     private func window(_ percent: Double, minute: Double, resetMinute: Double = 300) -> OfficialWindow {
         OfficialWindow(percent: percent, resetsAt: start.addingTimeInterval(resetMinute * 60),
-                       fetchedAt: at(minute), duration: 5 * 3600)
+                       fetchedAt: at(minute))
     }
 
     private func at(_ minute: Double) -> Date { start.addingTimeInterval(minute * 60) }

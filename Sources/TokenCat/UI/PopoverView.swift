@@ -133,13 +133,15 @@ struct PopoverView: View {
     private var sessionColumn: some View {
         let gauge = engine.sessionGauge
         return VStack(alignment: .leading, spacing: 0) {
-            columnTitle("세션", detail: "5시간", gauge: gauge)
+            columnTitle("세션", detail: "5시간")
             figure(gauge).padding(.top, 2)
-            GaugeBar(percent: gauge.percent,
+            GaugeBar(percent: gauge?.percent,
                      elapsed: elapsed(until: engine.sessionResetsAt, duration: BlockCalculator.blockDuration))
                 .padding(.top, 6)
             VStack(alignment: .leading, spacing: 2) {
-                if gauge.source == .rolledOver {
+                if gauge == nil {
+                    caption(unavailableNote)
+                } else if gauge?.source == .rolledOver {
                     caption("초기화됨 · 새 값 확인 중")
                 } else if let reset = engine.sessionResetsAt {
                     caption(Format.resetCountdown(until: reset))
@@ -156,8 +158,7 @@ struct PopoverView: View {
 
     @ViewBuilder
     private var sessionOutlook: some View {
-        let gauge = engine.sessionGauge
-        if gauge.percent < 100,
+        if let gauge = engine.sessionGauge, gauge.percent < 100,
            let outlook = GaugeMath.limitOutlook(minutesLeft: engine.sessionMinutesLeft,
                                                 resetsAt: engine.sessionResetsAt, now: Date()) {
             switch outlook {
@@ -166,25 +167,24 @@ struct PopoverView: View {
             case .clearUntilReset:
                 caption("초기화 전까지 여유", color: Theme.tertiary)
             }
-        } else if !gauge.isOfficial {
-            caption("\(Format.tokens(engine.snapshot?.currentBlock?.totalTokens ?? 0)) / \(Format.tokens(settings.estimatedSessionLimit))",
-                    color: Theme.tertiary)
         }
     }
 
     private var weeklyColumn: some View {
         let gauge = engine.weeklyGauge
         return VStack(alignment: .leading, spacing: 0) {
-            columnTitle("주간", detail: nil, gauge: gauge)
+            columnTitle("주간", detail: nil)
             figure(gauge).padding(.top, 2)
-            GaugeBar(percent: gauge.percent,
-                     elapsed: elapsed(until: weeklyResetsAt, duration: WeeklyWindow.duration))
+            GaugeBar(percent: gauge?.percent,
+                     elapsed: gauge == nil ? nil : elapsed(until: engine.nextWeeklyReset, duration: WeeklyWindow.duration))
                 .padding(.top, 6)
             VStack(alignment: .leading, spacing: 2) {
-                if let reset = engine.nextWeeklyReset, gauge.isOfficial {
+                if gauge == nil {
+                    caption(unavailableNote)
+                } else if let reset = engine.nextWeeklyReset {
                     caption("\(Format.weekdayTime(reset)) 초기화")
                 } else {
-                    caption(weeklyWindowNote)
+                    caption("사용하면 7일 창 시작")
                 }
                 if let shares = weeklyShares {
                     caption(shares, color: Theme.tertiary)
@@ -195,42 +195,31 @@ struct PopoverView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func columnTitle(_ title: String, detail: String?, gauge: GaugeReading) -> some View {
+    private func columnTitle(_ title: String, detail: String?) -> some View {
         HStack(spacing: 4) {
             Text(title).foregroundStyle(Theme.secondary)
             if let detail { Text(detail).foregroundStyle(Theme.tertiary) }
-            if !gauge.isOfficial {
-                Text("추정")
-                    .foregroundStyle(Theme.warning)
-                    .help("공식 사용량을 받지 못해 로컬 기록과 추정 한도로 계산한 값")
-            }
         }
         .font(Theme.label)
     }
 
-    private func figure(_ gauge: GaugeReading) -> some View {
-        Figure(value: gauge.percent > 999 ? ">999" : "\(gauge.displayPercent)", unit: "%",
-               color: gauge.percent >= 80 ? Theme.level(gauge.percent) : Theme.primary)
+    /// 공식 값이 없으면 "--". 로컬 기록으로 추정하면 `/usage`와 어긋나서 숫자를 지어내지 않는다.
+    private func figure(_ gauge: GaugeReading?) -> some View {
+        let percent = gauge?.percent ?? 0
+        return Figure(value: gauge.map { "\($0.displayPercent)" } ?? "--", unit: "%",
+                      color: gauge == nil ? Theme.tertiary : percent >= 80 ? Theme.level(percent) : Theme.primary)
             .contentTransition(.numericText())
-            .animation(.easeOut(duration: 0.25), value: gauge.displayPercent)
+            .animation(.easeOut(duration: 0.25), value: gauge?.displayPercent)
     }
 
-    /// 주간 창의 다음 리셋. 공식 값을 모르고 롤링 7일이면 창 경계가 없어 nil.
-    private var weeklyResetsAt: Date? {
-        if let reset = engine.nextWeeklyReset { return reset }
-        guard settings.weeklyResetEnabled else { return nil }
-        return WeeklyWindow.lastReset(weekday: settings.weeklyResetWeekday, hour: settings.weeklyResetHour)
-            .addingTimeInterval(WeeklyWindow.duration)
-    }
-
-    private var weeklyWindowNote: String {
-        if let reset = engine.nextWeeklyReset {
-            return "\(Format.weekdayTime(reset)) 초기화"
+    /// 게이지를 비운 이유. 자세한 사유는 아래 상태 줄에 있다.
+    private var unavailableNote: String {
+        switch engine.officialStatus {
+        case .waiting: return "공식 값 조회 중"
+        case .disabled: return "공식 연동 꺼짐"
+        case .failed: return "조회 실패"
+        case .live, .stale: return "공식 값 없음"   // 응답에 이 창이 빠졌을 때
         }
-        if settings.weeklyResetEnabled {
-            return "\(Format.weekdayName(settings.weeklyResetWeekday)) \(Format.hour(settings.weeklyResetHour)) 초기화"
-        }
-        return "최근 7일 기준"
     }
 
     /// 사용처가 둘 이상이면 공식 비중(Claude Code·채팅…), 아니면 이 기기의 모델 비중.
@@ -327,16 +316,16 @@ struct PopoverView: View {
             return age < 1 ? "공식 사용량 · 방금 갱신" : "공식 사용량 · \(age)분 전 갱신"
         case .waiting: return "공식 사용량 조회 중"
         case .stale(let reason): return "직전 공식 값 · \(reason)"
-        case .failed(let reason): return "추정 모드 · \(reason)"
-        case .disabled: return "추정 모드 · \(settings.plan.displayName) 플랜 기준"
+        case .failed(let reason): return "조회 실패 · \(reason)"
+        case .disabled: return "공식 연동 꺼짐"
         }
     }
 
     private var statusColor: Color {
         switch engine.officialStatus {
         case .live: return Theme.positive
-        case .waiting: return Theme.tertiary
-        case .stale, .failed, .disabled: return Theme.warning
+        case .waiting, .disabled: return Theme.tertiary
+        case .stale, .failed: return Theme.warning
         }
     }
 
@@ -354,7 +343,7 @@ struct PopoverView: View {
     }
 }
 
-/// 스파크라인에서 마우스가 가리키는 분. `@State`를 못 쓰는 이유는 CalibrationForm 참고.
+/// 스파크라인에서 마우스가 가리키는 분. `@State`를 못 쓰는 이유는 HoverFlag 참고.
 final class HoverIndex: ObservableObject {
     @Published var index: Int?
 }

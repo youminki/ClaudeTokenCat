@@ -84,7 +84,8 @@ struct ToolbarButtonStyle: ButtonStyle {
     }
 }
 
-/// `@State`를 못 쓰는 이유는 CalibrationForm 참고.
+/// macOS 27 SDK의 `@State`는 매크로라 Command Line Tools만으로는 빌드되지 않는다.
+/// install.sh가 Xcode 없이도 돌도록 뷰 상태를 ObservableObject로 둔다.
 final class HoverFlag: ObservableObject {
     @Published var on = false
 }

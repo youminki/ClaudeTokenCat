@@ -34,19 +34,10 @@ enum Format {
 
     private static let weekdays = ["일", "월", "화", "수", "목", "금", "토"]
 
-    /// 1 → "일요일"
-    static func weekdayName(_ weekday: Int) -> String {
-        (1...7).contains(weekday) ? "\(weekdays[weekday - 1])요일" : "?"
-    }
-
     /// "목 13:40"
     static func weekdayTime(_ date: Date) -> String {
         let weekday = Calendar.current.component(.weekday, from: date)
         return "\(weekdays[weekday - 1]) \(timeFormatter.string(from: date))"
-    }
-
-    static func hour(_ hour: Int) -> String {
-        String(format: "%02d:00", hour)
     }
 
     static func modelName(_ model: String) -> String {
