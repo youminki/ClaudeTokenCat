@@ -1,93 +1,135 @@
-import XCTest
+import Foundation
+import Testing
 @testable import UsageCore
 
-final class GaugeMathTests: XCTestCase {
+struct GaugeMathTests {
 
-    // 실측 시나리오: 공식 63%, 조회 시점 블록 3.7M, 이후 300K 소모
-    // → 1% ≈ 58,730 tokens → 보간 +5.1% ≈ 68.1%
-    func testInterpolationUsesCalibratedScale() {
-        let pct = GaugeMath.interpolated(base: 63, windowTokens: 4_000_000, tokensSince: 300_000)
-        XCTAssertEqual(pct, 68.1, accuracy: 0.1)
+    private let now = Date(timeIntervalSince1970: 1_000_000)
+    private let fiveHours: TimeInterval = 5 * 3600
+
+    private func window(_ percent: Double, resetsInMinutes: Double?, fetchedMinutesAgo: Double = 2) -> OfficialWindow {
+        OfficialWindow(percent: percent, resetsAt: resetsInMinutes.map { now.addingTimeInterval($0 * 60) },
+                       fetchedAt: now.addingTimeInterval(-fetchedMinutesAgo * 60), duration: fiveHours)
     }
 
-    func testNoInterpolationWhenNothingConsumedSinceFetch() {
-        XCTAssertEqual(GaugeMath.interpolated(base: 63, windowTokens: 4_000_000, tokensSince: 0), 63)
+    @Test func showsOfficialValueAsIs() {
+        let reading = GaugeMath.reading(official: window(42, resetsInMinutes: 120), now: now)
+        #expect(reading.percent == 42)
+        #expect(reading.source == .official)
+        #expect(reading.isOfficial)
     }
 
-    func testLowBaseSkipsInterpolation() {
-        // 공식 3%처럼 작으면 역산이 불안정 → 보간 없이 base 그대로 (100% 폭주 방지)
-        XCTAssertEqual(GaugeMath.interpolated(base: 3, windowTokens: 200_000, tokensSince: 150_000), 3)
+    // 회귀: 조회 뒤 창이 초기화되면 다음 조회까지 이전 창의 높은 %를 그대로 보여 줬다.
+    @Test func dropsToZeroWhenWindowResetsAfterFetch() {
+        let reading = GaugeMath.reading(official: window(97, resetsInMinutes: -0.5, fetchedMinutesAgo: 4), now: now)
+        #expect(reading.percent == 0)
+        #expect(reading.source == .rolledOver)
     }
 
-    func testMissingWindowTokensSkipsInterpolation() {
-        // 블록 없음(0) 또는 조회 이후분이 창 전체보다 큰 비정상 → base 그대로
-        XCTAssertEqual(GaugeMath.interpolated(base: 50, windowTokens: 0, tokensSince: 100_000), 50)
-        XCTAssertEqual(GaugeMath.interpolated(base: 50, windowTokens: 80_000, tokensSince: 100_000), 50)
+    // 조회할 때 이미 지난 리셋 시각이 왔으면 활성 창이 없는 것: 0%, 다시 조회하지 않는다
+    @Test func staleResetAtFetchMeansNoActiveWindow() {
+        let reading = GaugeMath.reading(official: window(55, resetsInMinutes: -10, fetchedMinutesAgo: 2), now: now)
+        #expect(reading.percent == 0)
+        #expect(reading.source == .official)
     }
 
-    func testCapsAtHundred() {
-        let pct = GaugeMath.interpolated(base: 98, windowTokens: 1_000_000, tokensSince: 500_000)
-        XCTAssertEqual(pct, 100)
-        XCTAssertEqual(GaugeMath.interpolated(base: 120, windowTokens: 0, tokensSince: 0), 100)
+    @Test func clampsToRange() {
+        #expect(GaugeMath.reading(official: window(120, resetsInMinutes: 60), now: now).percent == 100)
+        #expect(GaugeMath.reading(official: window(-3, resetsInMinutes: 60), now: now).percent == 0)
+        #expect(GaugeMath.reading(official: window(30, resetsInMinutes: nil), now: now).percent == 30)
     }
 
-    func testRemainingTokens() {
-        // 63% + 보간 5.1% = 68.1% → 남은 31.9% × 58,730 ≈ 1.87M
-        let remaining = GaugeMath.remainingTokens(base: 63, windowTokens: 4_000_000, tokensSince: 300_000)
-        XCTAssertEqual(Double(remaining ?? 0), 1_873_000, accuracy: 5_000)
-        XCTAssertNil(GaugeMath.remainingTokens(base: 3, windowTokens: 100, tokensSince: 0))
+    @Test func displayPercentIsWhole() {
+        #expect(GaugeReading(percent: 42.9, source: .official).displayPercent == 42)
+        #expect(GaugeReading.estimated(1500).displayPercent == 999)
+        #expect(GaugeReading.estimated(-3).displayPercent == 0)
     }
 
-    func testReadingUsesOfficialBaseWhenPresent() {
-        let reading = GaugeMath.reading(officialBase: 40, windowTokens: 1_100_000,
-                                        tokensSince: 100_000, estimatedLimit: 500_000)
-        XCTAssertTrue(reading.isOfficial)
-        XCTAssertTrue(reading.isInterpolating)
-        XCTAssertEqual(reading.percent, 44, accuracy: 0.001)   // 1% = 25,000 tokens
+    @Test func estimatedReading() {
+        #expect(GaugeMath.estimated(windowTokens: 250_000, limit: 500_000).percent == 50)
+        #expect(GaugeMath.estimated(windowTokens: 10, limit: 0).percent == 0)
+        #expect(!GaugeMath.estimated(windowTokens: 1, limit: 2).isOfficial)
     }
 
-    func testReadingFallsBackToEstimatedLimit() {
-        let reading = GaugeMath.reading(officialBase: nil, windowTokens: 250_000,
-                                        tokensSince: 0, estimatedLimit: 500_000)
-        XCTAssertFalse(reading.isOfficial)
-        XCTAssertEqual(reading.percent, 50, accuracy: 0.001)
-        XCTAssertEqual(GaugeMath.reading(officialBase: nil, windowTokens: 10, tokensSince: 0,
-                                         estimatedLimit: 0).percent, 0)
+    @Test func impliedLimit() {
+        #expect(GaugeMath.impliedLimit(percent: 40, windowTokens: 1_000_000) == 2_500_000)
+        #expect(GaugeMath.impliedLimit(percent: 2, windowTokens: 1_000) == nil)
+        #expect(GaugeMath.impliedLimit(percent: 40, windowTokens: 0) == nil)
     }
 
-    func testImpliedLimit() {
-        XCTAssertEqual(GaugeMath.impliedLimit(base: 40, windowTokens: 1_100_000, tokensSince: 100_000), 2_500_000)
-        XCTAssertNil(GaugeMath.impliedLimit(base: 2, windowTokens: 1_000, tokensSince: 0))
+    @Test func minutesUntilFull() {
+        // 40%에서 분당 0.6%p씩 오르면 남은 60%p는 100분
+        #expect(GaugeMath.minutesUntilFull(percent: 40, ratePerMinute: 0.6) == 100)
+        #expect(GaugeMath.minutesUntilFull(percent: 40, ratePerMinute: nil) == nil)
+        #expect(GaugeMath.minutesUntilFull(percent: 40, ratePerMinute: 0) == nil)
+        #expect(GaugeMath.minutesUntilFull(percent: 100, ratePerMinute: 1) == nil)
+        #expect(GaugeMath.minutesUntilFull(remainingTokens: 600_000, burnRate: 10_000) == 60)
+        #expect(GaugeMath.minutesUntilFull(remainingTokens: 0, burnRate: 10_000) == nil)
+        #expect(GaugeMath.minutesUntilFull(remainingTokens: nil, burnRate: 10_000) == nil)
     }
 
-    func testMinutesUntilFull() {
-        XCTAssertEqual(GaugeMath.minutesUntilFull(remainingTokens: 600_000, burnRate: 10_000), 60)
-        XCTAssertNil(GaugeMath.minutesUntilFull(remainingTokens: 600_000, burnRate: 0))
-        XCTAssertNil(GaugeMath.minutesUntilFull(remainingTokens: 0, burnRate: 10_000))
-        XCTAssertNil(GaugeMath.minutesUntilFull(remainingTokens: nil, burnRate: 10_000))
-    }
-
-    func testElapsedFraction() {
-        let now = Date(timeIntervalSince1970: 1_000_000)
-        let fiveHours: TimeInterval = 5 * 3600
+    @Test func elapsedFraction() {
         // 리셋까지 2시간 남은 5시간 창 → 60% 경과
-        XCTAssertEqual(GaugeMath.elapsedFraction(resetsAt: now.addingTimeInterval(2 * 3600),
-                                                 duration: fiveHours, now: now), 0.6, accuracy: 0.0001)
-        // 리셋이 지났거나 창보다 멀면 0~1로 자른다
-        XCTAssertEqual(GaugeMath.elapsedFraction(resetsAt: now.addingTimeInterval(-60), duration: fiveHours, now: now), 1)
-        XCTAssertEqual(GaugeMath.elapsedFraction(resetsAt: now.addingTimeInterval(9 * 3600), duration: fiveHours, now: now), 0)
+        #expect(abs(GaugeMath.elapsedFraction(resetsAt: now.addingTimeInterval(2 * 3600), duration: fiveHours,
+                                              now: now) - 0.6) < 0.0001)
+        #expect(GaugeMath.elapsedFraction(resetsAt: now.addingTimeInterval(-60), duration: fiveHours, now: now) == 1)
+        #expect(GaugeMath.elapsedFraction(resetsAt: now.addingTimeInterval(9 * 3600), duration: fiveHours, now: now) == 0)
     }
 
-    func testLimitOutlookComparesWithReset() {
-        let now = Date(timeIntervalSince1970: 1_000_000)
+    @Test func limitOutlookComparesWithReset() {
         let reset = now.addingTimeInterval(90 * 60)
-        XCTAssertEqual(GaugeMath.limitOutlook(minutesLeft: 40, resetsAt: reset, now: now), .reachesLimit(minutes: 40))
+        #expect(GaugeMath.limitOutlook(minutesLeft: 40, resetsAt: reset, now: now) == .reachesLimit(minutes: 40))
         // 한도보다 리셋이 먼저 오면 "N분 뒤 한도"는 의미가 없다
-        XCTAssertEqual(GaugeMath.limitOutlook(minutesLeft: 120, resetsAt: reset, now: now), .clearUntilReset)
-        XCTAssertEqual(GaugeMath.limitOutlook(minutesLeft: 40, resetsAt: nil, now: now), .reachesLimit(minutes: 40))
-        XCTAssertNil(GaugeMath.limitOutlook(minutesLeft: nil, resetsAt: reset, now: now))
-        // 리셋이 지났는데 새 공식 값을 아직 못 받았으면 리셋 시각을 모르는 것으로 본다
-        XCTAssertEqual(GaugeMath.limitOutlook(minutesLeft: 40, resetsAt: now.addingTimeInterval(-60), now: now),
-                       .reachesLimit(minutes: 40))
+        #expect(GaugeMath.limitOutlook(minutesLeft: 120, resetsAt: reset, now: now) == .clearUntilReset)
+        #expect(GaugeMath.limitOutlook(minutesLeft: 40, resetsAt: nil, now: now) == .reachesLimit(minutes: 40))
+        #expect(GaugeMath.limitOutlook(minutesLeft: nil, resetsAt: reset, now: now) == nil)
+        #expect(GaugeMath.limitOutlook(minutesLeft: 40, resetsAt: now.addingTimeInterval(-60), now: now)
+                == .reachesLimit(minutes: 40))
+    }
+}
+
+struct OfficialTrendTests {
+    private let start = Date(timeIntervalSince1970: 2_000_000)
+
+    private func window(_ percent: Double, minute: Double, resetMinute: Double = 300) -> OfficialWindow {
+        OfficialWindow(percent: percent, resetsAt: start.addingTimeInterval(resetMinute * 60),
+                       fetchedAt: at(minute), duration: 5 * 3600)
+    }
+
+    private func at(_ minute: Double) -> Date { start.addingTimeInterval(minute * 60) }
+
+    @Test func rateFromRecentOfficialValues() {
+        var trend = OfficialTrend()
+        trend.record(window(20, minute: 0))
+        trend.record(window(21, minute: 3))
+        #expect(trend.ratePerMinute(now: at(3)) == nil)          // 5분이 안 됐고 2%p도 안 올랐다
+        trend.record(window(26, minute: 12))
+        #expect(trend.ratePerMinute(now: at(12)) == 0.5)          // 12분에 6%p
+        #expect(trend.ratePerMinute(now: at(23)) == nil)          // 마지막 상승 뒤 10분 넘게 쉬는 중
+    }
+
+    @Test func restartsOnNewWindowOrDrop() {
+        var trend = OfficialTrend()
+        trend.record(window(90, minute: 0))
+        trend.record(window(3, minute: 10, resetMinute: 600))    // 새 창
+        trend.record(window(9, minute: 22, resetMinute: 600))
+        #expect(trend.ratePerMinute(now: at(22)) == 0.5)
+        trend.record(window(4, minute: 25, resetMinute: 600))    // 내려감 → 새로 센다
+        #expect(trend.ratePerMinute(now: at(25)) == nil)
+    }
+
+    @Test func forgetsOldValues() {
+        var trend = OfficialTrend()
+        trend.record(window(10, minute: 0))
+        trend.record(window(20, minute: 10))
+        trend.record(window(20, minute: 50))   // 30분 넘게 지난 값은 버린다 → 변화 없음
+        #expect(trend.ratePerMinute(now: at(50)) == nil)
+    }
+
+    @Test func toleratesResetJitter() {
+        var trend = OfficialTrend()
+        trend.record(window(10, minute: 0, resetMinute: 300))
+        trend.record(window(16, minute: 6, resetMinute: 300.01))   // resets_at이 0.6초 흔들림
+        #expect(trend.ratePerMinute(now: at(6)) == 1)
     }
 }

@@ -1,7 +1,8 @@
-import XCTest
+import Foundation
+import Testing
 @testable import UsageCore
 
-final class UsageStoreTests: XCTestCase {
+struct UsageStoreTests {
 
     private func event(minutesAgo: Double, tokens: Int, id: String, now: Date) -> UsageEvent {
         UsageEvent(timestamp: now.addingTimeInterval(-minutesAgo * 60),
@@ -11,16 +12,16 @@ final class UsageStoreTests: XCTestCase {
                    cacheCreationTokens: 0, cacheReadTokens: 0)
     }
 
-    func testDeduplicatesByMessageIdAndRequestId() {
+    @Test func deduplicatesByMessageIdAndRequestId() {
         let store = UsageStore()
         let now = Date()
         let e = event(minutesAgo: 1, tokens: 500, id: "dup", now: now)
         // 실물 JSONL은 같은 응답을 최대 6줄로 중복 기록한다
-        XCTAssertEqual(store.add([e, e, e, e, e, e]), 1)
-        XCTAssertEqual(store.snapshot(now: now).todayTokens, 500)
+        #expect(store.add([e, e, e, e, e, e]) == 1)
+        #expect(store.snapshot(now: now).todayTokens == 500)
     }
 
-    func testTokensLast60s() {
+    @Test func tokensLast60s() {
         let store = UsageStore()
         let now = Date()
         store.add([
@@ -28,10 +29,10 @@ final class UsageStoreTests: XCTestCase {
             event(minutesAgo: 0.9, tokens: 200, id: "b", now: now),
             event(minutesAgo: 2.0, tokens: 999, id: "c", now: now),
         ])
-        XCTAssertEqual(store.snapshot(now: now).tokensLast60s, 300)
+        #expect(store.snapshot(now: now).tokensLast60s == 300)
     }
 
-    func testTodayTokensExcludesYesterday() {
+    @Test func todayTokensExcludesYesterday() {
         let store = UsageStore()
         let calendar = Calendar.current
         let now = calendar.startOfDay(for: Date()).addingTimeInterval(3600) // 오늘 01:00
@@ -39,10 +40,10 @@ final class UsageStoreTests: XCTestCase {
             event(minutesAgo: 30, tokens: 100, id: "today", now: now),
             event(minutesAgo: 120, tokens: 999, id: "yesterday", now: now), // 전날 23:00
         ])
-        XCTAssertEqual(store.snapshot(now: now).todayTokens, 100)
+        #expect(store.snapshot(now: now).todayTokens == 100)
     }
 
-    func testWeeklyTokensAndModelShares() {
+    @Test func weeklyTokensAndModelShares() {
         let store = UsageStore()
         let now = Date()
         var opus = event(minutesAgo: 60, tokens: 300, id: "o", now: now)
@@ -55,12 +56,12 @@ final class UsageStoreTests: XCTestCase {
             event(minutesAgo: 8 * 24 * 60, tokens: 999, id: "old", now: now), // 8일 전 → 롤링 7일 밖
         ])
         let snap = store.snapshot(now: now)
-        XCTAssertEqual(snap.weeklyTokens, 1000)
-        XCTAssertEqual(snap.weeklyModelTokens["claude-opus-4-8"], 300)
-        XCTAssertEqual(snap.weeklyModelTokens["claude-sonnet-5"], 700)
+        #expect(snap.weeklyTokens == 1000)
+        #expect(snap.weeklyModelTokens["claude-opus-4-8"] == 300)
+        #expect(snap.weeklyModelTokens["claude-sonnet-5"] == 700)
     }
 
-    func testWeeklyWindowWithCustomStart() {
+    @Test func weeklyWindowWithCustomStart() {
         let store = UsageStore()
         let now = Date()
         store.add([
@@ -68,10 +69,10 @@ final class UsageStoreTests: XCTestCase {
             event(minutesAgo: 90, tokens: 200, id: "out", now: now),
         ])
         let snap = store.snapshot(now: now, weeklySince: now.addingTimeInterval(-3600))
-        XCTAssertEqual(snap.weeklyTokens, 100)
+        #expect(snap.weeklyTokens == 100)
     }
 
-    func testSparklineBuckets() {
+    @Test func sparklineBuckets() {
         let store = UsageStore()
         let now = Date()
         store.add([
@@ -81,25 +82,25 @@ final class UsageStoreTests: XCTestCase {
             event(minutesAgo: 31, tokens: 99, id: "d", now: now),    // 창 밖
         ])
         let spark = store.snapshot(now: now).sparkline
-        XCTAssertEqual(spark.count, 30)
-        XCTAssertEqual(spark[29], 10)
-        XCTAssertEqual(spark[24], 20)
-        XCTAssertEqual(spark[0], 30)
-        XCTAssertEqual(spark.reduce(0, +), 60)
+        #expect(spark.count == 30)
+        #expect(spark[29] == 10)
+        #expect(spark[24] == 20)
+        #expect(spark[0] == 30)
+        #expect(spark.reduce(0, +) == 60)
     }
 
-    func testTokensSince() {
+    @Test func tokensSince() {
         let store = UsageStore()
         let now = Date()
         store.add([
             event(minutesAgo: 1, tokens: 100, id: "new", now: now),
             event(minutesAgo: 10, tokens: 200, id: "old", now: now),
         ])
-        XCTAssertEqual(store.tokens(since: now.addingTimeInterval(-300), now: now), 100)
-        XCTAssertEqual(store.tokens(since: now.addingTimeInterval(-3600), now: now), 300)
+        #expect(store.tokens(since: now.addingTimeInterval(-300), now: now) == 100)
+        #expect(store.tokens(since: now.addingTimeInterval(-3600), now: now) == 300)
     }
 
-    func testDailyTotalsAndProgrammaticSplit() {
+    @Test func dailyTotalsAndProgrammaticSplit() {
         let store = UsageStore()
         let calendar = Calendar.current
         let now = calendar.startOfDay(for: Date()).addingTimeInterval(2 * 3600) // 오늘 02:00
@@ -114,15 +115,15 @@ final class UsageStoreTests: XCTestCase {
             event(minutesAgo: 5 * 60, tokens: 200, id: "y1", now: now),  // 전날 21:00
         ])
         let snap = store.snapshot(now: now)
-        XCTAssertEqual(snap.todayTokens, 500)
-        XCTAssertEqual(snap.todayProgrammaticTokens, 400)
-        XCTAssertEqual(snap.dailyTotals.count, 2)
-        XCTAssertEqual(snap.dailyTotals[0].tokens, 500)   // 최신(오늘)부터
-        XCTAssertEqual(snap.dailyTotals[1].tokens, 200)
-        XCTAssertGreaterThan(snap.dailyTotals[0].costUSD, 0)
+        #expect(snap.todayTokens == 500)
+        #expect(snap.todayProgrammaticTokens == 400)
+        #expect(snap.dailyTotals.count == 2)
+        #expect(snap.dailyTotals[0].tokens == 500)   // 최신(오늘)부터
+        #expect(snap.dailyTotals[1].tokens == 200)
+        #expect(snap.dailyTotals[0].costUSD > 0)
     }
 
-    func testCostUsesPricingTable() {
+    @Test func costUsesPricingTable() {
         let store = UsageStore()
         let now = Date()
         // sonnet 5: input $2/MTok → 1M input = $2
@@ -131,18 +132,18 @@ final class UsageStoreTests: XCTestCase {
                            inputTokens: 1_000_000, outputTokens: 0,
                            cacheCreationTokens: 0, cacheReadTokens: 0)
         store.add([e])
-        XCTAssertEqual(store.snapshot(now: now).todayCostUSD, 2.0, accuracy: 0.001)
+        #expect(abs((store.snapshot(now: now).todayCostUSD) - (2.0)) <= 0.001)
     }
 
-    func testOpus55PricingIsNotZero() {
+    @Test func opus55PricingIsNotZero() {
         let e = UsageEvent(timestamp: Date(), model: "claude-opus-5-5",
                            requestId: "r", messageId: "m",
                            inputTokens: 1_000_000, outputTokens: 0,
                            cacheCreationTokens: 0, cacheReadTokens: 1_000_000)
-        XCTAssertEqual(PricingTable.cost(of: e), 4.2, accuracy: 0.001)
+        #expect(abs((PricingTable.cost(of: e)) - (4.2)) <= 0.001)
     }
 
-    func testPrunesEventsOlderThanRetention() {
+    @Test func prunesEventsOlderThanRetention() {
         let store = UsageStore(retention: 24 * 60 * 60)
         let now = Date()
         store.add([
@@ -150,11 +151,11 @@ final class UsageStoreTests: XCTestCase {
             event(minutesAgo: 2 * 24 * 60, tokens: 999, id: "drop", now: now),
         ])
         let snap = store.snapshot(now: now)
-        XCTAssertEqual(snap.totalEventCount, 1)
-        XCTAssertEqual(snap.dailyTotals.map(\.tokens).reduce(0, +), 100)
+        #expect(snap.totalEventCount == 1)
+        #expect(snap.dailyTotals.map(\.tokens).reduce(0, +) == 100)
     }
 
-    func testDailyTotalsSplitByModel() {
+    @Test func dailyTotalsSplitByModel() {
         let store = UsageStore()
         let now = Date()
         store.add([
@@ -164,11 +165,11 @@ final class UsageStoreTests: XCTestCase {
                        cacheCreationTokens: 0, cacheReadTokens: 0),
         ])
         let today = store.snapshot(now: now).dailyTotals[0]
-        XCTAssertEqual(today.modelTokens, ["claude-sonnet-5": 300, "claude-opus-5-5": 700])
-        XCTAssertEqual(today.tokens, 1000)
+        #expect(today.modelTokens == ["claude-sonnet-5": 300, "claude-opus-5-5": 700])
+        #expect(today.tokens == 1000)
     }
 
-    func testLatestClientVersionComesFromNewestEvent() {
+    @Test func latestClientVersionComesFromNewestEvent() {
         let store = UsageStore()
         let now = Date()
         func versioned(_ minutesAgo: Double, _ id: String, _ version: String?) -> UsageEvent {
@@ -178,6 +179,6 @@ final class UsageStoreTests: XCTestCase {
         }
         // 늦게 읽힌 옛 기록이 최신 버전을 덮지 않아야 한다
         store.add([versioned(1, "new", "2.1.285"), versioned(2, "nil", nil), versioned(30, "old", "2.1.200")])
-        XCTAssertEqual(store.snapshot(now: now).latestClientVersion, "2.1.285")
+        #expect(store.snapshot(now: now).latestClientVersion == "2.1.285")
     }
 }

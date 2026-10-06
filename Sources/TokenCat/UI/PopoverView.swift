@@ -46,7 +46,7 @@ struct PopoverView: View {
         return VStack(alignment: .leading, spacing: 5) {
             header("세션", detail: "5시간", gauge: gauge)
                 .help("이번 세션에 Claude Code가 쓴 토큰: \(Format.tokens(blockTokens))")
-            GaugeBar(percent: gauge.percent, basePercent: gauge.officialBase,
+            GaugeBar(percent: gauge.percent,
                      elapsed: elapsed(until: engine.sessionResetsAt, duration: BlockCalculator.blockDuration))
             HStack {
                 if let reset = engine.sessionResetsAt {
@@ -82,7 +82,7 @@ struct PopoverView: View {
 
         return VStack(alignment: .leading, spacing: 5) {
             header("주간", detail: nil, gauge: gauge)
-            GaugeBar(percent: gauge.percent, basePercent: gauge.officialBase,
+            GaugeBar(percent: gauge.percent,
                      elapsed: elapsed(until: weeklyResetsAt, duration: WeeklyWindow.duration))
             if gauge.isOfficial, let reset = engine.nextWeeklyReset {
                 caption("\(Format.weekdayTime(reset)) 초기화 · \(Format.duration(reset.timeIntervalSinceNow)) 남음")
@@ -260,7 +260,7 @@ struct PopoverView: View {
                     .help("공식 사용량을 받지 못해 로컬 기록과 추정 한도로 계산한 값")
             }
             Spacer()
-            Text(gauge.percent > 999 ? ">999%" : Format.percent(gauge.percent))
+            Text(gauge.percent > 999 ? ">999%" : "\(gauge.displayPercent)%")
                 .font(.system(size: 15, weight: .semibold, design: .rounded)).monospacedDigit()
                 .foregroundStyle(gauge.percent >= 80 ? GaugeBar.color(for: gauge.percent) : .primary)
         }

@@ -60,7 +60,7 @@ public final class UsageStore {
         }
     }
 
-    /// 특정 시각 이후 토큰 합계 (공식 % 보간용 — 마지막 공식 조회 이후 소모분).
+    /// (since, now] 구간 토큰 합계.
     public func tokens(since: Date, now: Date = Date()) -> Int {
         queue.sync {
             events.reduce(0) { sum, e in

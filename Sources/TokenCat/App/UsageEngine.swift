@@ -26,14 +26,16 @@ final class UsageEngine: ObservableObject {
     /// 화면용 사본이고 원본은 workQueue의 `officialValue`.
     @Published var official: OfficialUsage?
     @Published var officialStatus: OfficialStatus = .waiting
-    @Published var sessionGauge = GaugeReading(percent: 0, officialBase: nil)
-    @Published var weeklyGauge = GaugeReading(percent: 0, officialBase: nil)
+    @Published var sessionGauge = GaugeReading.estimated(0)
+    @Published var weeklyGauge = GaugeReading.estimated(0)
     /// 현재 속도로 세션 한도에 닿기까지 남은 분. 속도가 없으면 nil.
     @Published var sessionMinutesLeft: Int?
     /// 세션 게이지가 기준으로 삼는 창의 리셋 시각. 공식 값이면 공식 리셋, 추정이면 로컬 5시간 블록 끝.
     @Published var sessionResetsAt: Date?
     /// 공식 응답에서 알아낸 다음 주간 리셋. 조회가 끊겨도 7일 단위로 굴려 유지한다.
     @Published var nextWeeklyReset: Date?
+    /// 주간 사용처별 비중 (Claude Code, 채팅 등). 공식 값이 있을 때만.
+    @Published var weeklyBreakdown: [UsageShare] = []
 
     let settings: AppSettings
 
@@ -45,6 +47,8 @@ final class UsageEngine: ObservableObject {
     static let officialGrace: TimeInterval = 15 * 60
     /// 429를 받으면 이만큼 조회를 쉰다.
     static let rateLimitBackoff: TimeInterval = 10 * 60
+    /// 공식 창이 초기화된 뒤 새 값을 받을 때까지 다시 조회하는 간격.
+    static let rolloverRefetchInterval: TimeInterval = 30
 
     private let watcher = JSONLWatcher()
     private let store = UsageStore()
@@ -69,6 +73,8 @@ final class UsageEngine: ObservableObject {
     private var lastOfficialFailure = ""
     private var knownWeeklyReset: Date?
     private var lastAutoCalibratedFetch: Date?
+    /// 최근 공식 세션 %의 오름세. "약 N분 뒤 한도"를 공식 값만으로 계산한다.
+    private var sessionTrend = OfficialTrend()
 
     /// 진단용: `log stream --predicate 'subsystem == "dev.tokencat.TokenCat"' --info`
     private let log = Logger(subsystem: "dev.tokencat.TokenCat", category: "engine")
@@ -216,7 +222,7 @@ final class UsageEngine: ObservableObject {
 
         if let reset = official?.weeklyResetsAt { knownWeeklyReset = reset }
         let nextWeeklyReset = knownWeeklyReset.map { WeeklyWindow.nextReset(from: $0, now: now) }
-        // 공식 주간 창을 알면 그 창으로 집계해야 보간·자동 보정이 공식 %와 맞는다.
+        // 공식 주간 창을 알면 그 창으로 집계해야 추정 한도 자동 보정이 공식 %와 맞는다.
         let weeklyStart = nextWeeklyReset.map { $0.addingTimeInterval(-WeeklyWindow.duration) }
             ?? config.weeklyWindowStart(now: now)
 
@@ -228,26 +234,28 @@ final class UsageEngine: ObservableObject {
         let state = Thresholds.preset(sensitivity: config.sensitivity)
             .state(burnRate: rate, idleSeconds: idle)
 
-        let sinceOfficial = official.map { store.tokens(since: $0.fetchedAt, now: now) } ?? 0
         let blockTokens = snap.currentBlock?.totalTokens ?? 0
-        let result = UsageEvaluator.evaluate(official: official, officialEnabled: config.officialEnabled,
-                                             blockTokens: blockTokens, weeklyTokens: snap.weeklyTokens,
-                                             tokensSinceOfficial: sinceOfficial,
-                                             sessionLimit: config.sessionLimit, weeklyLimit: config.weeklyLimit,
-                                             burnRate: rate)
+        let result = UsageEvaluator.evaluate(UsageEvaluator.Input(
+            official: official, officialEnabled: config.officialEnabled, now: now,
+            // 이 기기에서 지금 쓰고 있지 않으면 한도 도달 시간을 보여 주지 않는다
+            sessionRatePerMinute: rate >= 1 ? sessionTrend.ratePerMinute(now: now) : nil,
+            blockTokens: blockTokens, weeklyTokens: snap.weeklyTokens,
+            sessionLimit: config.sessionLimit, weeklyLimit: config.weeklyLimit, tokenBurnRate: rate))
+        // 조회 뒤 공식 창이 초기화됐으면 다음 정기 조회(최대 3분)를 기다리지 않고 새 값을 받는다.
+        if result.needsRefresh { fetchOfficial(minInterval: Self.rolloverRefetchInterval) }
 
-        autoCalibrate(official: official, blockTokens: blockTokens, weeklyTokens: snap.weeklyTokens,
-                      tokensSince: sinceOfficial)
+        autoCalibrate(official: official)
 
         if config.limitAlertsEnabled && result.authoritative {
-            fireLimitAlerts(config: config, official: official, snap: snap, weeklyStart: weeklyStart,
+            fireLimitAlerts(config: config, snap: snap, weeklyStart: weeklyStart,
                             nextWeeklyReset: nextWeeklyReset, result: result)
         }
         checkNewBlock(snap: snap, enabled: config.newSessionAlertEnabled)
 
-        log.debug("tick: today=\(snap.todayTokens) block=\(blockTokens) last60s=\(snap.tokensLast60s) rate=\(Int(rate)) state=\(state.rawValue, privacy: .public) 세션%=\(String(format: "%.1f", result.session.percent), privacy: .public)")
+        log.debug("tick: today=\(snap.todayTokens) block=\(blockTokens) last60s=\(snap.tokensLast60s) rate=\(Int(rate)) state=\(state.rawValue, privacy: .public) 세션%=\(String(format: "%.1f", result.session.percent), privacy: .public) source=\(String(describing: result.session.source), privacy: .public)")
 
-        let sessionResetsAt = result.session.isOfficial ? official?.sessionResetsAt : snap.currentBlock?.end
+        let sessionResetsAt = result.session.isOfficial ? result.sessionResetsAt : snap.currentBlock?.end
+        let breakdown = official?.weeklyBreakdown ?? []
         DispatchQueue.main.async {
             self.snapshot = snap
             self.burnRate = rate
@@ -257,20 +265,23 @@ final class UsageEngine: ObservableObject {
             self.weeklyGauge = result.weekly
             self.sessionMinutesLeft = result.sessionMinutesLeft
             self.sessionResetsAt = sessionResetsAt
-            self.nextWeeklyReset = nextWeeklyReset
+            self.nextWeeklyReset = result.weeklyResetsAt ?? nextWeeklyReset
+            self.weeklyBreakdown = breakdown
         }
     }
 
-    /// 공식 조회 1건당 한 번, 그 시점의 로컬 토큰으로 한도를 역산해 둔다.
-    private func autoCalibrate(official: OfficialUsage?, blockTokens: Int, weeklyTokens: Int, tokensSince: Int) {
+    /// 공식 조회 1건당 한 번, 공식 창 안의 로컬 토큰으로 추정 한도를 역산해 둔다.
+    /// 공식 조회가 실패해 추정 모드로 내려가도 게이지가 크게 어긋나지 않게 한다.
+    private func autoCalibrate(official: OfficialUsage?) {
         guard let official, official.fetchedAt != lastAutoCalibratedFetch else { return }
         lastAutoCalibratedFetch = official.fetchedAt
-        let session = official.sessionPercent.flatMap {
-            GaugeMath.impliedLimit(base: $0, windowTokens: blockTokens, tokensSince: tokensSince)
+        func implied(_ window: OfficialWindow?) -> Int? {
+            guard let window, let start = window.start else { return nil }
+            return GaugeMath.impliedLimit(percent: window.percent,
+                                          windowTokens: store.tokens(since: start, now: window.fetchedAt))
         }
-        let weekly = official.weeklyPercent.flatMap {
-            GaugeMath.impliedLimit(base: $0, windowTokens: weeklyTokens, tokensSince: tokensSince)
-        }
+        let session = implied(official.sessionWindow)
+        let weekly = implied(official.weeklyWindow)
         guard session != nil || weekly != nil else { return }
         DispatchQueue.main.async {
             if let session { self.settings.autoSessionLimit = session }
@@ -280,13 +291,13 @@ final class UsageEngine: ObservableObject {
 
     // MARK: - 한도 알림 (§F4: 80%/95% 각 1회)
 
-    private func fireLimitAlerts(config: Config, official: OfficialUsage?, snap: UsageStore.Snapshot,
-                                 weeklyStart: Date, nextWeeklyReset: Date?, result: UsageEvaluator.Result) {
+    private func fireLimitAlerts(config: Config, snap: UsageStore.Snapshot, weeklyStart: Date,
+                                 nextWeeklyReset: Date?, result: UsageEvaluator.Result) {
         // 창 식별자는 창이 유지되는 동안 바뀌지 않는 값이어야 한다.
-        // now-7d처럼 매 틱 바뀌는 값을 쓰면 추적기가 리셋돼 알림이 다시 나간다.
-        let sessionWindow = official?.sessionResetsAt.map { "\($0.timeIntervalSince1970)" }
+        // now-7d처럼 매 틱 바뀌거나 조회마다 흔들리는 값을 그대로 쓰면 추적기가 리셋돼 알림이 다시 나간다.
+        let sessionWindow = result.sessionResetsAt.map(LimitAlertTracker.windowId(resetsAt:))
             ?? snap.currentBlock.map { "\($0.start.timeIntervalSince1970)" } ?? "none"
-        let weeklyWindow = nextWeeklyReset.map { "\($0.timeIntervalSince1970)" }
+        let weeklyWindow = (result.weeklyResetsAt ?? nextWeeklyReset).map(LimitAlertTracker.windowId(resetsAt:))
             ?? (config.weeklyResetEnabled ? "\(weeklyStart.timeIntervalSince1970)" : "rolling")
 
         for threshold in alertTracker.alertsToFire(kind: .session, percent: result.session.percent,
@@ -356,6 +367,7 @@ final class UsageEngine: ObservableObject {
             log.info("공식 조회 성공: 세션 \(usage.sessionPercent ?? -1)% 주간 \(usage.weeklyPercent ?? -1)%")
             // 응답을 기다리는 사이 연동을 끈 경우
             guard config.officialEnabled else { return }
+            if let window = usage.sessionWindow { sessionTrend.record(window) }
             officialValue = usage
             publishOfficial(usage, status: .live)
             tick()

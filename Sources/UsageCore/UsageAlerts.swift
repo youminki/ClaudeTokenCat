@@ -26,6 +26,12 @@ public struct LimitAlertTracker {
 
     public init() {}
 
+    /// 창 식별자. resets_at은 조회마다 1초 안쪽으로 흔들려 그대로 쓰면 매 조회가 새 창으로 보이고
+    /// 80%/95% 알림이 반복된다. 분 단위로 반올림한다.
+    public static func windowId(resetsAt: Date) -> String {
+        "\(Int((resetsAt.timeIntervalSince1970 / 60).rounded()))"
+    }
+
     /// 현재 사용률을 보고하고, 새로 발송해야 할 알림 임계값을 반환 (없으면 빈 배열).
     /// 70→96처럼 건너뛰면 95만 발송 (80은 함께 소진 처리해 스팸 방지).
     public mutating func alertsToFire(kind: Kind, percent: Double, windowId: String) -> [Threshold] {

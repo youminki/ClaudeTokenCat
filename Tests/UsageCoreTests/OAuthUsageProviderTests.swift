@@ -1,7 +1,8 @@
-import XCTest
+import Foundation
+import Testing
 @testable import UsageCore
 
-final class OAuthUsageProviderTests: XCTestCase {
+struct OAuthUsageProviderTests {
 
     // docs/usage-endpoint.md의 실측 응답을 축약한 픽스처
     static let realResponse = """
@@ -22,20 +23,20 @@ final class OAuthUsageProviderTests: XCTestCase {
     }
     """
 
-    func testParsesRealResponse() throws {
-        let usage = try XCTUnwrap(OAuthUsageProvider.parse(
+    @Test func parsesRealResponse() throws {
+        let usage = try #require(OAuthUsageProvider.parse(
             data: Data(Self.realResponse.utf8), fetchedAt: Date()))
-        XCTAssertEqual(usage.sessionPercent, 61.0)
-        XCTAssertEqual(usage.weeklyPercent, 42.0)
+        #expect(usage.sessionPercent == 61.0)
+        #expect(usage.weeklyPercent == 42.0)
 
         let iso = ISO8601DateFormatter()
-        let sessionReset = try XCTUnwrap(usage.sessionResetsAt)
-        let weeklyReset = try XCTUnwrap(usage.weeklyResetsAt)
-        XCTAssertEqual(sessionReset.timeIntervalSince(iso.date(from: "2026-07-14T11:50:00Z")!), 0.3, accuracy: 0.01)
-        XCTAssertEqual(weeklyReset.timeIntervalSince(iso.date(from: "2026-07-19T11:00:00Z")!), 0.3, accuracy: 0.01)
+        let sessionReset = try #require(usage.sessionResetsAt)
+        let weeklyReset = try #require(usage.weeklyResetsAt)
+        #expect(abs((sessionReset.timeIntervalSince(iso.date(from: "2026-07-14T11:50:00Z")!)) - (0.3)) <= 0.01)
+        #expect(abs((weeklyReset.timeIntervalSince(iso.date(from: "2026-07-19T11:00:00Z")!)) - (0.3)) <= 0.01)
     }
 
-    func testFallsBackToLimitsArray() throws {
+    @Test func fallsBackToLimitsArray() throws {
         // five_hour/seven_day가 사라져도 limits[]에서 복원 (스키마 변경 대비)
         let json = """
         { "limits": [
@@ -43,45 +44,66 @@ final class OAuthUsageProviderTests: XCTestCase {
             { "kind": "weekly_all", "percent": 55, "resets_at": "2026-07-19T11:00:00Z" }
         ] }
         """
-        let usage = try XCTUnwrap(OAuthUsageProvider.parse(data: Data(json.utf8), fetchedAt: Date()))
-        XCTAssertEqual(usage.sessionPercent, 30)
-        XCTAssertEqual(usage.weeklyPercent, 55)
-        XCTAssertNotNil(usage.sessionResetsAt)
+        let usage = try #require(OAuthUsageProvider.parse(data: Data(json.utf8), fetchedAt: Date()))
+        #expect(usage.sessionPercent == 30)
+        #expect(usage.weeklyPercent == 55)
+        #expect(usage.sessionResetsAt != nil)
     }
 
-    func testRejectsResponseWithoutAnyPercent() {
-        XCTAssertNil(OAuthUsageProvider.parse(data: Data("{}".utf8), fetchedAt: Date()))
-        XCTAssertNil(OAuthUsageProvider.parse(data: Data("not json".utf8), fetchedAt: Date()))
+    @Test func rejectsResponseWithoutAnyPercent() {
+        #expect(OAuthUsageProvider.parse(data: Data("{}".utf8), fetchedAt: Date()) == nil)
+        #expect(OAuthUsageProvider.parse(data: Data("not json".utf8), fetchedAt: Date()) == nil)
     }
 
     // MARK: 자격증명 파싱 (토큰 값은 픽스처 — 실제 토큰 아님)
 
-    func testParseCredentialsWithExpiry() throws {
+    @Test func parseCredentialsWithExpiry() throws {
         let json = #"{"claudeAiOauth":{"accessToken":"tok_fixture","expiresAt":1789400000000}}"#
-        let parsed = try XCTUnwrap(OAuthUsageProvider.parseCredentials(Data(json.utf8)))
-        XCTAssertEqual(parsed.token, "tok_fixture")
-        XCTAssertEqual(parsed.expiresAt, Date(timeIntervalSince1970: 1_789_400_000))
+        let parsed = try #require(OAuthUsageProvider.parseCredentials(Data(json.utf8)))
+        #expect(parsed.token == "tok_fixture")
+        #expect(parsed.expiresAt == Date(timeIntervalSince1970: 1_789_400_000))
     }
 
-    func testParseCredentialsWithoutExpiryAssumesOneHour() throws {
+    @Test func parseCredentialsWithoutExpiryAssumesOneHour() throws {
         let now = Date()
         let json = #"{"claudeAiOauth":{"accessToken":"tok_fixture"}}"#
-        let parsed = try XCTUnwrap(OAuthUsageProvider.parseCredentials(Data(json.utf8), now: now))
-        XCTAssertEqual(parsed.expiresAt, now.addingTimeInterval(OAuthUsageProvider.defaultTokenLifetime))
+        let parsed = try #require(OAuthUsageProvider.parseCredentials(Data(json.utf8), now: now))
+        #expect(parsed.expiresAt == now.addingTimeInterval(OAuthUsageProvider.defaultTokenLifetime))
     }
 
-    func testParseCredentialsRejectsMissingToken() {
-        XCTAssertNil(OAuthUsageProvider.parseCredentials(Data("{}".utf8)))
-        XCTAssertNil(OAuthUsageProvider.parseCredentials(Data(#"{"claudeAiOauth":{"accessToken":""}}"#.utf8)))
-        XCTAssertNil(OAuthUsageProvider.parseCredentials(Data("garbage".utf8)))
+    @Test func parseCredentialsRejectsMissingToken() {
+        #expect(OAuthUsageProvider.parseCredentials(Data("{}".utf8)) == nil)
+        #expect(OAuthUsageProvider.parseCredentials(Data(#"{"claudeAiOauth":{"accessToken":""}}"#.utf8)) == nil)
+        #expect(OAuthUsageProvider.parseCredentials(Data("garbage".utf8)) == nil)
     }
 
-    func testUserAgentUsesClientVersion() {
-        XCTAssertEqual(OAuthUsageProvider.userAgent(clientVersion: "2.1.285"), "claude-code/2.1.285")
+    @Test func userAgentUsesClientVersion() {
+        #expect(OAuthUsageProvider.userAgent(clientVersion: "2.1.285") == "claude-code/2.1.285")
         let fallback = "claude-code/\(OAuthUsageProvider.fallbackClientVersion)"
-        XCTAssertEqual(OAuthUsageProvider.userAgent(clientVersion: nil), fallback)
+        #expect(OAuthUsageProvider.userAgent(clientVersion: nil) == fallback)
         // 로그에서 온 값이라 숫자와 점이 아니면 헤더에 넣지 않는다
-        XCTAssertEqual(OAuthUsageProvider.userAgent(clientVersion: "2.1\r\nX-Evil: 1"), fallback)
-        XCTAssertEqual(OAuthUsageProvider.userAgent(clientVersion: ""), fallback)
+        #expect(OAuthUsageProvider.userAgent(clientVersion: "2.1\r\nX-Evil: 1") == fallback)
+        #expect(OAuthUsageProvider.userAgent(clientVersion: "") == fallback)
+    }
+
+    @Test func parsesWeeklyBreakdown() throws {
+        let json = """
+        {
+          "five_hour": { "utilization": 10, "resets_at": "2026-10-06T17:10:00.474399+00:00" },
+          "seven_day": { "utilization": 25, "resets_at": "2026-10-13T02:00:00.474424+00:00" },
+          "seven_day_breakdown": { "rows": [
+            { "display_name": "Claude Code", "key": "claude_code", "percent": 92 },
+            { "display_name": "채팅", "key": "chat", "percent": 8 },
+            { "key": "other", "percent": 0 }
+          ] }
+        }
+        """
+        let usage = try #require(OAuthUsageProvider.parse(data: Data(json.utf8), fetchedAt: Date()))
+        #expect(usage.sessionPercent == 10)
+        #expect(usage.weeklyBreakdown == [UsageShare(name: "Claude Code", percent: 92),
+                                          UsageShare(name: "채팅", percent: 8),
+                                          UsageShare(name: "other", percent: 0)])
+        let bare = try #require(OAuthUsageProvider.parse(data: Data(Self.realResponse.utf8), fetchedAt: Date()))
+        #expect(bare.weeklyBreakdown.isEmpty)
     }
 }

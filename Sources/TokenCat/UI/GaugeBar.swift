@@ -1,10 +1,8 @@
 import SwiftUI
 
 /// 사용률 게이지 바. 0~60% 파랑 → 60~80% 노랑 → 80%+ 빨강 (§F3).
-/// 공식 조회값(base) 위에 얹힌 보간분은 옅게 그려 실측과 추정을 구분한다.
 struct GaugeBar: View {
     let percent: Double
-    var basePercent: Double? = nil
     /// 창이 지난 비율(0~1). 세로선으로 그려 사용량이 시간보다 앞서는지 보이게 한다.
     var elapsed: Double? = nil
 
@@ -26,13 +24,8 @@ struct GaugeBar: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.primary.opacity(0.12))
                 Capsule()
-                    .fill(color.opacity(basePercent == nil ? 1 : 0.45))
+                    .fill(color)
                     .frame(width: width(percent, in: geo.size.width))
-                if let basePercent {
-                    Capsule()
-                        .fill(color)
-                        .frame(width: width(basePercent, in: geo.size.width))
-                }
             }
             .frame(height: 6)
             .frame(maxHeight: .infinity)
@@ -55,12 +48,12 @@ struct GaugeBar: View {
     private var helpText: String {
         var lines: [String] = []
         if let elapsed { lines.append("세로선: 이번 창 시간의 \(Int((elapsed * 100).rounded()))% 경과") }
-        if let basePercent, percent > basePercent + 0.05 { lines.append("옅은 부분: 마지막 갱신 이후 로컬 기록으로 더한 사용량") }
         return lines.joined(separator: "\n")
     }
 
     private var accessibilityText: String {
-        guard let elapsed else { return Format.percent(percent) }
-        return "\(Format.percent(percent)), 시간 \(Int((elapsed * 100).rounded()))% 경과"
+        let value = "\(Int(percent.rounded(.down)))%"
+        guard let elapsed else { return value }
+        return "\(value), 시간 \(Int((elapsed * 100).rounded()))% 경과"
     }
 }

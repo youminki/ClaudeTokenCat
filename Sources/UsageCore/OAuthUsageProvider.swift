@@ -1,20 +1,36 @@
 import Foundation
 
-/// 공식 usage 엔드포인트 응답 (게이지 1순위 소스, docs/usage-endpoint.md).
+/// 주간 사용량의 사용처별 비중 (Claude Code, 채팅 등).
+public struct UsageShare: Equatable, Sendable {
+    public let name: String
+    public let percent: Double
+
+    public init(name: String, percent: Double) {
+        self.name = name
+        self.percent = percent
+    }
+}
+
+/// 공식 usage 엔드포인트 응답 (게이지 1순위 소스).
+/// 퍼센트는 정수로 온다. resets_at은 조회할 때마다 1초 안쪽으로 흔들린다 (실측 17:09:59.75 → 17:10:00.47).
 public struct OfficialUsage: Equatable, Sendable {
     public let sessionPercent: Double?
     public let sessionResetsAt: Date?
     public let weeklyPercent: Double?
     public let weeklyResetsAt: Date?
     public let fetchedAt: Date
+    /// 주간 사용처별 비중 (seven_day_breakdown). 로컬 기록은 이 기기의 Claude Code분만 본다.
+    public let weeklyBreakdown: [UsageShare]
 
     public init(sessionPercent: Double?, sessionResetsAt: Date?,
-                weeklyPercent: Double?, weeklyResetsAt: Date?, fetchedAt: Date) {
+                weeklyPercent: Double?, weeklyResetsAt: Date?, fetchedAt: Date,
+                weeklyBreakdown: [UsageShare] = []) {
         self.sessionPercent = sessionPercent
         self.sessionResetsAt = sessionResetsAt
         self.weeklyPercent = weeklyPercent
         self.weeklyResetsAt = weeklyResetsAt
         self.fetchedAt = fetchedAt
+        self.weeklyBreakdown = weeklyBreakdown
     }
 }
 
@@ -158,9 +174,15 @@ public final class OAuthUsageProvider {
         }
 
         guard sessionPct != nil || weeklyPct != nil else { return nil }
+        let rows = ((root["seven_day_breakdown"] as? [String: Any])?["rows"] as? [[String: Any]]) ?? []
+        let breakdown = rows.compactMap { row -> UsageShare? in
+            guard let name = (row["display_name"] as? String) ?? (row["key"] as? String),
+                  let pct = percent(row["percent"]) else { return nil }
+            return UsageShare(name: name, percent: pct)
+        }
         return OfficialUsage(sessionPercent: sessionPct, sessionResetsAt: sessionReset,
                              weeklyPercent: weeklyPct, weeklyResetsAt: weeklyReset,
-                             fetchedAt: fetchedAt)
+                             fetchedAt: fetchedAt, weeklyBreakdown: breakdown)
     }
 
     // MARK: - 자격증명 로드 (파일 우선 → 키체인 서브프로세스, docs/usage-endpoint.md)
