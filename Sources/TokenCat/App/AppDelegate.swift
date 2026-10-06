@@ -60,9 +60,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             .sink { [weak self] text in self?.statusItem.button?.toolTip = text }
             .store(in: &cancellables)
 
-        Publishers.CombineLatest4(engine.$sessionGauge, engine.$weeklyGauge, engine.$alertLevel,
-                                  engine.settings.$menuBarLabel)
-            .map { Self.statusLabel($3, session: $0, weekly: $1, alertLevel: $2) }
+        Publishers.CombineLatest3(engine.$sessionGauge, engine.$weeklyGauge, engine.settings.$menuBarLabel)
+            .map { Self.statusLabel($2, session: $0, weekly: $1) }
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] label in self?.applyStatusLabel(label) }
@@ -161,20 +160,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let level: UsageAlertLevel
     }
 
-    /// 고양이 옆 사용률. 추정값은 "~"를 붙인다.
-    /// 색은 표시 중인 %의 단계로 정하되, 엔진이 아직 판단을 보류 중(alertLevel == .normal)이면 칠하지 않는다.
-    private static func statusLabel(_ label: MenuBarLabel, session: GaugeReading, weekly: GaugeReading,
-                                    alertLevel: UsageAlertLevel) -> StatusLabel? {
-        let gauge: GaugeReading
+    /// 고양이 옆 사용률. 공식 값이 없으면 "--%". 색은 표시 중인 %의 단계로 정한다.
+    private static func statusLabel(_ label: MenuBarLabel, session: GaugeReading?, weekly: GaugeReading?) -> StatusLabel? {
+        let gauge: GaugeReading?
         switch label {
         case .off: return nil
         case .session: gauge = session
         case .weekly: gauge = weekly
-        case .higher: gauge = session.percent >= weekly.percent ? session : weekly
+        case .higher: gauge = [session, weekly].compactMap { $0 }.max { $0.percent < $1.percent }
         }
-        let percent = gauge.displayPercent
-        return StatusLabel(text: "\(gauge.isOfficial ? "" : "~")\(percent)%",
-                           level: min(UsageAlertLevel.level(percent: gauge.percent), alertLevel))
+        guard let gauge else { return StatusLabel(text: "--%", level: .normal) }
+        return StatusLabel(text: "\(gauge.displayPercent)%", level: UsageAlertLevel.level(percent: gauge.percent))
     }
 
     private static let statusLabelFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
@@ -220,9 +216,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     /// 메뉴바 아이콘에 마우스를 올리면 현재 사용률을 보여준다.
-    private static func tooltip(session: GaugeReading, weekly: GaugeReading) -> String {
-        func line(_ name: String, _ gauge: GaugeReading) -> String {
-            "\(name) \(gauge.displayPercent)%\(gauge.isOfficial ? "" : " (추정)")"
+    private static func tooltip(session: GaugeReading?, weekly: GaugeReading?) -> String {
+        func line(_ name: String, _ gauge: GaugeReading?) -> String {
+            "\(name) \(gauge.map { "\($0.displayPercent)" } ?? "--")%"
         }
         return "TokenCat · \(line("세션", session)) · \(line("주간", weekly))"
     }

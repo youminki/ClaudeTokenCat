@@ -13,11 +13,8 @@ struct UsageEvaluatorTests {
                       fetchedAt: now.addingTimeInterval(-minutesAgo * 60))
     }
 
-    private func input(_ official: OfficialUsage?, enabled: Bool = true, rate: Double? = nil, blockTokens: Int = 0,
-                       weeklyTokens: Int = 0, tokenBurnRate: Double = 0) -> UsageEvaluator.Input {
-        UsageEvaluator.Input(official: official, officialEnabled: enabled, now: now, sessionRatePerMinute: rate,
-                             blockTokens: blockTokens, weeklyTokens: weeklyTokens,
-                             sessionLimit: 500_000, weeklyLimit: 4_000_000, tokenBurnRate: tokenBurnRate)
+    private func input(_ official: OfficialUsage?, rate: Double? = nil) -> UsageEvaluator.Input {
+        UsageEvaluator.Input(official: official, now: now, sessionRatePerMinute: rate)
     }
 
     @Test func usableOfficialRespectsToggleAndGrace() {
@@ -29,41 +26,60 @@ struct UsageEvaluatorTests {
         #expect(UsageEvaluator.usableOfficial(old, enabled: true, now: now, grace: grace) == nil)
     }
 
-    // 게이지는 공식 값만: 로컬 사용량(blockTokens)이 아무리 많아도 공식 %를 그대로 보여 준다.
-    @Test func gaugesShowOfficialValuesOnly() {
-        let result = UsageEvaluator.evaluate(input(official(session: 40, weekly: 96), blockTokens: 9_000_000))
-        #expect(result.authoritative)
-        #expect(result.session.percent == 40)
-        #expect(result.session.source == .official)
-        #expect(result.weekly.percent == 96)
+    @Test func gaugesShowOfficialValuesAsIs() {
+        let result = UsageEvaluator.evaluate(input(official(session: 40, weekly: 96)))
+        #expect(result.session == GaugeReading(percent: 40, source: .official))
+        #expect(result.weekly?.percent == 96)
         #expect(result.level == .critical)
         #expect(result.sessionResetsAt == now.addingTimeInterval(180 * 60))
         #expect(!result.needsRefresh)
     }
 
-    @Test func holdsLevelWhileWaitingForOfficial() {
-        // 연동 on인데 공식 값이 아직 없으면 추정 %가 튀어도 경고 단계로 올리지 않는다
-        let result = UsageEvaluator.evaluate(input(nil, blockTokens: 900_000))
-        #expect(!result.authoritative)
-        #expect(abs(result.session.percent - 180) < 0.001)
+    // 공식 값이 없으면(연동 꺼짐, 조회 전·실패) 로컬 기록으로 추정하지 않고 게이지를 비운다.
+    @Test func noOfficialMeansEmptyGauges() {
+        let result = UsageEvaluator.evaluate(input(nil, rate: 1))
+        #expect(result.session == nil)
+        #expect(result.weekly == nil)
+        #expect(result.sessionResetsAt == nil)
+        #expect(result.sessionMinutesLeft == nil)
         #expect(result.level == .normal)
+        #expect(!result.needsRefresh)
     }
 
-    @Test func disabledOfficialUsesEstimateAndIsAuthoritative() {
-        let result = UsageEvaluator.evaluate(input(nil, enabled: false, blockTokens: 425_000, weeklyTokens: 1_000_000))
-        #expect(result.authoritative)
-        #expect(!result.session.isOfficial)
-        #expect(abs(result.session.percent - 85) < 0.001)
-        #expect(abs(result.weekly.percent - 25) < 0.001)
+    @Test func missingWindowStaysEmpty() {
+        let result = UsageEvaluator.evaluate(input(official(session: nil, weekly: 85), rate: 1))
+        #expect(result.session == nil)
+        #expect(result.sessionResetsAt == nil)
+        #expect(result.sessionMinutesLeft == nil)
+        #expect(result.weekly?.percent == 85)
         #expect(result.level == .tired)
+        #expect(!result.needsRefresh)
+    }
+
+    @Test func sessionOnlyResponse() {
+        let result = UsageEvaluator.evaluate(input(official(session: 82, weekly: nil), rate: 0.5))
+        #expect(result.weekly == nil)
+        #expect(result.weeklyResetsAt == nil)
+        #expect(result.session?.percent == 82)
+        #expect(result.sessionMinutesLeft == 36)
+        #expect(result.level == .tired)
+        #expect(!result.needsRefresh)
+    }
+
+    // 조회할 때 이미 지난 리셋 시각이 왔으면 활성 창이 없다: 0%로 두고 지난 시각을 리셋으로 보여 주지 않는다.
+    @Test func staleResetAtFetchIsNotShown() {
+        let result = UsageEvaluator.evaluate(input(official(session: 55, weekly: 30, sessionResetsIn: -10)))
+        #expect(result.session == GaugeReading(percent: 0, source: .official))
+        #expect(result.sessionResetsAt == nil)
+        #expect(result.weeklyResetsAt != nil)
+        #expect(!result.needsRefresh)
     }
 
     @Test func rolledOverWindowAsksForRefresh() {
         // 세션 창이 30초 전에 초기화됐는데 공식 값은 그 전에 받았다
         let stale = official(session: 97, weekly: 30, minutesAgo: 2, sessionResetsIn: -0.5)
         let result = UsageEvaluator.evaluate(input(stale, rate: 1))
-        #expect(result.session.source == .rolledOver)
-        #expect(result.session.percent == 0)
+        #expect(result.session == GaugeReading(percent: 0, source: .rolledOver))
         #expect(result.sessionResetsAt == nil)
         #expect(result.sessionMinutesLeft == nil)
         #expect(result.needsRefresh)
@@ -74,9 +90,5 @@ struct UsageEvaluatorTests {
         // 공식 40%가 분당 0.6%p씩 오르면 100분
         #expect(UsageEvaluator.evaluate(input(official(session: 40, weekly: 10), rate: 0.6)).sessionMinutesLeft == 100)
         #expect(UsageEvaluator.evaluate(input(official(session: 40, weekly: 10))).sessionMinutesLeft == nil)
-        // 추정 모드는 토큰 한도 기준
-        let estimated = UsageEvaluator.evaluate(input(nil, enabled: false, blockTokens: 100_000, tokenBurnRate: 10_000))
-        #expect(estimated.sessionMinutesLeft == 40)
-        #expect(UsageEvaluator.evaluate(input(nil, enabled: false, blockTokens: 100_000)).sessionMinutesLeft == nil)
     }
 }

@@ -11,7 +11,7 @@ public struct UsageShare: Equatable, Sendable {
     }
 }
 
-/// 공식 usage 엔드포인트 응답 (게이지 1순위 소스).
+/// 공식 usage 엔드포인트 응답 (게이지 %의 유일한 소스).
 /// 퍼센트는 정수로 온다. resets_at은 조회할 때마다 1초 안쪽으로 흔들린다 (실측 17:09:59.75 → 17:10:00.47).
 public struct OfficialUsage: Equatable, Sendable {
     public let sessionPercent: Double?
@@ -36,7 +36,7 @@ public struct OfficialUsage: Equatable, Sendable {
 
 /// 비문서화 OAuth usage 엔드포인트 폴링 (180초 간격 준수).
 /// 토큰은 읽기 전용, Anthropic 외 어디에도 전송·로깅 금지.
-/// 실패 시 호출측(엔진)이 추정 모드로 폴백한다.
+/// 실패하면 엔진이 유예 시간 동안 직전 값을 쓰고, 그 뒤로는 게이지를 비운다.
 ///
 /// 키체인 접근 설계 (프롬프트 최소화):
 /// 1. 액세스 토큰은 메모리 캐시 — 만료 시에만 자격증명을 다시 읽는다 (매 폴링 금지).

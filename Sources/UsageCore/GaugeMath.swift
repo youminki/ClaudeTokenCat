@@ -6,8 +6,6 @@ public enum GaugeSource: Equatable, Sendable {
     case official
     /// 조회 뒤 창이 초기화됐다. 새 공식 값을 받기 전까지 0%로 둔다.
     case rolledOver
-    /// 공식 값 없이 추정 한도로 계산 (연동을 껐거나 조회에 실패했을 때).
-    case estimated
 }
 
 /// 게이지 하나(세션 또는 주간)의 표시값.
@@ -20,14 +18,8 @@ public struct GaugeReading: Equatable, Sendable {
         self.source = source
     }
 
-    public static func estimated(_ percent: Double) -> GaugeReading {
-        GaugeReading(percent: percent, source: .estimated)
-    }
-
-    public var isOfficial: Bool { source != .estimated }
-
     /// 화면 표시용 정수 %. 공식 값이 정수로 온다.
-    public var displayPercent: Int { Int(min(max(percent, 0), 999).rounded(.down)) }
+    public var displayPercent: Int { Int(min(max(percent, 0), 100).rounded(.down)) }
 }
 
 /// 공식 응답의 창 하나 (세션 5시간 또는 주간 7일).
@@ -35,24 +27,22 @@ public struct OfficialWindow: Equatable, Sendable {
     public let percent: Double
     public let resetsAt: Date?
     public let fetchedAt: Date
-    public let duration: TimeInterval
 
-    public init(percent: Double, resetsAt: Date?, fetchedAt: Date, duration: TimeInterval) {
+    public init(percent: Double, resetsAt: Date?, fetchedAt: Date) {
         self.percent = percent
         self.resetsAt = resetsAt
         self.fetchedAt = fetchedAt
-        self.duration = duration
     }
 
-    /// 창 시작. 리셋 시각에서 창 길이를 뺀다. 로컬 5시간 블록(UTC 정시 내림)과는 다르다.
-    public var start: Date? { resetsAt.map { $0.addingTimeInterval(-duration) } }
+    /// 조회할 때 아직 오지 않은 리셋 시각. 이미 지난 시각이 왔으면 활성 창이 없는 것이라 nil.
+    public var upcomingReset: Date? { resetsAt.flatMap { $0 > fetchedAt ? $0 : nil } }
 }
 
 /// 게이지 계산 (§F3).
 ///
 /// 게이지 %는 공식 조회값만 쓴다. 로컬 기록은 이 기기의 Claude Code만 보고 한도 환산 비율도 창마다 달라
-/// (실측 세션 1.3배, 주간 4.4배 차이) 조회 사이를 보간하면 `/usage`와 어긋난다.
-/// 공식값만 쓰면 조회 사이 최대 3분 늦을 뿐 값은 늘 일치한다.
+/// (실측 세션 1.3배, 주간 4.4배 차이) 조회 사이를 보간하거나 로컬 토큰으로 추정하면 `/usage`와 어긋난다.
+/// 공식값만 쓰면 조회 사이 최대 3분 늦을 뿐 값은 늘 일치하고, 공식 값이 없으면 게이지를 비워 둔다.
 public enum GaugeMath {
 
     /// 공식 창 하나의 표시값. 조회 뒤 리셋 시각이 지났으면 창이 초기화된 것이라 0%로 둔다.
@@ -68,29 +58,10 @@ public enum GaugeMath {
         return GaugeReading(percent: min(max(official.percent, 0), 100), source: .official)
     }
 
-    /// 추정 모드: 로컬 토큰 ÷ 추정 한도.
-    public static func estimated(windowTokens: Int, limit: Int) -> GaugeReading {
-        .estimated(limit > 0 ? Double(windowTokens) / Double(limit) * 100 : 0)
-    }
-
-    /// 공식 %로 역산한 창 전체 한도(토큰). 공식 조회가 실패했을 때 쓰는 추정 한도를 자동 보정한다.
-    /// 공식 %가 5 미만이면 정수 반올림 오차가 커서 역산하지 않는다.
-    /// - windowTokens: 공식 창 시작부터 조회 시점까지 로컬 토큰
-    public static func impliedLimit(percent: Double, windowTokens: Int) -> Int? {
-        guard percent >= 5, windowTokens > 0 else { return nil }
-        return Int(Double(windowTokens) / percent * 100)
-    }
-
     /// 지금 오름세(분당 %p)로 남은 %를 다 쓰는 데 걸리는 분. 오름세가 없거나 이미 꽉 찼으면 nil.
     public static func minutesUntilFull(percent: Double, ratePerMinute: Double?) -> Int? {
         guard let ratePerMinute, ratePerMinute > 0, percent < 100 else { return nil }
         return Int(((100 - percent) / ratePerMinute).rounded())
-    }
-
-    /// 추정 모드의 남은 분: 토큰 한도 기준.
-    public static func minutesUntilFull(remainingTokens: Int?, burnRate: Double) -> Int? {
-        guard let remaining = remainingTokens, remaining > 0, burnRate >= 1 else { return nil }
-        return Int(Double(remaining) / burnRate)
     }
 
     /// 창이 지난 비율(0~1). 게이지에 경과 시간 표시선을 그려 사용량이 시간보다 앞서는지 보이게 한다.
@@ -117,7 +88,7 @@ public enum GaugeMath {
     }
 }
 
-/// 최근 공식 값의 오름세 (분당 %p). "약 N분 뒤 한도"를 로컬 추정 없이 공식 값만으로 계산한다.
+/// 최근 공식 값의 오름세 (분당 %p). "약 N분 뒤 한도"를 공식 값만으로 계산한다.
 public struct OfficialTrend: Equatable, Sendable {
 
     /// 오름세를 볼 기간.

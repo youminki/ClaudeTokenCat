@@ -13,7 +13,7 @@ public final class UsageStore {
         public let tokensLast60s: Int
         public let lastEventDate: Date?
         public let totalEventCount: Int
-        /// 주간 창(호출측이 시작 시각 지정: 롤링 7일 or 사용자 리셋) 토큰 합계.
+        /// 주간 창(호출측이 시작 시각 지정: 공식 주간 창 또는 롤링 7일) 토큰 합계.
         public let weeklyTokens: Int
         /// 주간 창 모델별 토큰 (모델 비중 표시용).
         public let weeklyModelTokens: [String: Int]
@@ -57,15 +57,6 @@ public final class UsageStore {
                 added += 1
             }
             return added
-        }
-    }
-
-    /// (since, now] 구간 토큰 합계.
-    public func tokens(since: Date, now: Date = Date()) -> Int {
-        queue.sync {
-            events.reduce(0) { sum, e in
-                (e.timestamp > since && e.timestamp <= now) ? sum + e.totalTokens : sum
-            }
         }
     }
 
