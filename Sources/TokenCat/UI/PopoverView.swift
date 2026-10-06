@@ -22,7 +22,13 @@ struct PopoverView: View {
 
     private var customSelection: Binding<String?> {
         Binding(get: { settings.customRunnerID },
-                set: { id in if let custom = customRunners.runner(id: id) { settings.select(custom) } })
+                set: { id in
+                    if let pack = LocalPack.runner(storageID: id) {
+                        settings.select(pack)
+                    } else if let custom = customRunners.runner(id: id) {
+                        settings.select(custom)
+                    }
+                })
     }
 
     private var display: SpriteDisplay {
@@ -76,6 +82,12 @@ struct PopoverView: View {
             ForEach(Runner.Group.allCases, id: \.self) { group in
                 Picker(group.rawValue, selection: builtInSelection) {
                     ForEach(Runner.runners(in: group), id: \.self) { Text($0.displayName).tag(Optional($0)) }
+                }
+                .pickerStyle(.inline)
+            }
+            if !LocalPack.runners.isEmpty {
+                Picker("개인 팩", selection: customSelection) {
+                    ForEach(LocalPack.runners, id: \.id) { Text($0.name).tag(Optional(LocalPack.storageID($0))) }
                 }
                 .pickerStyle(.inline)
             }

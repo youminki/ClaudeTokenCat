@@ -29,6 +29,21 @@ struct RunnerPicker: View {
                     }
                 }
             }
+            if !LocalPack.runners.isEmpty {
+                groupTitle("개인 팩")
+                LazyVGrid(columns: columns, spacing: 8) {
+                    ForEach(LocalPack.runners, id: \.id) { pack in
+                        let id = LocalPack.storageID(pack)
+                        let selected = settings.customRunnerID == id
+                        Button { settings.select(pack) } label: {
+                            tile(pack.character, key: id, selected: selected)
+                        }
+                        .buttonStyle(.plain)
+                        .onHover { hover.update(id, $0) }
+                        .accessibilityLabel(pack.name)
+                    }
+                }
+            }
             groupTitle("내 러너")
             LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(store.runners) { custom in
