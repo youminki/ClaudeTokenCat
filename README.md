@@ -36,7 +36,7 @@
 | 집계 정확도 | 검증 도구 `ccusage blocks`와 동시점 대조 **오차 0.00%** (샌드위치 검증: 측정→대조→측정)        |
 | 공식 게이지 | 비문서화 OAuth usage 엔드포인트 실측 연동 — 게이지는 공식 값만 표시해 `/usage`와 동일 값       |
 | 성능        | 유휴 CPU **0.05%**, 30fps 질주 **0.5%** (예산 0.5%), 메모리 **17~21MB** (예산 50MB) — 실측      |
-| 품질        | 단위 테스트 **76개** (swift-testing, `./scripts/test.sh`) — 파서·중복제거·블록·게이지·알림·틱 판단 |
+| 품질        | 단위 테스트 **77개** (swift-testing, `./scripts/test.sh`) — 파서·중복제거·블록·게이지·알림·틱 판단 |
 | 데이터 검증 | 실물 JSONL 1,432건 분석 → **중복 기록(최대 6줄) 발견**, 중복제거 미적용 시 2.9배 과대집계 확인 |
 | 배포        | `git clone` + `./install.sh` 3줄 설치 (로컬 빌드 → Gatekeeper 차단 없음), MIT 오픈소스         |
 
@@ -81,10 +81,12 @@
 - 동작 한 주기를 fps로 잘게 나눠 미리 그린다. 설정의 움직임: 절약 12 / 부드럽게 30 / 최고 60fps.
 - 프레임은 Core Animation 키프레임으로 재생해 앱은 상태가 바뀔 때만 깨어난다 (사례 5).
 - 색상 9종: 자동(메뉴바 글자색)·본래 색(캐릭터 고유색)·주황·하늘·분홍·초록·보라·노랑·무지개.
-- 장난 21종: 깡충·공중제비·빙글·두리번·하트·노래·춤·기지개·깜빡·부르르·에취·반짝·꾸벅·어질어질·슝
+- 장난 22종: 깡충·공중제비·빙글·두리번·하트·노래·춤·기지개·깜빡·부르르·에취·반짝·꾸벅·어질어질·슝·실룩실룩
   (25~70초마다 하나), 기상·하품·신남(상태가 바뀔 때), 뒤척·코풍선·꿈(잘 때). 설정에서 끌 수 있다.
 - 내 러너: GIF나 PNG(여러 장이면 파일 이름 순서)를 불러와 러너로 쓴다. 테두리에 붙은 단색 배경은 지우고
   이 Mac의 Application Support에만 저장한다. 사용량에 따라 빨라지고 장난도 똑같이 한다.
+- 개인 팩: `Sources/TokenCat/LocalPack/`(.gitignore)에 `LocalRunnerPack`을 따르는 러너를 두면 그 Mac에서 빌드한
+  앱에만 더해진다. 저작권이 있는 캐릭터를 공개 저장소에 싣지 않고 개인적으로 쓰는 경우를 위한 연결 고리다.
 - 다크/라이트 메뉴바 대응: 동적 색상으로 그린 프레임을 상태 전환 시 1회 래스터라이즈(테마 변경 감지 시 재생성).
 - 러너 옆 사용률 표시(옵션, 기본 끔): 세션·주간·높은 쪽 중 선택. 추정값은 `~47%`,
   80%/95% 이상은 주황/빨강.
@@ -173,7 +175,7 @@ SPM. 테스트 가능한 코어(`UsageCore` 라이브러리)와 앱 계층 분�
 
 ```
 TokenCat/
-├── Sources/UsageCore/          # 순수 로직 — 단위 테스트 76개의 대상
+├── Sources/UsageCore/          # 순수 로직 — 단위 테스트 77개의 대상
 │   ├── JSONLWatcher.swift      #   ~/.claude/projects 재귀 감시, 파일별 오프셋 증분 파싱
 │   ├── JSONLParser.swift       #   스키마-관용 파싱, <synthetic> 스킵
 │   ├── UsageStore.swift        #   중복제거(message.id+requestId) + 집계(오늘/주간/모델/스파크라인)
@@ -187,7 +189,7 @@ TokenCat/
 │   └── UsageAlerts.swift       #   80/95% 알림 정책 (창별 1회)
 ├── Sources/TokenCat/
 │   ├── App/                    #   AppDelegate(NSStatusItem), UsageEngine, AppSettings
-│   ├── Characters/             #   러너 22종 벡터 골격(Quadruped·Bird·Reptile…), 장난 21종, 효과, 내 러너
+│   ├── Characters/             #   러너 22종 벡터 골격(Quadruped·Bird·Reptile…), 장난 22종, 효과, 내 러너·개인 팩
 │   ├── SpriteEngine/           #   SpriteAnimator(Core Animation 재생), 프레임 생성, 래스터라이저, 점검 시트
 │   ├── UI/                     #   PopoverView, RunnerStage(무대), Theme, GaugeBar, Sparkline, SettingsView, RunnerPicker
 │   ├── Services/               #   Notifier(UserNotifications), LaunchAtLogin(SMAppService)
@@ -302,7 +304,7 @@ Claude Code는 macOS에서 OAuth 토큰을 키체인 항목 `Claude Code-credent
 | M2 (2일)     | 공식/주간 게이지, 플랜 설정·캘리브레이션, 스파크라인                    | ccusage 오차 < 2%                        | ✅ **오차 0.00%**                                    |
 | M3 (1~2일)   | 알림, 지친 고양이, 자동 시작, 서명, README                              | dmg 배포 가능                            | ✅ + 소스 배포(install.sh) 채택                      |
 | v1.1         | 러너 테마 3종, 일별 상세, 무지개 전용 에셋 경로, 프로그래매틱 분리 표시 | —                                        | ✅                                                   |
-| v1.2         | 벡터 러너 22종·장난 21종·팝오버 무대·내 러너, 게이지 공식 값 전용       | `/usage` 일치, 질주 CPU < 0.5%           | ✅ CPU 0.5%, 테스트 76개                             |
+| v1.2         | 벡터 러너 22종·장난 22종·팝오버 무대·내 러너, 게이지 공식 값 전용       | `/usage` 일치, 질주 CPU < 0.5%           | ✅ CPU 0.5%, 테스트 77개                             |
 
 ## 9. 수용 기준 (Acceptance Criteria) — 최종 체크
 

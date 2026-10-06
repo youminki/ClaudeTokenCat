@@ -27,17 +27,17 @@ enum MotionEffect {
 /// 한 번 재생하고 끝나는 동작. 시간 함수라 메뉴바는 fps만큼 잘라 쓰고 팝오버는 매 프레임 계산한다.
 enum Trick: String, CaseIterable {
     // 깨어 있을 때
-    case hop, flip, spin, lookAround, love, sing, dance, stretch, blink, shake, sneeze, sparkle, doze, dizzy, zoom
+    case hop, flip, spin, lookAround, love, sing, dance, stretch, blink, shake, sneeze, sparkle, doze, dizzy, zoom, wiggle
     // 상태가 바뀔 때
     case wakeUp, fallAsleep, celebrate
     // 잘 때
     case rollOver, snore, dream
 
     static let awake: [Trick] = [.hop, .flip, .spin, .lookAround, .love, .sing, .dance, .stretch, .blink, .blink,
-                                 .shake, .sneeze, .sparkle, .doze, .dizzy, .zoom]
+                                 .shake, .sneeze, .sparkle, .doze, .dizzy, .zoom, .wiggle]
     static let asleep: [Trick] = [.rollOver, .snore, .dream]
     /// 팝오버에서 러너를 눌렀을 때.
-    static let petting: [Trick] = [.hop, .flip, .spin, .love, .dance, .sparkle, .shake]
+    static let petting: [Trick] = [.hop, .flip, .spin, .love, .dance, .sparkle, .shake, .wiggle]
 
     var duration: TimeInterval {
         switch self {
@@ -46,7 +46,7 @@ enum Trick: String, CaseIterable {
         case .shake: return 1.0
         case .spin: return 1.0
         case .flip, .celebrate: return 1.15
-        case .sneeze, .zoom: return 1.3
+        case .sneeze, .zoom, .wiggle: return 1.3
         case .stretch, .sparkle: return 1.5
         case .love: return 1.7
         case .lookAround, .sing, .dizzy: return 1.9
@@ -75,6 +75,7 @@ enum Trick: String, CaseIterable {
         case .doze: return "꾸벅"
         case .dizzy: return "어질어질"
         case .zoom: return "슝"
+        case .wiggle: return "실룩실룩"
         case .wakeUp: return "기상"
         case .fallAsleep: return "하품"
         case .celebrate: return "신남"
@@ -202,6 +203,17 @@ enum Trick: String, CaseIterable {
             stand.eyes = .closed
             f.pose = stand
             f.effects = [.dizzyStars(t)]
+
+        case .wiggle:
+            // 뒤돌아 엉덩이를 좌우로 흔든다
+            stand.eyes = .happy
+            f.pose = stand
+            f.transform.scaleX = Self.turn(t, at: 0.05, back: 0.85)
+            let beat = sin(tau * t * 5) * Self.window(t, 0.12, 0.85)
+            f.transform.rotation = 0.16 * beat
+            f.transform.offset.x = 0.9 * beat
+            f.transform.squash = 1 - 0.05 * abs(beat)
+            f.effects = [.notes(t)]
 
         case .zoom:
             f.pose = CharacterPose(activity: .run, phase: seconds / 0.4, speed: 1.4)

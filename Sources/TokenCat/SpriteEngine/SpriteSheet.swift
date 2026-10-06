@@ -7,9 +7,10 @@ enum SpriteSheet {
 
     static func write(to directory: URL, runners: [Runner] = Runner.allCases) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try render(theme: .auto, runners: runners, background: NSColor(hex: 0x2B2A30))
+        let rigs = runners.map(\.rig)
+        try render(theme: .auto, rigs: rigs, background: NSColor(hex: 0x2B2A30))
             .write(to: directory.appendingPathComponent("sheet-mono.png"))
-        try render(theme: .natural, runners: runners, background: NSColor(hex: 0x8FA3B8))
+        try render(theme: .natural, rigs: rigs, background: NSColor(hex: 0x8FA3B8))
             .write(to: directory.appendingPathComponent("sheet-natural.png"))
         try renderTricks(runner: runners.first ?? .cat, background: NSColor(hex: 0x2B2A30))
             .write(to: directory.appendingPathComponent("sheet-tricks.png"))
@@ -54,19 +55,28 @@ enum SpriteSheet {
         return list
     }()
 
-    private static func render(theme: SpriteTheme, runners: [Runner], background: NSColor) -> Data {
+    /// 개인 팩 러너만 컬러로 그린다 (`--sprite-sheet <폴더> pack`).
+    static func writePack(to directory: URL) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let rigs = LocalPack.runners.map { $0.character.rig }
+        guard !rigs.isEmpty else { return }
+        try render(theme: .natural, rigs: rigs, background: NSColor(hex: 0x8FA3B8))
+            .write(to: directory.appendingPathComponent("sheet-pack.png"))
+    }
+
+    private static func render(theme: SpriteTheme, rigs: [CharacterRig], background: NSColor) -> Data {
         let scale: CGFloat = 5
         let cell = CGSize(width: Stage.size.width * scale, height: Stage.size.height * scale)
-        let size = CGSize(width: cell.width * CGFloat(columns.count), height: cell.height * CGFloat(runners.count))
+        let size = CGSize(width: cell.width * CGFloat(columns.count), height: cell.height * CGFloat(rigs.count))
         return png(size: size, background: background) { cg in
-            for (row, runner) in runners.enumerated() {
+            for (row, rig) in rigs.enumerated() {
                 for (column, item) in columns.enumerated() {
                     cg.saveGState()
                     cg.translateBy(x: CGFloat(column) * cell.width, y: CGFloat(row) * cell.height)
                     cg.setStrokeColor(NSColor.white.withAlphaComponent(0.08).cgColor)
                     cg.stroke(CGRect(origin: .zero, size: cell))
                     cg.scaleBy(x: scale, y: scale)
-                    SpriteFrames.render(cg, rig: runner.rig, frame: item.1, theme: theme, themePhase: 0,
+                    SpriteFrames.render(cg, rig: rig, frame: item.1, theme: theme, themePhase: 0,
                                         alarm: false) { _, _, _, _ in }
                     cg.restoreGState()
                 }

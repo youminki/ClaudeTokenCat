@@ -42,9 +42,14 @@ if CommandLine.arguments.contains("--report") {
 if let index = CommandLine.arguments.firstIndex(of: "--sprite-sheet") {
     let args = Array(CommandLine.arguments.dropFirst(index + 1))
     let path = args.first ?? "sprite-sheet"
-    let runners = args.dropFirst().first.map { $0.split(separator: ",").compactMap { Runner(rawValue: String($0)) } }
+    let filter = args.dropFirst().first
+    let runners = filter.map { $0.split(separator: ",").compactMap { Runner(rawValue: String($0)) } }
     do {
-        try SpriteSheet.write(to: URL(fileURLWithPath: path), runners: runners ?? Runner.allCases)
+        if filter == "pack" {
+            try SpriteSheet.writePack(to: URL(fileURLWithPath: path))
+        } else {
+            try SpriteSheet.write(to: URL(fileURLWithPath: path), runners: runners ?? Runner.allCases)
+        }
         print("saved: \(path)")
         exit(0)
     } catch {
