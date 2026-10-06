@@ -131,12 +131,13 @@ struct DailyDetailView: View {
         familyOrder.firstIndex(of: family) ?? familyOrder.count
     }
 
+    /// 모델 계열 색. 채도를 낮춘 네 가지 색이라 막대가 나란히 있어도 시끄럽지 않다.
     private static func color(for family: String) -> Color {
         switch family {
-        case "Fable": return .orange
-        case "Opus": return .purple
-        case "Sonnet": return .blue
-        case "Haiku": return .teal
+        case "Fable": return Color(red: 0.85, green: 0.55, blue: 0.38)
+        case "Opus": return Color(red: 0.58, green: 0.50, blue: 0.82)
+        case "Sonnet": return Color(red: 0.42, green: 0.62, blue: 0.85)
+        case "Haiku": return Color(red: 0.40, green: 0.72, blue: 0.68)
         default: return .gray
         }
     }

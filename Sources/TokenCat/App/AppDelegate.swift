@@ -3,10 +3,12 @@ import SwiftUI
 import Combine
 import UsageCore
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private var statusItem: NSStatusItem!
     private let animator = SpriteAnimator()
+    /// 러너 레이어를 담는 뷰. AppKit이 버튼 레이어를 다시 만들어도 러너가 사라지지 않게 따로 둔다.
+    private let spriteView = PassthroughLayerView()
     private let engine = UsageEngine()
     private var popover: NSPopover?
     private var settingsWindow: NSWindow?
@@ -20,19 +22,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.action = #selector(togglePopover)
         }
 
-        animator.onFrame = { [weak self] image in
-            self?.statusItem.button?.image = image
+        if let button = statusItem.button {
+            // 버튼 크기·글자 배치는 투명한 자리 표시 이미지로 잡고, 러너는 그 위 레이어에서 재생한다.
+            button.image = Self.placeholderImage
+            spriteView.layer = animator.layer
+            spriteView.wantsLayer = true
+            button.addSubview(spriteView)
+            layoutSprite()
         }
         animator.appearanceProvider = { [weak self] in
             self?.statusItem.button?.effectiveAppearance
         }
-        animator.runnerProvider = { [weak self] in
-            self?.engine.settings.runner ?? .cat
+        animator.characterProvider = { [weak self] in
+            self?.engine.settings.character ?? Runner.cat.character
         }
         animator.themeProvider = { [weak self] in
             self?.engine.settings.spriteTheme ?? .auto
         }
+        animator.smoothnessProvider = { [weak self] in
+            self?.engine.settings.smoothness ?? .smooth
+        }
+        animator.tricksEnabledProvider = { [weak self] in
+            self?.engine.settings.tricksEnabled ?? true
+        }
         animator.set(display: .normal(.sleeping))
+        // 메뉴바가 있는 화면이 바뀌면(레티나↔일반) 레이어 배율을 맞춘다
+        NotificationCenter.default.publisher(for: NSWindow.didChangeBackingPropertiesNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.layoutSprite() }
+            .store(in: &cancellables)
         statusItem.button?.setAccessibilityLabel("TokenCat 사용량")
 
         Publishers.CombineLatest(engine.$sessionGauge, engine.$weeklyGauge)
@@ -56,22 +74,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] _ in self?.engine.refreshNow(forceOfficial: true) }
             .store(in: &cancellables)
 
-        // 러너·색상 변경 → 프레임 다시 그리기
+        // 러너·색상·부드러움 변경 → 프레임 다시 그리기 (@Published는 값이 바뀌기 전에 알리므로 한 박자 뒤에)
         engine.settings.$spriteTheme.dropFirst().map { _ in }
-            .merge(with: engine.settings.$runner.dropFirst().map { _ in })
+            .merge(with: engine.settings.$runner.dropFirst().map { _ in },
+                   engine.settings.$smoothness.dropFirst().map { _ in },
+                   engine.settings.$customRunnerID.dropFirst().map { _ in },
+                   CustomRunnerStore.shared.$runners.dropFirst().map { _ in })
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.animator.reloadFrames() }
             .store(in: &cancellables)
 
         // 한도 오버라이드(§F2): 80% 이상 지침, 95% 이상 경고. 속도 상태보다 우선
         Publishers.CombineLatest(engine.$catState, engine.$alertLevel)
-            .map { state, level -> SpriteDisplay in
-                switch level {
-                case .critical: return .alert
-                case .tired: return .tired
-                case .normal: return .normal(state)
-                }
-            }
+            .map { SpriteDisplay(state: $0, level: $1) }
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] display in self?.animator.set(display: display) }
@@ -88,16 +103,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let popover = NSPopover()
         popover.behavior = .transient
+        popover.delegate = self
+        popover.animates = true
         popover.appearance = NSAppearance(named: .darkAqua)   // RunCat 스타일 다크 팝오버
         popover.contentViewController = NSHostingController(
             rootView: PopoverView(engine: engine, settings: engine.settings,
                                   openSettings: { [weak self] in self?.openSettings() },
-                                  openDailyDetail: { [weak self] in self?.openDailyDetail() }))
+                                  openDailyDetail: { [weak self] in self?.openDailyDetail() },
+                                  performTrick: { [weak self] trick in self?.animator.perform(trick) }))
         if let button = statusItem.button {
             engine.refreshNow()   // 여는 순간 JSONL 재스캔 + 공식 재조회(30초 스로틀)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         }
         self.popover = popover
+    }
+
+    /// 닫힌 팝오버의 화면을 놓아 준다. 무대 애니메이션이 보이지 않는 채로 돌지 않게.
+    func popoverDidClose(_ notification: Notification) {
+        // 닫히는 애니메이션 중에 다시 열었으면 새 팝오버는 건드리지 않는다
+        guard let closed = notification.object as? NSPopover, closed === popover else { return }
+        closed.contentViewController = nil
+        popover = nil
     }
 
     private func openSettings() {
@@ -159,6 +185,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.title = ""
             button.imagePosition = .imageOnly
             statusItem.length = SpriteFrames.spriteSize.width + 4
+            DispatchQueue.main.async { self.layoutSprite() }   // 길이가 줄어든 뒤 배치가 끝나면
             return
         }
         button.font = Self.statusLabelFont
@@ -173,6 +200,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         button.imagePosition = .imageLeft
         statusItem.length = NSStatusItem.variableLength
+        DispatchQueue.main.async { self.layoutSprite() }   // 길이가 바뀐 뒤 버튼 배치가 끝나면
+    }
+
+    private static let placeholderImage = NSImage(size: SpriteFrames.spriteSize)
+
+    /// 자리 표시 이미지가 놓인 자리에 러너 레이어를 맞춘다.
+    private func layoutSprite() {
+        guard let button = statusItem.button, let cell = button.cell else { return }
+        button.layoutSubtreeIfNeeded()
+        var rect = cell.imageRect(forBounds: button.bounds)
+        rect.size = SpriteFrames.spriteSize
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        spriteView.frame = rect
+        animator.layer.frame = spriteView.bounds
+        animator.layer.contentsScale = button.window?.backingScaleFactor ?? 2
+        CATransaction.commit()
     }
 
     /// 메뉴바 아이콘에 마우스를 올리면 현재 사용률을 보여준다.
@@ -182,4 +226,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         return "TokenCat · \(line("세션", session)) · \(line("주간", weekly))"
     }
+}
+
+/// 클릭은 아래 상태바 버튼으로 넘기는 레이어 전용 뷰.
+final class PassthroughLayerView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

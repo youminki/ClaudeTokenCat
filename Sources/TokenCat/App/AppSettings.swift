@@ -14,7 +14,7 @@ final class AppSettings: ObservableObject {
         case autoSessionLimit, autoWeeklyLimit
         case weeklyResetEnabled, weeklyResetWeekday, weeklyResetHour
         case sensitivity, pollInterval, limitAlertsEnabled, newSessionAlertEnabled, spriteTheme
-        case menuBarLabel, runner
+        case menuBarLabel, runner, smoothness, tricksEnabled, customRunner
     }
 
     /// 추정 한도가 어디서 왔는지 (설정 화면 표시용).
@@ -69,6 +69,29 @@ final class AppSettings: ObservableObject {
     @Published var runner: Runner { didSet { save(runner.rawValue, .runner) } }
     @Published var spriteTheme: SpriteTheme { didSet { save(spriteTheme.rawValue, .spriteTheme) } }
 
+    /// 내 러너(사용자가 불러온 그림)를 쓰는 중이면 그 id. 기본 러너를 고르면 nil.
+    @Published var customRunnerID: String? { didSet { save(customRunnerID ?? "", .customRunner) } }
+
+    /// 지금 그릴 러너. 내 러너를 지웠으면 기본 러너로 돌아간다.
+    var character: RunnerCharacter {
+        CustomRunnerStore.shared.runner(id: customRunnerID)?.character ?? runner.character
+    }
+
+    func select(_ runner: Runner) {
+        customRunnerID = nil
+        self.runner = runner
+    }
+
+    func select(_ custom: CustomRunner) {
+        customRunnerID = custom.id
+    }
+
+    /// 메뉴바 애니메이션 fps 상한 (기본 30fps).
+    @Published var smoothness: SpriteSmoothness { didSet { save(smoothness.rawValue, .smoothness) } }
+
+    /// 가끔 혼자 장난치기 (점프, 하트, 춤 등). 끄면 상태가 바뀔 때만 움직임이 달라진다.
+    @Published var tricksEnabled: Bool { didSet { save(tricksEnabled, .tricksEnabled) } }
+
     /// 메뉴바 고양이 옆에 띄울 사용률 (기본 끔).
     @Published var menuBarLabel: MenuBarLabel { didSet { save(menuBarLabel.rawValue, .menuBarLabel) } }
 
@@ -104,6 +127,11 @@ final class AppSettings: ObservableObject {
         newSessionAlertEnabled = bool(.newSessionAlertEnabled, false)
         runner = Runner(rawValue: string(.runner)) ?? .cat
         spriteTheme = SpriteTheme(rawValue: string(.spriteTheme)) ?? .auto
+        // 내 러너 목록에서 사라진 id는 버린다 (그대로 두면 메뉴·고르기에서 아무 것도 선택되지 않아 보인다)
+        let savedCustom = string(.customRunner)
+        customRunnerID = CustomRunnerStore.shared.runner(id: savedCustom) == nil ? nil : savedCustom
+        smoothness = SpriteSmoothness(rawValue: string(.smoothness)) ?? .smooth
+        tricksEnabled = bool(.tricksEnabled, true)
         menuBarLabel = MenuBarLabel(rawValue: string(.menuBarLabel)) ?? .off
         launchAtLogin = LaunchAtLogin.isEnabled
     }

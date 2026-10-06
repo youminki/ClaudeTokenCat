@@ -103,11 +103,17 @@ struct SettingsView: View {
             }
 
             Section("러너") {
-                RunnerPicker(selection: $settings.runner, theme: settings.spriteTheme)
+                RunnerPicker(settings: settings)
                 Picker("색상", selection: $settings.spriteTheme) {
                     ForEach(SpriteTheme.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
+                Picker("움직임", selection: $settings.smoothness) {
+                    ForEach(SpriteSmoothness.allCases, id: \.self) {
+                        Text("\($0.displayName) (\(Int($0.fps))fps)").tag($0)
+                    }
+                }
                 .pickerStyle(.segmented)
+                Toggle("가끔 혼자 장난치기 (점프, 하트, 춤 등)", isOn: $settings.tricksEnabled)
                 Picker("메뉴바 사용률", selection: $settings.menuBarLabel) {
                     ForEach(MenuBarLabel.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
@@ -116,7 +122,7 @@ struct SettingsView: View {
                     ForEach(Thresholds.Sensitivity.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                Text("민감도가 높을수록 적은 사용량에도 빨리 달립니다. 메뉴바 사용률 앞의 ~는 추정값입니다.")
+                Text("민감도가 높을수록 적은 사용량에도 빨리 달립니다. 메뉴바 사용률 앞의 ~는 추정값입니다. 움직임을 높이면 더 매끄럽지만 CPU를 조금 더 씁니다. '본래 색'은 메뉴바에서도 캐릭터 고유색으로 그립니다.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
@@ -131,7 +137,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)   // 내용이 넘치면 Form이 스스로 스크롤
-        .frame(width: 420)
+        .frame(width: 440)
         .frame(minHeight: 340, idealHeight: 520, maxHeight: 720)
     }
 
