@@ -44,6 +44,7 @@ struct FittedRig: CharacterRig {
             .translatedBy(x: -centerX, y: -bottom)
         for var part in inner.parts {
             part.path = part.path.copy(using: &t) ?? part.path
+            part.imageRect = part.imageRect.applying(t)
             part.stroke *= scale
             part.eyeCenter = part.eyeCenter.applying(t)
             part.eyeRadius *= scale
