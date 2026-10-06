@@ -1,7 +1,7 @@
 import AppKit
 
 /// drawingHandler 기반 NSImage를 비트맵으로 1회 래스터라이즈.
-/// 상태바가 40ms 프레임마다 핸들러를 재실행하지 않게 해 애니메이션 CPU를 낮춘다 (§4 성능 예산).
+/// 프레임은 Core Animation 레이어에 넘겨 재생하므로 그리기는 상태가 바뀔 때 한 번만 일어난다 (§4 성능 예산).
 /// labelColor 등 동적 색상은 래스터라이즈 시점의 appearance로 고정되므로,
 /// 테마 변경 시 SpriteAnimator가 캐시를 비우고 다시 만든다.
 enum SpriteRasterizer {
@@ -32,5 +32,11 @@ enum SpriteRasterizer {
         let output = NSImage(size: size)
         output.addRepresentation(rep)
         return output
+    }
+
+    /// 레이어에 넘길 CGImage.
+    static func cgImage(_ image: NSImage, size: NSSize, appearance: NSAppearance?, scale: CGFloat = 2) -> CGImage? {
+        let raster = rasterize(image, size: size, appearance: appearance, scale: scale)
+        return (raster.representations.first as? NSBitmapImageRep)?.cgImage
     }
 }

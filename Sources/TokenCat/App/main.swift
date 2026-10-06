@@ -38,6 +38,29 @@ if CommandLine.arguments.contains("--report") {
     exit(0)
 }
 
+// 디자인 점검용: 모든 러너의 대표 장면을 PNG로 저장하고 종료.
+if let index = CommandLine.arguments.firstIndex(of: "--sprite-sheet") {
+    let args = Array(CommandLine.arguments.dropFirst(index + 1))
+    let path = args.first ?? "sprite-sheet"
+    let runners = args.dropFirst().first.map { $0.split(separator: ",").compactMap { Runner(rawValue: String($0)) } }
+    do {
+        try SpriteSheet.write(to: URL(fileURLWithPath: path), runners: runners ?? Runner.allCases)
+        print("saved: \(path)")
+        exit(0)
+    } catch {
+        print("failed: \(error)")
+        exit(1)
+    }
+}
+
+// README GIF 생성: 러너 몇 마리가 차례로 달리는 애니메이션.
+if let index = CommandLine.arguments.firstIndex(of: "--hero-gif") {
+    let path = CommandLine.arguments.dropFirst(index + 1).first ?? "tokencat-run.gif"
+    try? SpriteSheet.writeHeroGIF(to: URL(fileURLWithPath: path))
+    print("saved: \(path)")
+    exit(0)
+}
+
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate

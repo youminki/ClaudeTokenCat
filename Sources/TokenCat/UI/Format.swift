@@ -14,10 +14,6 @@ enum Format {
         String(format: "$%.2f", v)
     }
 
-    static func percent(_ v: Double) -> String {
-        String(format: "%.1f%%", v)
-    }
-
     /// 72 → "1시간 12분", 3 → "3분"
     static func minutes(_ total: Int) -> String {
         total >= 60 ? "\(total / 60)시간 \(total % 60)분" : "\(total)분"

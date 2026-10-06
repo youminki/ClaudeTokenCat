@@ -7,11 +7,24 @@ enum SpriteDisplay: Equatable {
     case tired    // 사용률 80%+, 상태와 무관하게 오버라이드
     case alert    // 사용률 95%+, 빨간 경고
 
-    var frameInterval: TimeInterval {
+    init(state: CatState, level: UsageAlertLevel) {
+        switch level {
+        case .critical: self = .alert
+        case .tired: self = .tired
+        case .normal: self = .normal(state)
+        }
+    }
+
+    /// 한 동작 주기(초). 프레임 수는 이 길이를 fps로 나눠 정한다.
+    var cycle: TimeInterval {
         switch self {
-        case .normal(let state): return state.frameInterval
-        case .tired: return 0.400
-        case .alert: return 0.500
+        case .normal(.sleeping): return 2.6
+        case .normal(.walking): return 1.25
+        case .normal(.running): return 0.72
+        case .normal(.dashing): return 0.54
+        case .normal(.rainbow): return 0.44
+        case .tired: return 1.1
+        case .alert: return 0.8
         }
     }
 
@@ -23,35 +36,158 @@ enum SpriteDisplay: Equatable {
         case .alert: return "alert"
         }
     }
+
+    var isAsleep: Bool { self == .normal(.sleeping) }
+
+    /// 숨쉬기처럼 느린 동작은 프레임을 늘려도 차이가 없어 상한을 둔다 (잠자는 동안 CPU 절약).
+    var maxFPS: Double {
+        switch self {
+        case .normal(.sleeping): return 20
+        case .tired: return 30
+        default: return 60
+        }
+    }
+
+    /// 진행도 phase(0~1)의 모습.
+    func motion(at phase: CGFloat) -> MotionFrame {
+        switch self {
+        case .normal(.sleeping):
+            return MotionFrame(pose: CharacterPose(activity: .sleep, phase: phase, eyes: .closed))
+        case .normal(.walking):
+            return MotionFrame(pose: CharacterPose(activity: .walk, phase: phase))
+        case .normal(.running):
+            return MotionFrame(pose: CharacterPose(activity: .run, phase: phase, speed: 1))
+        case .normal(.dashing):
+            return MotionFrame(pose: CharacterPose(activity: .run, phase: phase, speed: 1.2))
+        case .normal(.rainbow):
+            return MotionFrame(pose: CharacterPose(activity: .run, phase: phase, speed: 1.35))
+        case .tired:
+            return MotionFrame(pose: CharacterPose(activity: .sit, phase: phase, mouthOpen: true))
+        case .alert:
+            var frame = MotionFrame(pose: CharacterPose(activity: .stand, phase: phase))
+            frame.transform.rotation = 0.05 * sin(tau * phase * 2)
+            frame.transform.offset.x = 0.35 * sin(tau * phase * 6)
+            return frame
+        }
+    }
+
+    /// 상태마다 늘 붙는 효과 (무지개 꼬리, 바람, 먼지, Z, 땀, 느낌표).
+    /// `leftEdge`는 무지개 꼬리가 시작하는 x (팝오버 무대는 화면 왼쪽 끝까지 끈다).
+    func drawLoopEffects(in cg: CGContext, scene: CharacterScene, phase: CGFloat, tint: NSColor, front: Bool,
+                         leftEdge: CGFloat = -1) {
+        let bounds = scene.placedBounds
+        switch (self, front) {
+        case (.normal(.rainbow), false):
+            SpriteEffects.rainbowTrail(cg, from: leftEdge, to: bounds.minX + 3, centerY: bounds.midY - 0.3,
+                                       band: 1.05, phase: phase)
+            if leftEdge > -2 {
+                SpriteEffects.sparkleField(cg, phase: phase, width: bounds.minX + 2, height: Stage.size.height)
+            }
+        case (.normal(.dashing), false):
+            SpriteEffects.speedLines(cg, phase: phase, maxX: bounds.minX + 2, color: tint)
+        case (.normal(.running), false):
+            SpriteEffects.dust(cg, at: CGPoint(bounds.minX + 4, Stage.ground - 0.8), phase: phase, color: tint)
+        case (.normal(.sleeping), true):
+            SpriteEffects.zzz(cg, from: CGPoint(bounds.maxX - 2.5, bounds.minY + 0.5), phase: phase, color: tint)
+        case (.tired, true):
+            SpriteEffects.sweat(cg, at: CGPoint(bounds.maxX - 1.5, bounds.minY + 1), phase: phase)
+        case (.alert, true):
+            let blink = 0.55 + 0.45 * cos(tau * phase * 2)
+            SpriteEffects.exclaim(cg, at: CGPoint(min(bounds.maxX + 0.5, 34.5), 5.5), height: 7,
+                                  color: NSColor.systemRed.withAlphaComponent(blink))
+        default:
+            break
+        }
+    }
 }
 
 /// 러너 색상. 코드로 그린 러너에만 적용되고, 커스텀 PNG 에셋은 원본 색 그대로.
 enum SpriteTheme: String, CaseIterable {
     case auto      // labelColor — 다크/라이트 메뉴바 자동
+    case natural   // 캐릭터 고유색 + 외곽선
     case orange
     case sky
     case pink
     case green
+    case purple
+    case yellow
+    case rainbow   // 프레임마다 색이 돈다
 
     var displayName: String {
         switch self {
         case .auto: return "자동"
+        case .natural: return "본래 색"
         case .orange: return "주황"
         case .sky: return "하늘"
         case .pink: return "분홍"
         case .green: return "초록"
+        case .purple: return "보라"
+        case .yellow: return "노랑"
+        case .rainbow: return "무지개"
         }
     }
 
-    var bodyColor: NSColor {
+    /// 단색일 때의 색. 무지개는 진행도에 따라 색상환을 돈다.
+    func tint(at phase: CGFloat) -> NSColor {
         switch self {
-        case .auto: return .labelColor
+        case .auto, .natural: return .labelColor
         case .orange: return .systemOrange
         case .sky: return .systemTeal
         case .pink: return .systemPink
         case .green: return .systemGreen
+        case .purple: return .systemPurple
+        case .yellow: return .systemYellow
+        case .rainbow:
+            return NSColor(hue: phase - floor(phase), saturation: 0.72, brightness: 0.98, alpha: 1)
         }
     }
+
+    /// 메뉴바용 그리는 방식.
+    func look(palette: CharacterPalette, phase: CGFloat, alarm: Bool) -> CharacterLook {
+        if self == .natural {
+            var look = CharacterLook(rich: true, palette: palette, tint: .labelColor, outline: 0.42)
+            look.alarm = alarm
+            return look
+        }
+        return .mono(alarm ? .systemRed : tint(at: phase))
+    }
+
+    /// 팝오버 무대·설정 타일용. 단색 테마는 몸 색만 바꾸고 나머지는 캐릭터 고유색을 쓴다.
+    func richPalette(_ base: CharacterPalette, phase: CGFloat) -> CharacterPalette {
+        guard self != .auto && self != .natural else { return base }
+        var palette = base
+        let color = tint(at: phase).usingColorSpace(.sRGB) ?? .systemOrange
+        palette.body = color.tinted(by: 0.12)
+        palette.belly = color.tinted(by: 0.6)
+        return palette
+    }
+}
+
+/// 메뉴바 애니메이션 부드러움 (fps 상한). 높을수록 매끄럽고 CPU를 더 쓴다.
+enum SpriteSmoothness: String, CaseIterable {
+    case saver, smooth, max
+
+    var displayName: String {
+        switch self {
+        case .saver: return "절약"
+        case .smooth: return "부드럽게"
+        case .max: return "최고"
+        }
+    }
+
+    var fps: Double {
+        switch self {
+        case .saver: return 12
+        case .smooth: return 30
+        case .max: return 60
+        }
+    }
+}
+
+/// 한 동작을 잘게 나눈 프레임 묶음.
+struct SpriteClip {
+    let frames: [NSImage]
+    let interval: TimeInterval
 }
 
 /// 상태별 스프라이트 프레임 로더.
@@ -60,155 +196,104 @@ enum SpriteTheme: String, CaseIterable {
 /// 코드로 그린 러너 대신 자동 사용된다 (Assets/README.md 참조). 예: cat_run_0.png ... cat_run_7.png
 enum SpriteFrames {
 
-    static let spriteSize = NSSize(width: 36, height: 22)
+    static let spriteSize = Stage.size
 
-    static func frames(for display: SpriteDisplay, runner: Runner, theme: SpriteTheme) -> [NSImage] {
-        let body = theme.bodyColor
-        let art = runner.art
-        let prefix = runner.rawValue
-        let key = "\(prefix)|\(theme.rawValue)"
-        switch display {
-        case .normal(.sleeping):
-            return loadAssets(named: "\(prefix)_sleep", count: 2) ?? generated("sleep|\(key)") {
-                (0..<2).map { PixelRunner.sleepFrame(art, index: $0, body: body) }
-            }
-        case .normal(.rainbow):
-            // 무지개 전용 에셋 → 달리기 에셋 고속 재생 → 생성 프레임(트레일 포함) 순
-            return loadAssets(named: "\(prefix)_rainbow", count: 8)
-                ?? loadAssets(named: "\(prefix)_run", count: 8)
-                ?? generated("rainbow|\(key)") {
-                    (0..<8).map { PixelRunner.runFrame(art, index: $0, rainbowTrail: true, body: body) }
+    /// 주기를 fps로 나눈 프레임 수와 간격.
+    static func timing(cycle: TimeInterval, fps: Double) -> (count: Int, interval: TimeInterval) {
+        let count = max(4, Int((cycle * fps).rounded()))
+        return (count, cycle / Double(count))
+    }
+
+    static func clip(for display: SpriteDisplay, character: RunnerCharacter, theme chosen: SpriteTheme,
+                     fps: Double) -> SpriteClip {
+        if let prefix = character.assetPrefix, let assets = assetClip(for: display, prefix: prefix) { return assets }
+        let theme = character.theme(chosen)
+        let (count, interval) = timing(cycle: display.cycle, fps: min(fps, display.maxFPS))
+        let rig = character.rig
+        let frames = (0..<count).map { i -> NSImage in
+            let phase = CGFloat(i) / CGFloat(count)
+            return image { cg in
+                render(cg, rig: rig, frame: display.motion(at: phase), theme: theme, themePhase: phase,
+                       alarm: display == .alert) { cg, scene, tint, front in
+                    display.drawLoopEffects(in: cg, scene: scene, phase: phase, tint: tint, front: front)
                 }
-        case .normal(.walking), .normal(.running), .normal(.dashing):
-            return loadAssets(named: "\(prefix)_run", count: 8) ?? generated("run|\(key)") {
-                (0..<8).map { PixelRunner.runFrame(art, index: $0, rainbowTrail: false, body: body) }
             }
-        case .tired:
-            return loadAssets(named: "\(prefix)_tired", count: 2) ?? generated("tired|\(key)") {
-                (0..<2).map { PixelRunner.tiredFrame(art, index: $0, body: body) }
+        }
+        return SpriteClip(frames: frames, interval: interval)
+    }
+
+    /// 한 번 재생하는 동작. Assets 폴더 PNG로 바꾼 러너는 동작 프레임이 없어 nil.
+    static func clip(for trick: Trick, character: RunnerCharacter, theme chosen: SpriteTheme, fps: Double) -> SpriteClip? {
+        if let prefix = character.assetPrefix, loadAssets(named: "\(prefix)_run", count: 8) != nil { return nil }
+        let theme = character.theme(chosen)
+        let (count, interval) = timing(cycle: trick.duration, fps: fps)
+        let rig = character.rig
+        let frames = (0...count).map { i -> NSImage in
+            let t = CGFloat(i) / CGFloat(count)
+            return image { cg in
+                render(cg, rig: rig, frame: trick.frame(at: t), theme: theme, themePhase: t, alarm: false) { _, _, _, _ in }
             }
-        case .alert:
-            // 경고는 테마와 무관하게 항상 빨강
-            return loadAssets(named: "\(prefix)_alert", count: 2) ?? generated("alert|\(prefix)") {
-                (0..<2).map { PixelRunner.alertFrame(art, index: $0) }
-            }
+        }
+        return SpriteClip(frames: frames, interval: interval)
+    }
+
+    /// 러너 한 장면을 그린다. 효과는 `loopEffects`(뒤·앞 두 번 불림)와 동작 자체의 효과를 함께 얹는다.
+    static func render(_ cg: CGContext, rig: CharacterRig, frame: MotionFrame, theme: SpriteTheme,
+                       themePhase: CGFloat, alarm: Bool,
+                       loopEffects: (CGContext, CharacterScene, NSColor, Bool) -> Void) {
+        let scene = CharacterScene(rig: rig, pose: frame.pose, transform: frame.transform)
+        let look = theme.look(palette: rig.palette, phase: themePhase, alarm: alarm)
+        let tint = theme == .natural ? NSColor.labelColor : look.tint
+        loopEffects(cg, scene, tint, false)
+        scene.draw(in: cg, look: look)
+        loopEffects(cg, scene, tint, true)
+        for effect in frame.effects {
+            effect.draw(in: cg, around: scene.placedBounds, tint: tint)
         }
     }
 
-    /// 설정 화면 미리보기용 한 장 (달리기 첫 포즈).
-    static func preview(runner: Runner, theme: SpriteTheme) -> NSImage {
-        frames(for: .normal(.running), runner: runner, theme: theme)[0]
+    /// 설계 좌표(y 아래)로 그리는 이미지. 그리기는 래스터라이즈 시점에 일어난다.
+    static func image(size: CGSize = Stage.size, scale: CGFloat = 1, _ draw: @escaping (CGContext) -> Void) -> NSImage {
+        NSImage(size: NSSize(width: size.width * scale, height: size.height * scale), flipped: true) { _ in
+            guard let cg = NSGraphicsContext.current?.cgContext else { return false }
+            cg.scaleBy(x: scale, y: scale)
+            draw(cg)
+            return true
+        }
     }
 
     // MARK: - 파일 에셋
 
+    private static func assetClip(for display: SpriteDisplay, prefix: String) -> SpriteClip? {
+        let frames: [NSImage]?
+        switch display {
+        case .normal(.sleeping): frames = loadAssets(named: "\(prefix)_sleep", count: 2)
+        case .normal(.rainbow):
+            frames = loadAssets(named: "\(prefix)_rainbow", count: 8) ?? loadAssets(named: "\(prefix)_run", count: 8)
+        case .normal: frames = loadAssets(named: "\(prefix)_run", count: 8)
+        case .tired: frames = loadAssets(named: "\(prefix)_tired", count: 2)
+        case .alert: frames = loadAssets(named: "\(prefix)_alert", count: 2)
+        }
+        guard let frames else { return nil }
+        return SpriteClip(frames: frames, interval: display.cycle / Double(frames.count))
+    }
+
+    private static var assetCache: [String: [NSImage]?] = [:]
+
     private static func loadAssets(named prefix: String, count: Int) -> [NSImage]? {
-        guard let assetsDir = Bundle.module.resourceURL?.appendingPathComponent("Assets") else { return nil }
-        var frames: [NSImage] = []
-        for i in 0..<count {
-            let url = assetsDir.appendingPathComponent("\(prefix)_\(i).png")
-            guard let image = NSImage(contentsOf: url) else { return nil } // 하나라도 없으면 전체 폴백
-            image.size = spriteSize
-            frames.append(image)
-        }
-        return frames
-    }
-
-    // MARK: - 코드 생성 프레임 캐시
-
-    private static var generatedCache: [String: [NSImage]] = [:]
-
-    private static func generated(_ key: String, _ make: () -> [NSImage]) -> [NSImage] {
-        if let cached = generatedCache[key] { return cached }
-        let frames = make()
-        generatedCache[key] = frames
-        return frames
-    }
-}
-
-/// RunnerArt 픽셀맵(1칸 = 2pt)을 그린다. 상태 표현(무지개 트레일, Zzz, 땀방울, 느낌표)은 러너와 무관하게 여기서 얹는다.
-/// labelColor로 그려서 다크/라이트 메뉴바에 자동 대응. 래스터라이즈 시점의 appearance가 적용된다 (SpriteRasterizer 참조).
-enum PixelRunner {
-
-    private static let cell: CGFloat = 2
-    private static let columns = 18
-    private static let rows = 11
-
-    /// 달리기 프레임. 4포즈 × 2회전 = 8프레임.
-    static func runFrame(_ art: RunnerArt, index: Int, rainbowTrail: Bool, body: NSColor) -> NSImage {
-        let pose = index % 4
-        return draw { fill in
-            if rainbowTrail {
-                // 무지개 트레일 (몸 뒤 왼쪽): 6색 가로 줄무늬, 프레임마다 1픽셀 흔들림
-                let colors: [NSColor] = [.systemRed, .systemOrange, .systemYellow,
-                                         .systemGreen, .systemBlue, .systemPurple]
-                let wave = index % 2
-                for (i, color) in colors.enumerated() {
-                    fill(0, 2 + i + wave, 4 - wave, 1, color)
-                }
+        if let cached = assetCache[prefix] { return cached }
+        var result: [NSImage]? = nil
+        if let assetsDir = Bundle.module.resourceURL?.appendingPathComponent("Assets") {
+            var frames: [NSImage] = []
+            for i in 0..<count {
+                let url = assetsDir.appendingPathComponent("\(prefix)_\(i).png")
+                guard let image = NSImage(contentsOf: url) else { break }   // 하나라도 없으면 전체 폴백
+                image.size = spriteSize
+                frames.append(image)
             }
-            paint(art.body + art.legs[pose], dy: art.bob[pose], body: body, fill: fill)
+            if frames.count == count { result = frames }
         }
-    }
-
-    /// 잠자기: 러너의 잠든 자세 + 떠오르는 Z.
-    static func sleepFrame(_ art: RunnerArt, index: Int, body: NSColor) -> NSImage {
-        draw { fill in
-            paint(art.sleep, dy: 0, body: body, fill: fill)
-            // Z 3×3 픽셀 글자, 프레임마다 위치 이동
-            let (x, y) = index == 0 ? (15, 1) : (14, 0)
-            fill(x, y, 3, 1, body)
-            fill(x + 1, y + 1, 1, 1, body)
-            fill(x, y + 2, 3, 1, body)
-        }
-    }
-
-    /// 지침 (사용률 80%+): 앉은 자세로 들썩이며 땀방울이 떨어진다.
-    static func tiredFrame(_ art: RunnerArt, index: Int, body: NSColor) -> NSImage {
-        let pant = index % 2
-        return draw { fill in
-            paint(art.sit, dy: pant, body: body, fill: fill)
-            fill(17, 1 + pant * 2, 1, 1, .systemBlue)
-        }
-    }
-
-    /// 경고 (사용률 95%+): 선 자세 전체를 빨강으로 + 깜빡이는 느낌표.
-    static func alertFrame(_ art: RunnerArt, index: Int) -> NSImage {
-        let red = NSColor.systemRed
-        return draw { fill in
-            paint(art.body + art.legs[3], dy: art.bob[3], body: red, accent: red, fill: fill)
-            if index == 0 {
-                fill(0, 1, 1, 4, red)
-                fill(0, 6, 1, 1, red)
-            }
-        }
-    }
-
-    private typealias Fill = (_ x: Int, _ y: Int, _ w: Int, _ h: Int, _ color: NSColor) -> Void
-
-    /// 픽셀맵을 dy만큼 내려 그린다. 그리드 밖은 버린다.
-    private static func paint(_ map: [String], dy: Int, body: NSColor, accent: NSColor = .systemOrange,
-                              fill: Fill) {
-        for (row, line) in map.enumerated() where (0..<rows).contains(row + dy) {
-            for (column, pixel) in line.enumerated() where column < columns {
-                switch pixel {
-                case "#": fill(column, row + dy, 1, 1, body)
-                case "o": fill(column, row + dy, 1, 1, accent)
-                default: break
-                }
-            }
-        }
-    }
-
-    /// 그리드 좌표(원점 좌상단)로 그리는 이미지.
-    private static func draw(_ content: @escaping (Fill) -> Void) -> NSImage {
-        NSImage(size: SpriteFrames.spriteSize, flipped: true) { _ in
-            content { x, y, w, h, color in
-                color.setFill()
-                NSRect(x: CGFloat(x) * cell, y: CGFloat(y) * cell,
-                       width: CGFloat(w) * cell, height: CGFloat(h) * cell).fill()
-            }
-            return true
-        }
+        assetCache[prefix] = result
+        return result
     }
 }

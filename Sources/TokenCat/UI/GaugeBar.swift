@@ -1,45 +1,38 @@
 import SwiftUI
 
-/// 사용률 게이지 바. 0~60% 파랑 → 60~80% 노랑 → 80%+ 빨강 (§F3).
+/// 사용률 게이지 바 (§F3). 80% 전까지는 무채색, 80% 주황, 95% 빨강.
 struct GaugeBar: View {
     let percent: Double
-    /// 창이 지난 비율(0~1). 세로선으로 그려 사용량이 시간보다 앞서는지 보이게 한다.
+    /// 창이 지난 비율(0~1). 눈금으로 그려 사용량이 시간보다 앞서는지 보이게 한다.
     var elapsed: Double? = nil
-
-    static func color(for percent: Double) -> Color {
-        switch percent {
-        case ..<60: return .blue
-        case ..<80: return .yellow
-        default: return .red
-        }
-    }
 
     private func width(_ percent: Double, in total: CGFloat) -> CGFloat {
         total * min(max(percent, 0), 100) / 100
     }
 
     var body: some View {
-        let color = Self.color(for: percent)
+        let color = Theme.level(percent)
         GeometryReader { geo in
+            let total = geo.size.width
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.primary.opacity(0.12))
+                Capsule().fill(Theme.track)
                 Capsule()
                     .fill(color)
-                    .frame(width: width(percent, in: geo.size.width))
+                    .frame(width: width(percent, in: total))
             }
-            .frame(height: 6)
+            .frame(height: 4)
             .frame(maxHeight: .infinity)
             .overlay(alignment: .leading) {
                 if let elapsed {
-                    Capsule()
-                        .fill(Color.primary.opacity(0.75))
-                        .frame(width: 2, height: 10)
-                        .offset(x: min(max(width(elapsed * 100, in: geo.size.width) - 1, 0), geo.size.width - 2))
+                    Rectangle()
+                        .fill(Theme.secondary)
+                        .frame(width: 1, height: 9)
+                        .offset(x: min(max(width(elapsed * 100, in: total), 0), total - 1))
                 }
             }
         }
         .frame(height: 10)
-        .animation(.easeOut(duration: 0.3), value: percent)
+        .animation(.easeOut(duration: 0.25), value: percent)
         .help(helpText)
         .accessibilityElement()
         .accessibilityValue(accessibilityText)
@@ -47,7 +40,7 @@ struct GaugeBar: View {
 
     private var helpText: String {
         var lines: [String] = []
-        if let elapsed { lines.append("세로선: 이번 창 시간의 \(Int((elapsed * 100).rounded()))% 경과") }
+        if let elapsed { lines.append("눈금: 이번 창 시간의 \(Int((elapsed * 100).rounded()))% 경과") }
         return lines.joined(separator: "\n")
     }
 

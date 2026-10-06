@@ -9,36 +9,25 @@ struct Sparkline: View {
         GeometryReader { geo in
             let maxValue = max(values.max() ?? 0, 1)
             let stepX = geo.size.width / CGFloat(max(values.count - 1, 1))
+            let inset: CGFloat = 1.5
             let points = values.enumerated().map { i, v in
                 CGPoint(x: CGFloat(i) * stepX,
-                        y: geo.size.height * (1 - CGFloat(v) / CGFloat(maxValue)))
+                        y: inset + (geo.size.height - inset * 2) * (1 - CGFloat(v) / CGFloat(maxValue)))
             }
-            ZStack {
-                Path { p in
-                    guard let first = points.first else { return }
-                    p.move(to: CGPoint(x: first.x, y: geo.size.height))
-                    points.forEach { p.addLine(to: $0) }
-                    p.addLine(to: CGPoint(x: points[points.count - 1].x, y: geo.size.height))
-                    p.closeSubpath()
-                }
-                .fill(LinearGradient(colors: [Color.accentColor.opacity(0.35), Color.accentColor.opacity(0.05)],
-                                     startPoint: .top, endPoint: .bottom))
-                Path { p in
-                    guard let first = points.first else { return }
-                    p.move(to: first)
-                    points.dropFirst().forEach { p.addLine(to: $0) }
-                }
-                .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 1.2, lineJoin: .round))
+            ZStack(alignment: .topLeading) {
+                Self.curve(points, closedTo: geo.size.height)
+                    .fill(LinearGradient(colors: [Color.white.opacity(0.09), Color.white.opacity(0)],
+                                         startPoint: .top, endPoint: .bottom))
+                Self.curve(points, closedTo: nil)
+                    .stroke(Theme.normal.opacity(0.75), style: StrokeStyle(lineWidth: 1.25, lineJoin: .round))
                 if let i = hoverIndex, points.indices.contains(i) {
-                    Path { p in
-                        p.move(to: CGPoint(x: points[i].x, y: 0))
-                        p.addLine(to: CGPoint(x: points[i].x, y: geo.size.height))
-                    }
-                    .stroke(Color.primary.opacity(0.3), lineWidth: 1)
-                    Circle()
-                        .fill(Color.accentColor)
-                        .frame(width: 5, height: 5)
-                        .position(points[i])
+                    Rectangle()
+                        .fill(Theme.tertiary)
+                        .frame(width: 1, height: geo.size.height)
+                        .offset(x: points[i].x)
+                    Circle().fill(Theme.primary).frame(width: 5, height: 5).position(points[i])
+                } else if let last = points.last {
+                    Circle().fill(Theme.primary).frame(width: 4, height: 4).position(last)
                 }
             }
             .contentShape(Rectangle())
@@ -53,6 +42,33 @@ struct Sparkline: View {
                 }
             }
         }
-        .frame(height: 24)
+        .frame(height: 34)
+    }
+
+    /// Catmull-Rom 곡선. 제어점은 그래프 높이 안으로 묶어 0 아래로 출렁이지 않게 한다.
+    private static func curve(_ points: [CGPoint], closedTo bottom: CGFloat?) -> Path {
+        Path { p in
+            guard let first = points.first else { return }
+            let lowY = points.map(\.y).max() ?? 0
+            let highY = points.map(\.y).min() ?? 0
+            func clamp(_ y: CGFloat) -> CGFloat { min(max(y, highY), lowY) }
+            if let bottom {
+                p.move(to: CGPoint(x: first.x, y: bottom))
+                p.addLine(to: first)
+            } else {
+                p.move(to: first)
+            }
+            for i in 0..<max(points.count - 1, 0) {
+                let p0 = points[max(i - 1, 0)], p1 = points[i], p2 = points[i + 1]
+                let p3 = points[min(i + 2, points.count - 1)]
+                let c1 = CGPoint(x: p1.x + (p2.x - p0.x) / 6, y: clamp(p1.y + (p2.y - p0.y) / 6))
+                let c2 = CGPoint(x: p2.x - (p3.x - p1.x) / 6, y: clamp(p2.y - (p3.y - p1.y) / 6))
+                p.addCurve(to: p2, control1: c1, control2: c2)
+            }
+            if let bottom, let last = points.last {
+                p.addLine(to: CGPoint(x: last.x, y: bottom))
+                p.closeSubpath()
+            }
+        }
     }
 }

@@ -8,17 +8,6 @@ public enum CatState: String, CaseIterable, Sendable {
     case dashing    // 10,000 ~ 30,000
     case rainbow    // 30,000+
 
-    /// 프레임 간격 (§F2 표).
-    public var frameInterval: TimeInterval {
-        switch self {
-        case .sleeping: return 1.000
-        case .walking:  return 0.200
-        case .running:  return 0.100
-        case .dashing:  return 0.060
-        case .rainbow:  return 0.040
-        }
-    }
-
     public var label: String {
         switch self {
         case .sleeping: return "쉬는 중"
