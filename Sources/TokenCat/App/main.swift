@@ -54,6 +54,24 @@ if let index = CommandLine.arguments.firstIndex(of: "--menubar-audit") {
     }
 }
 
+// 게임 화면 점검: 자동 플레이로 시작·진행·부딪힘 장면을 PNG로 저장하고 종료.
+if let index = CommandLine.arguments.firstIndex(of: "--game-shots") {
+    let args = Array(CommandLine.arguments.dropFirst(index + 1))
+    let id = args.dropFirst().first
+    let character = LocalPack.runner(storageID: id)?.character ?? Runner(rawValue: id ?? "")?.character ?? Runner.cat.character
+    // 무대 그리기는 메인 액터에서만 된다
+    Task { @MainActor in
+        do {
+            try GameShots.run(to: URL(fileURLWithPath: args.first ?? "game-shots"), character: character)
+            exit(0)
+        } catch {
+            print("failed: \(error)")
+            exit(1)
+        }
+    }
+    dispatchMain()
+}
+
 // 디자인 점검용: 모든 러너의 대표 장면을 PNG로 저장하고 종료.
 if let index = CommandLine.arguments.firstIndex(of: "--sprite-sheet") {
     let args = Array(CommandLine.arguments.dropFirst(index + 1))
