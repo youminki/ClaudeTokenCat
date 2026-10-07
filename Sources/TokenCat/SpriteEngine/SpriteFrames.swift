@@ -204,17 +204,19 @@ enum SpriteFrames {
         return (count, cycle / Double(count))
     }
 
+    /// `visibleY`를 주면 그 높이 범위(메뉴바 칸)를 벗어나는 장면을 줄여 넣는다.
     static func clip(for display: SpriteDisplay, character: RunnerCharacter, theme chosen: SpriteTheme,
-                     fps: Double) -> SpriteClip {
+                     fps: Double, visibleY: ClosedRange<CGFloat>? = nil) -> SpriteClip {
         if let prefix = character.assetPrefix, let assets = assetClip(for: display, prefix: prefix) { return assets }
         let theme = character.theme(chosen)
         let (count, interval) = timing(cycle: display.cycle, fps: min(fps, display.maxFPS))
         let rig = character.rig
+        let fit = visibleY.map { SceneFit.fixed(loopFit(display, rig: rig, range: $0, count: count)) } ?? .none
         let frames = (0..<count).map { i -> NSImage in
             let phase = CGFloat(i) / CGFloat(count)
             return image { cg in
                 render(cg, rig: rig, frame: display.motion(at: phase), theme: theme, themePhase: phase,
-                       alarm: display == .alert) { cg, scene, tint, front in
+                       alarm: display == .alert, fit: fit) { cg, scene, tint, front in
                     display.drawLoopEffects(in: cg, scene: scene, phase: phase, tint: tint, front: front)
                 }
             }
@@ -223,7 +225,8 @@ enum SpriteFrames {
     }
 
     /// 한 번 재생하는 동작. Assets 폴더 PNG로 바꾼 러너는 동작 프레임이 없어 nil.
-    static func clip(for trick: Trick, character: RunnerCharacter, theme chosen: SpriteTheme, fps: Double) -> SpriteClip? {
+    static func clip(for trick: Trick, character: RunnerCharacter, theme chosen: SpriteTheme, fps: Double,
+                     visibleY: ClosedRange<CGFloat>? = nil) -> SpriteClip? {
         if let prefix = character.assetPrefix, loadAssets(named: "\(prefix)_run", count: 8) != nil { return nil }
         let theme = character.theme(chosen)
         let (count, interval) = timing(cycle: trick.duration, fps: fps)
@@ -231,17 +234,42 @@ enum SpriteFrames {
         let frames = (0...count).map { i -> NSImage in
             let t = CGFloat(i) / CGFloat(count)
             return image { cg in
-                render(cg, rig: rig, frame: trick.frame(at: t), theme: theme, themePhase: t, alarm: false) { _, _, _, _ in }
+                render(cg, rig: rig, frame: trick.frame(at: t), theme: theme, themePhase: t, alarm: false,
+                       fit: visibleY.map(SceneFit.each) ?? .none) { _, _, _, _ in }
             }
         }
         return SpriteClip(frames: frames, interval: interval)
     }
 
+    /// 높이가 정해진 칸(메뉴바)에 장면을 맞추는 방법.
+    enum SceneFit {
+        case none
+        /// 프레임마다 따로 맞춘다. 장난은 움직임이 이어지니 크기도 이어서 바뀐다.
+        case each(ClosedRange<CGFloat>)
+        /// 미리 구한 변환을 모든 프레임에 건다. 반복 동작이 프레임마다 커졌다 작아지지 않게 한다.
+        case fixed(CGAffineTransform)
+    }
+
+    /// 반복 동작 한 주기의 모든 장면을 감싸는 영역으로 맞춤을 한 번 구한다.
+    static func loopFit(_ display: SpriteDisplay, rig: CharacterRig, range: ClosedRange<CGFloat>,
+                        count: Int) -> CGAffineTransform {
+        let union = (0..<count).reduce(CGRect.null) { rect, i in
+            let frame = display.motion(at: CGFloat(i) / CGFloat(count))
+            return rect.union(CharacterScene(rig: rig, pose: frame.pose, transform: frame.transform).placedBounds)
+        }
+        return union.isNull ? .identity : CharacterScene.fitTransform(for: union, in: range)
+    }
+
     /// 러너 한 장면을 그린다. 효과는 `loopEffects`(뒤·앞 두 번 불림)와 동작 자체의 효과를 함께 얹는다.
     static func render(_ cg: CGContext, rig: CharacterRig, frame: MotionFrame, theme: SpriteTheme,
-                       themePhase: CGFloat, alarm: Bool,
+                       themePhase: CGFloat, alarm: Bool, fit: SceneFit = .none,
                        loopEffects: (CGContext, CharacterScene, NSColor, Bool) -> Void) {
-        let scene = CharacterScene(rig: rig, pose: frame.pose, transform: frame.transform)
+        var scene = CharacterScene(rig: rig, pose: frame.pose, transform: frame.transform)
+        switch fit {
+        case .none: break
+        case .each(let range): scene.fit(verticallyIn: range)
+        case .fixed(let transform): scene.apply(fit: transform)
+        }
         let look = theme.look(palette: rig.palette, phase: themePhase, alarm: alarm)
         let tint = theme == .natural ? NSColor.labelColor : look.tint
         loopEffects(cg, scene, tint, false)

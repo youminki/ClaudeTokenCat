@@ -122,7 +122,7 @@ enum MenuBarLabel: String, CaseIterable {
 }
 
 /// 메뉴바 러너 크기. 메뉴바 높이는 정해져 있어 크게는 효과 자리로 남긴 위아래 여백만 줄여 키운다.
-/// 서 있거나 달릴 때는 잘리지 않고, 키운 만큼 칸이 옆으로 넓어진다.
+/// 키운 만큼 칸이 옆으로 넓어지고, 칸 위아래를 벗어나는 장난은 그 순간만 줄여 그린다 (MenuBarCanvas).
 enum RunnerSize: String, CaseIterable {
     case full, large
 
@@ -136,7 +136,7 @@ enum RunnerSize: String, CaseIterable {
     var zoom: CGFloat {
         switch self {
         case .full: return 1
-        case .large: return 1.12
+        case .large: return 1.1
         }
     }
 }

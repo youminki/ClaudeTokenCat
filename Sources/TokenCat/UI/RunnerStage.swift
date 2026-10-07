@@ -194,7 +194,9 @@ final class StageModel: ObservableObject {
         // 러너 장면
         let rig = character.rig
         let frame = playing.map { $0.kind.frame(at: $0.t) } ?? display.motion(at: gait)
-        let scene = CharacterScene(rig: rig, pose: frame.pose, transform: frame.transform)
+        var scene = CharacterScene(rig: rig, pose: frame.pose, transform: frame.transform)
+        // 공중제비처럼 무대 위로 넘치는 장면은 무대 높이 안으로 줄여 넣는다
+        scene.fit(verticallyIn: (-origin.y / scale + 0.4)...((size.height - origin.y) / scale))
         let bounds = scene.placedBounds
 
         // 그림자: 높이 뜰수록 옅고 작아진다

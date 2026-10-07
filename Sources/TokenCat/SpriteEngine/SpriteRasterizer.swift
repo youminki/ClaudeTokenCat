@@ -6,45 +6,67 @@ import AppKit
 /// 테마 변경 시 SpriteAnimator가 캐시를 비우고 다시 만든다.
 enum SpriteRasterizer {
 
-    /// `zoom`이 1보다 크면 칸을 그만큼 옆으로 넓히고, 바닥 조금 위를 기준으로 키워 위아래 여백만 줄인다.
-    /// 출력 크기는 (size.width × zoom) × size.height다.
-    static func rasterize(_ image: NSImage, size: NSSize,
-                          appearance: NSAppearance?, scale: CGFloat = 2, zoom: CGFloat = 1) -> NSImage {
-        guard let rep = NSBitmapImageRep(
-            bitmapDataPlanes: nil,
-            pixelsWide: Int((size.width * zoom * scale).rounded()), pixelsHigh: Int(size.height * scale),
-            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
-            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
-            let context = NSGraphicsContext(bitmapImageRep: rep)
-        else { return image }
-
+    /// 메뉴바 칸 픽셀 크기 그대로 그린 CGImage. `halo`를 주면 그림 바깥에 한 겹 테두리를 두른다.
+    static func cgImage(_ image: NSImage, canvas: MenuBarCanvas, appearance: NSAppearance?,
+                        halo: NSColor? = nil) -> CGImage? {
+        let width = canvas.pixelWidth, height = canvas.pixelHeight
+        guard width > 0, height > 0,
+              let cg = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                 space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        cg.scaleBy(x: canvas.pixelsPerPoint, y: canvas.pixelsPerPoint)
+        cg.interpolationQuality = .high
         NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = context
-        context.cgContext.scaleBy(x: scale, y: scale)   // 포인트 좌표로 그리면 2x 픽셀로 기록 (레티나)
-        // 선 자세는 바닥 아래 1pt, 머리 위 2.5pt가 비어 있다. 바닥에서 4pt 위를 고정점으로 두면
-        // 1.12배에서 머리와 발이 모두 칸 안에 남는다 (점프·춤의 머리 위는 조금 잘린다)
-        let pivot: CGFloat = 4
-        let rect = NSRect(x: 0, y: pivot * (1 - zoom), width: size.width * zoom, height: size.height * zoom)
-        let draw = { image.draw(in: rect) }
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: cg, flipped: false)
+        let draw = { image.draw(in: canvas.designRect) }
         if let appearance {
             appearance.performAsCurrentDrawingAppearance(draw)
         } else {
             draw()
         }
-        context.flushGraphics()
         NSGraphicsContext.restoreGraphicsState()
-
-        let outputSize = NSSize(width: size.width * zoom, height: size.height)
-        rep.size = outputSize
-        let output = NSImage(size: outputSize)
-        output.addRepresentation(rep)
-        return output
+        if let halo, let pixels = cg.data?.bindMemory(to: UInt8.self, capacity: width * height * 4) {
+            addHalo(pixels, width: width, height: height, color: halo, radius: canvas.haloRadius)
+        }
+        return cg.makeImage()
     }
 
-    /// 레이어에 넘길 CGImage.
-    static func cgImage(_ image: NSImage, size: NSSize, appearance: NSAppearance?, scale: CGFloat = 2,
-                        zoom: CGFloat = 1) -> CGImage? {
-        let raster = rasterize(image, size: size, appearance: appearance, scale: scale, zoom: zoom)
-        return (raster.representations.first as? NSBitmapImageRep)?.cgImage
+    /// 그림 바깥으로 `radius` 픽셀 안에 있는 투명한 자리에 `color`를 깐다 (프리멀티플라이드 RGBA).
+    /// 검은 머리처럼 메뉴바와 색이 비슷한 부분의 윤곽을 살린다.
+    static func addHalo(_ pixels: UnsafeMutablePointer<UInt8>, width: Int, height: Int, color: NSColor, radius: Int) {
+        let rgb = color.usingColorSpace(.sRGB) ?? color
+        let a = rgb.alphaComponent
+        let halo = [rgb.redComponent * a, rgb.greenComponent * a, rgb.blueComponent * a, a].map { $0 * 255 }
+        let solid: UInt8 = 128
+        let mask = (0..<width * height).map { pixels[$0 * 4 + 3] >= solid }
+        // 그림이 있는 범위에서 테두리 두께만큼 넓힌 곳만 본다
+        var minX = width, minY = height, maxX = -1, maxY = -1
+        for y in 0..<height {
+            for x in 0..<width where mask[y * width + x] {
+                minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+            }
+        }
+        guard maxX >= 0 else { return }
+        for y in max(minY - radius, 0)...min(maxY + radius, height - 1) {
+            for x in max(minX - radius, 0)...min(maxX + radius, width - 1) where !mask[y * width + x] {
+                var near = false
+                search: for dy in -radius...radius {
+                    let ny = y + dy
+                    guard ny >= 0, ny < height else { continue }
+                    for dx in -radius...radius where dx * dx + dy * dy <= radius * radius + 1 {
+                        let nx = x + dx
+                        if nx >= 0, nx < width, mask[ny * width + nx] { near = true; break search }
+                    }
+                }
+                guard near else { continue }
+                // 이미 칠해진 반투명 픽셀(가장자리 안티앨리어싱) 아래에 깐다
+                let i = (y * width + x) * 4
+                let keep = 1 - CGFloat(pixels[i + 3]) / 255
+                for c in 0..<4 {
+                    pixels[i + c] = UInt8(min(255, CGFloat(pixels[i + c]) + halo[c] * keep))
+                }
+            }
+        }
     }
 }

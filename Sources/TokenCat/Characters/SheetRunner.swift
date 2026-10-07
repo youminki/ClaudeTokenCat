@@ -26,10 +26,9 @@ struct SheetRig: CharacterRig {
         case .sit: order = ["sad", "run", "idle"]     // 한도 80% 이상 지침
         case .sleep: order = ["wait", "run", "idle"]
         }
-        guard let found = SheetFrames.frames(folder, rows: order) else { return }
-        let (row, frames) = found
+        guard let (row, frames) = SheetFrames.frames(folder, rows: order) else { return }
         let cycle = row == "wave" ? (pose.wave ?? 0) - floor(pose.wave ?? 0) : pose.cycle
-        let image = frames[min(Int(cycle * CGFloat(frames.count)), frames.count - 1)]
+        let image = frames.images[min(Int(cycle * CGFloat(frames.images.count)), frames.images.count - 1)]
         // 출력 1px이 차지할 설계 단위. 기준 칸의 키를 목표 키에 맞춘다.
         let unit = FittedRig.targetHeight / CGFloat(max(meta.h, 1))
         let base = CGRect(x: FittedRig.targetCenterX - CGFloat(meta.w) * unit / 2, y: Stage.ground - FittedRig.targetHeight,
@@ -38,13 +37,17 @@ struct SheetRig: CharacterRig {
             r.count == 4 ? CGRect(x: base.minX + CGFloat(r[0]) * unit, y: base.minY + CGFloat(r[1]) * unit,
                                   width: CGFloat(r[2]) * unit, height: CGFloat(r[3]) * unit) : nil
         } ?? base
-        s.add(Part(path: CGPath(rect: rect, transform: nil), fill: false, stroke: 0, role: .body,
+        // 크기 맞춤과 효과 위치는 투명한 여백을 뺀 그림 영역으로 잰다. 줄마다 하나라 프레임끼리 흔들리지 않는다.
+        let c = frames.content
+        let content = CGRect(x: rect.minX + c.minX * rect.width, y: rect.minY + c.minY * rect.height,
+                             width: c.width * rect.width, height: c.height * rect.height)
+        s.add(Part(path: CGPath(rect: content, transform: nil), fill: false, stroke: 0, role: .body,
                    image: image, imageRect: rect))
     }
 }
 
 /// 시트 러너 프레임 캐시. 메인 스레드에서만 쓴다.
-/// 프레임은 처음 그릴 때 풀리고 그 뒤로는 풀린 채 남는다. 설정의 러너 목록은 고르지 않은 러너마다 서 있는 한 장만 그린다.
+/// 줄을 처음 쓸 때 프레임마다 그림 영역을 재어 합친다. 잴 때 푼 픽셀은 버리고, 그린 프레임만 풀린 채 남는다.
 enum SheetFrames {
     struct Meta: Codable {
         let w: Int
@@ -54,10 +57,16 @@ enum SheetFrames {
         var rects: [String: [Int]]?
     }
 
+    /// 한 줄의 프레임과, 모든 프레임에서 그림이 있는 영역을 합친 것 (이미지 크기에 대한 비율, 위가 0).
+    struct Row {
+        let images: [CGImage]
+        let content: CGRect
+    }
+
     static let rows = ["idle", "run", "sad", "wait", "wave"]
 
     private static var metas: [URL: Meta] = [:]
-    private static var cache: [String: [CGImage]] = [:]
+    private static var cache: [String: Row] = [:]
 
     static func meta(_ folder: URL) -> Meta? {
         dispatchPrecondition(condition: .onQueue(.main))
@@ -69,23 +78,53 @@ enum SheetFrames {
     }
 
     /// `rows` 순서대로 보며 프레임이 있는 첫 줄. 손 흔들기 줄이 생기기 전에 받은 펫은 그 줄이 없다.
-    static func frames(_ folder: URL, rows: [String]) -> (row: String, images: [CGImage])? {
+    static func frames(_ folder: URL, rows: [String]) -> (row: String, frames: Row)? {
         guard let meta = meta(folder) else { return nil }
         for row in rows where (meta.counts[row] ?? 0) > 0 {
             let key = "\(folder.path)/\(row)"
             if let cached = cache[key] {
-                if cached.isEmpty { continue }   // PNG를 못 읽은 줄
+                if cached.images.isEmpty { continue }   // PNG를 못 읽은 줄
                 return (row, cached)
             }
-            let images = (0..<(meta.counts[row] ?? 0)).compactMap { i -> CGImage? in
-                guard let source = CGImageSourceCreateWithURL(folder.appendingPathComponent("\(row)_\(i).png") as CFURL, nil)
-                else { return nil }
-                return CGImageSourceCreateImageAtIndex(source, 0, nil)
+            var images: [CGImage] = []
+            var content = CGRect.null
+            for i in 0..<(meta.counts[row] ?? 0) {
+                guard let source = CGImageSourceCreateWithURL(folder.appendingPathComponent("\(row)_\(i).png") as CFURL, nil),
+                      let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+                else { continue }
+                images.append(image)
+                // 재기만 할 그림은 풀린 픽셀을 붙들지 않게 따로 만든다
+                let probe = CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCache: false] as CFDictionary)
+                content = content.union(Self.content(of: probe ?? image))
             }
-            cache[key] = images
-            if !images.isEmpty { return (row, images) }
+            let loaded = Row(images: images, content: content.isNull ? CGRect(x: 0, y: 0, width: 1, height: 1) : content)
+            cache[key] = loaded
+            if !images.isEmpty { return (row, loaded) }
         }
         return nil
+    }
+
+    /// 알파가 있는 픽셀을 감싸는 사각형. 비어 있으면 그림 전체.
+    static func content(of image: CGImage) -> CGRect {
+        let w = image.width, h = image.height
+        guard w > 0, h > 0,
+              let cg = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                 space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let pixels = cg.data?.bindMemory(to: UInt8.self, capacity: w * h * 4)
+        else { return CGRect(x: 0, y: 0, width: 1, height: 1) }
+        cg.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        var minX = w, minY = h, maxX = -1, maxY = -1
+        // 비트맵 메모리는 첫 줄이 그림의 맨 위다
+        for y in 0..<h {
+            for x in 0..<w where pixels[(y * w + x) * 4 + 3] > 40 {
+                minX = min(minX, x); maxX = max(maxX, x)
+                minY = min(minY, y); maxY = max(maxY, y)
+            }
+        }
+        guard maxX >= minX else { return CGRect(x: 0, y: 0, width: 1, height: 1) }
+        return CGRect(x: CGFloat(minX) / CGFloat(w), y: CGFloat(minY) / CGFloat(h),
+                      width: CGFloat(maxX - minX + 1) / CGFloat(w), height: CGFloat(maxY - minY + 1) / CGFloat(h))
     }
 
     /// 폴더를 지우거나 다시 받을 때 캐시도 비운다.
