@@ -170,6 +170,10 @@ public final class RunnerGame {
 
     public static let step: Double = 1.0 / 120
 
+    /// 순위 서버가 점수를 가릴 때 쓰는 규칙 번호. 속도·점수에 관한 Tuning 기본값을 바꾸면 올리고
+    /// server/leaderboard/src/rules.js에 같은 번호로 값을 더한다.
+    public static let rulesVersion = 1
+
     public init(tuning: Tuning, runnerWidth: Double, runnerHeight: Double, best: Int = 0,
                 seed: UInt64 = UInt64.random(in: 0...UInt64.max)) {
         self.tuning = tuning
