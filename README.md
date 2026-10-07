@@ -36,7 +36,7 @@
 | 집계 정확도 | 검증 도구 `ccusage blocks`와 동시점 대조 **오차 0.00%** (샌드위치 검증: 측정→대조→측정)        |
 | 공식 게이지 | 비문서화 OAuth usage 엔드포인트 실측 연동 — 게이지는 공식 값만 표시해 `/usage`와 동일 값       |
 | 성능        | 유휴 CPU **0.05%**, 30fps 질주 **0.5%** (예산 0.5%), 메모리 **17~21MB** (예산 50MB) — 실측      |
-| 품질        | 단위 테스트 **70개** (swift-testing, `./scripts/test.sh`) — 파서·중복제거·블록·게이지·알림·틱 판단 |
+| 품질        | 단위 테스트 **89개** (swift-testing, `./scripts/test.sh`) — 파서·중복제거·블록·게이지·알림·틱 판단, 게임 규칙 |
 | 데이터 검증 | 실물 JSONL 1,432건 분석 → **중복 기록(최대 6줄) 발견**, 중복제거 미적용 시 2.9배 과대집계 확인 |
 | 배포        | `git clone` + `./install.sh` 3줄 설치 (로컬 빌드 → Gatekeeper 차단 없음), MIT 오픈소스         |
 
@@ -127,7 +127,7 @@
 
 ```
 ┌───────────────────────────────────┐
-│   러너가 달리는 무대 (시간대별 하늘)    │  ← 누르면 장난 + 말풍선
+│   러너가 달리는 무대 (시간대별 하늘)  [게임] │  ← 누르면 장난 + 말풍선, [게임]은 미니게임
 └───────────────────────────────────┘
 고양이 · 달리는 중 ⌄            8,420 토큰/분   ← 이름을 누르면 러너·색상·동작 메뉴
 ─────────────────────────────────────
@@ -150,6 +150,14 @@
 - 색은 상태를 알릴 때만: 80% 전까지 무채색, 80% 주황, 95% 빨강. 이모지 없이 숫자와 짧은 문구만 둔다.
 - 무대: 시간대별 하늘(아침·낮·노을·밤), 속도에 맞춰 산·구름·땅이 겹겹이 흐르고 전력 질주 때는 우주 배경.
   러너를 누르면 장난을 치고 메뉴바 러너도 같은 장난을 한다. 화면 주사율대로 그리고 팝오버가 닫히면 멈춘다.
+- 미니게임 "토큰 러너": 무대 오른쪽 위 게임 단추로 켠다. 고른 러너가 장애물(가시·버섯·선인장·나무·걸어오는 게와
+  드릴·박쥐)을 뛰어넘거나 숙여 피하고 코인을 모은다. 스페이스·↑·클릭으로 점프(길게 누르면 높이), ↓로 숙이기,
+  esc로 나간다. 속도가 점점 빨라지고 100점마다 점수가 반짝이며, 최고 점수는 이 Mac에만 저장한다.
+  - 규칙은 `GameCore` 라이브러리에 화면과 떼어 두었다. 1/120초 고정 간격 물리, 착지 직전·이륙 직후 입력 보정,
+    최소 점프 높이, 너그러운 판정 상자. 판정 상자는 캐릭터와 상관없이 같아 어떤 러너로 해도 조건이 같다.
+  - 장애물 간격은 Chromium T-Rex Runner(BSD 3-Clause) 공식을 따르고, 점프 시간으로 잰 하한을 더했다.
+    무작위 씨앗 40개로 모든 장애물을 넘거나 지나갈 수 있는지 테스트한다.
+  - 그림과 효과음은 Kenney의 CC0 에셋(Pixel Platformer, Digital Audio). 출처는 `Assets/Game/CREDITS.txt`.
 - 게이지 눈금은 창(5시간/주간)의 경과 시간 — 막대가 눈금보다 앞서면 시간보다 빨리 쓰는 중.
 - "약 N분 뒤 한도"는 최근 30분 공식 세션 %의 오름세로 계산하고, 초기화가 먼저 오면 "초기화 전까지 여유".
 - 주간 아래는 사용처가 둘 이상이면 공식 사용처 비중(Claude Code·채팅…), 아니면 이 기기의 모델 비중.
@@ -185,6 +193,7 @@ SPM. 테스트 가능한 코어(`UsageCore` 라이브러리)와 앱 계층 분�
 
 ```
 TokenCat/
+├── Sources/GameCore/           # 미니게임 규칙 (물리·장애물·점수) — 게임 테스트 19개의 대상
 ├── Sources/UsageCore/          # 순수 로직 — 단위 테스트 70개의 대상
 │   ├── JSONLWatcher.swift      #   ~/.claude/projects 재귀 감시, 파일별 오프셋 증분 파싱
 │   ├── JSONLParser.swift       #   스키마-관용 파싱, <synthetic> 스킵
@@ -201,6 +210,7 @@ TokenCat/
 │   ├── Characters/             #   러너 22종 벡터 골격(Quadruped·Bird·Reptile…), 장난 22종, 효과, 내 러너·Petdex·개인 팩
 │   ├── SpriteEngine/           #   SpriteAnimator(Core Animation 재생), MenuBarCanvas(칸 크기), 프레임 생성, 래스터라이저, 점검 시트·메뉴바 점검
 │   ├── UI/                     #   PopoverView, RunnerStage(무대), Theme, GaugeBar, Sparkline, SettingsView, RunnerPicker, PetdexBrowser
+│   ├── Game/                   #   GameSession(무대 위 한 판: 입력·효과·점수판), GameAssets, GameSound, GameShots(점검)
 │   ├── Services/               #   Notifier(UserNotifications), LaunchAtLogin(SMAppService)
 │   └── Assets/                 #   PNG 넣으면 자동 교체되는 스프라이트 폴더
 ├── docs/                       #   jsonl-schema.md, usage-endpoint.md (M0 실측 산출물)
@@ -353,6 +363,7 @@ cd ClaudeTokenCat
 - **업데이트**: `git pull && ./install.sh` · **제거**: 응용 프로그램 폴더에서 삭제
 - **개발**: `swift run TokenCat` · `./scripts/test.sh`(코어 단위 테스트) · `.build/debug/TokenCat --report`(ccusage 대조) ·
   `--sprite-sheet <폴더>`(러너 점검 시트) · `--hero-gif <파일>`(README GIF) ·
+  `--game-shots <폴더> [러너 id]`(미니게임을 자동으로 플레이하며 시작·진행·부딪힘 장면을 PNG로 저장) ·
   `--menubar-audit <폴더> [화면 배율] [메뉴바 높이] [크기 배율]`(모든 러너의 동작·장난을 메뉴바 칸으로 그려
   잘림·키·어두운 윤곽 비율을 report.tsv로, 실제 크기 모습을 시트로 저장) ·
   진단 `log stream --predicate 'subsystem == "dev.tokencat.TokenCat"' --level debug`
@@ -393,6 +404,8 @@ cd ClaudeTokenCat
 - Claude Code 한도 해설(2026): https://www.morphllm.com/claude-code-usage-limits
 - 사용량 확인 가이드(/usage): https://sessionwatcher.com/guides/how-to-check-claude-code-usage
 - RunCat (UX 레퍼런스): https://kyome.io/runcat/
+- Chromium T-Rex Runner (미니게임 장애물 간격·속도 규칙, BSD 3-Clause): https://chromium.googlesource.com/chromium/src/+/main/components/neterror/resources/
+- Kenney 에셋 (미니게임 그림·효과음, CC0): https://kenney.nl/assets/pixel-platformer · https://kenney.nl/assets/digital-audio
 
 ---
 
