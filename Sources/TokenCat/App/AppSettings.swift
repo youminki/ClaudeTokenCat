@@ -121,23 +121,22 @@ enum MenuBarLabel: String, CaseIterable {
     }
 }
 
-/// 메뉴바 러너 크기. 메뉴바 높이가 정해져 있어, 크게·최대는 머리 쪽을 기준으로 확대하고 발끝을 잘라 얼굴을 키운다.
+/// 메뉴바 러너 크기. 메뉴바 높이는 정해져 있어 크게는 효과 자리로 남긴 위아래 여백만 줄여 키운다.
+/// 서 있거나 달릴 때는 잘리지 않고, 키운 만큼 칸이 옆으로 넓어진다.
 enum RunnerSize: String, CaseIterable {
-    case full, large, max
+    case full, large
 
     var displayName: String {
         switch self {
-        case .full: return "전신"
+        case .full: return "보통"
         case .large: return "크게"
-        case .max: return "최대"
         }
     }
 
     var zoom: CGFloat {
         switch self {
         case .full: return 1
-        case .large: return 1.3
-        case .max: return 1.6
+        case .large: return 1.12
         }
     }
 }

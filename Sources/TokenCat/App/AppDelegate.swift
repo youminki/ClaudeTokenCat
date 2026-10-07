@@ -16,6 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var cancellables: Set<AnyCancellable> = []
     /// 러너 칸 배율. 상태 버튼은 22pt지만 메뉴바 창은 더 높을 수 있어(macOS 27에서 30pt) 창 높이까지 키운다.
     private var menuScale: CGFloat = 1
+    /// 설정의 메뉴바 크기. 키운 만큼 칸을 옆으로 넓혀 캐릭터가 잘리지 않게 한다.
+    private var menuZoom: CGFloat = 1
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: spriteCanvas.width + 4)
@@ -30,6 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             spriteView.layer = animator.layer
             spriteView.wantsLayer = true
             button.addSubview(spriteView)
+            // 버튼(22pt)이 자식 뷰를 자르면 메뉴바 창 높이까지 키운 러너의 위아래가 잘린다
+            if #available(macOS 14, *) { button.clipsToBounds = false }
             layoutSprite()
         }
         animator.appearanceProvider = { [weak self] in
@@ -91,6 +95,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                    PetdexStore.shared.$pets.dropFirst().map { _ in })
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.animator.reloadFrames() }
+            .store(in: &cancellables)
+        engine.settings.$runnerSize.dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.layoutSprite() }
             .store(in: &cancellables)
 
         // 한도 오버라이드(§F2): 80% 이상 지침, 95% 이상 경고. 속도 상태보다 우선
@@ -210,7 +218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     private var spriteCanvas: NSSize {
-        NSSize(width: Stage.size.width * menuScale, height: Stage.size.height * menuScale)
+        NSSize(width: Stage.size.width * menuZoom * menuScale, height: Stage.size.height * menuScale)
     }
 
     /// 자리 표시 이미지가 놓인 자리에 러너 레이어를 맞춘다. 레이어는 버튼 위아래로 넘쳐 메뉴바 창 높이를 채운다.
@@ -219,8 +227,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let barHeight = button.window?.frame.height ?? NSStatusBar.system.thickness
         // 노치 화면처럼 메뉴바가 아주 높아도 항목이 너무 넓어져 노치 뒤로 숨지 않게 상한을 둔다
         let scale = min(max(1, barHeight / Stage.size.height), 1.6)
-        if scale != menuScale {
+        let zoom = engine.settings.runnerSize.zoom
+        if scale != menuScale || zoom != menuZoom {
             menuScale = scale
+            menuZoom = zoom
             button.image = NSImage(size: NSSize(width: spriteCanvas.width, height: Stage.size.height))
             if button.title.isEmpty && button.attributedTitle.length == 0 { statusItem.length = spriteCanvas.width + 4 }
             DispatchQueue.main.async { self.layoutSprite() }   // 길이가 바뀐 뒤 버튼 배치가 끝나면

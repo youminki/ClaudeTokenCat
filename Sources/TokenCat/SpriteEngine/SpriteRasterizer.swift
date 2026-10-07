@@ -6,12 +6,13 @@ import AppKit
 /// 테마 변경 시 SpriteAnimator가 캐시를 비우고 다시 만든다.
 enum SpriteRasterizer {
 
-    /// `zoom`이 1보다 크면 위쪽 가운데를 기준으로 확대해 그리고, 칸 밖으로 나간 아래쪽은 잘린다.
+    /// `zoom`이 1보다 크면 칸을 그만큼 옆으로 넓히고, 바닥 조금 위를 기준으로 키워 위아래 여백만 줄인다.
+    /// 출력 크기는 (size.width × zoom) × size.height다.
     static func rasterize(_ image: NSImage, size: NSSize,
                           appearance: NSAppearance?, scale: CGFloat = 2, zoom: CGFloat = 1) -> NSImage {
         guard let rep = NSBitmapImageRep(
             bitmapDataPlanes: nil,
-            pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale),
+            pixelsWide: Int((size.width * zoom * scale).rounded()), pixelsHigh: Int(size.height * scale),
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
             colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
             let context = NSGraphicsContext(bitmapImageRep: rep)
@@ -20,8 +21,10 @@ enum SpriteRasterizer {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = context
         context.cgContext.scaleBy(x: scale, y: scale)   // 포인트 좌표로 그리면 2x 픽셀로 기록 (레티나)
-        let rect = NSRect(x: size.width * (1 - zoom) / 2, y: size.height * (1 - zoom),
-                          width: size.width * zoom, height: size.height * zoom)
+        // 선 자세는 바닥 아래 1pt, 머리 위 2.5pt가 비어 있다. 바닥에서 4pt 위를 고정점으로 두면
+        // 1.12배에서 머리와 발이 모두 칸 안에 남는다 (점프·춤의 머리 위는 조금 잘린다)
+        let pivot: CGFloat = 4
+        let rect = NSRect(x: 0, y: pivot * (1 - zoom), width: size.width * zoom, height: size.height * zoom)
         let draw = { image.draw(in: rect) }
         if let appearance {
             appearance.performAsCurrentDrawingAppearance(draw)
@@ -31,8 +34,9 @@ enum SpriteRasterizer {
         context.flushGraphics()
         NSGraphicsContext.restoreGraphicsState()
 
-        rep.size = size
-        let output = NSImage(size: size)
+        let outputSize = NSSize(width: size.width * zoom, height: size.height)
+        rep.size = outputSize
+        let output = NSImage(size: outputSize)
         output.addRepresentation(rep)
         return output
     }
