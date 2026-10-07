@@ -18,6 +18,8 @@ struct CharacterScene {
     let bounds: CGRect
     let pose: CharacterPose
     let transform: CharacterTransform
+    /// 변형 뒤에 거는 맞춤. 메뉴바 칸을 벗어나는 장면을 줄이고 옮겨 안에 넣는다 (`fit(verticallyIn:)`).
+    private(set) var fit = CGAffineTransform.identity
 
     init(rig: CharacterRig, pose: CharacterPose, transform: CharacterTransform = .init()) {
         let sketch = Sketch(pose: pose)
@@ -36,6 +38,38 @@ struct CharacterScene {
         return bounds.applying(affine)
     }
 
+    /// 변형한 몸이 `range`(설계 y) 위아래로 나가면 줄이고 옮겨 안에 넣는다.
+    mutating func fit(verticallyIn range: ClosedRange<CGFloat>) {
+        fit = .identity
+        fit = Self.fitTransform(for: placedBounds, in: range)
+    }
+
+    /// 미리 구한 맞춤을 그대로 건다 (반복 동작은 클립 전체에 같은 맞춤을 써야 크기가 출렁이지 않는다).
+    mutating func apply(fit transform: CGAffineTransform) {
+        fit = transform
+    }
+
+    /// `placed`를 `range` 안에 넣는 변환. 위로 넘치면 바닥을 기준으로 줄여 뜬 높이도 함께 줄이고
+    /// (깡충·공중제비가 제자리에 붙어 버리지 않게), 아래로 넘치면(꾸벅·뒤척) 위로 옮긴다.
+    /// 좌우는 달려 나갔다 오는 장난이 있어 두지 않는다.
+    static func fitTransform(for placed: CGRect, in range: ClosedRange<CGFloat>) -> CGAffineTransform {
+        let tolerance: CGFloat = 0.02
+        guard placed.height > 0,
+              placed.minY < range.lowerBound - tolerance || placed.maxY > range.upperBound + tolerance
+        else { return .identity }
+        var s = min(1, (range.upperBound - range.lowerBound) / placed.height)
+        if placed.minY < range.lowerBound {
+            s = min(s, (Stage.ground - range.lowerBound) / max(Stage.ground - placed.minY, 0.01))
+        }
+        let t = CGAffineTransform(translationX: placed.midX, y: Stage.ground)
+            .scaledBy(x: s, y: s)
+            .translatedBy(x: -placed.midX, y: -Stage.ground)
+        let scaled = placed.applying(t)
+        let dy = scaled.maxY > range.upperBound ? range.upperBound - scaled.maxY
+            : (scaled.minY < range.lowerBound ? range.lowerBound - scaled.minY : 0)
+        return t.concatenating(CGAffineTransform(translationX: 0, y: dy))
+    }
+
     /// 바닥 중심을 기준으로 회전·반전·찌그러짐을 건다.
     var affine: CGAffineTransform {
         let pivot = CGPoint(bounds.isNull ? Stage.size.width / 2 : bounds.midX,
@@ -46,6 +80,7 @@ struct CharacterScene {
             .concatenating(CGAffineTransform(rotationAngle: transform.rotation))
             .concatenating(CGAffineTransform(translationX: pivot.x + transform.offset.x,
                                              y: pivot.y + transform.offset.y))
+            .concatenating(fit)
     }
 
     func draw(in cg: CGContext, look baseLook: CharacterLook) {
@@ -85,7 +120,8 @@ struct CharacterScene {
         if look.rich && !hasImage { shade(cg) }
         if look.alarm && look.rich {
             cg.setBlendMode(.sourceAtop)
-            cg.setFillColor(NSColor.systemRed.withAlphaComponent(0.55).cgColor)
+            // 그림 러너는 많이 덮으면 누군지 알아볼 수 없다
+            cg.setFillColor(NSColor.systemRed.withAlphaComponent(hasImage ? 0.38 : 0.55).cgColor)
             cg.fill(bounds.insetBy(dx: -2, dy: -2))
         }
         cg.endTransparencyLayer()

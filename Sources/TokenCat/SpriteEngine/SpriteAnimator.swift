@@ -22,11 +22,9 @@ final class SpriteAnimator {
     var themeProvider: () -> SpriteTheme = { .auto }
     var smoothnessProvider: () -> SpriteSmoothness = { .smooth }
     var tricksEnabledProvider: () -> Bool = { true }
-    /// 메뉴바 러너 확대 배율 (설정의 러너 크기).
-    var zoomProvider: () -> CGFloat = { 1 }
-    /// 프레임 1pt에 쓸 픽셀 수. 레이어를 설계 크기보다 키워 그리므로 화면 배율에 그만큼 곱해 흐려지지 않게 한다.
-    var pixelScale: CGFloat = 2 {
-        didSet { if pixelScale != oldValue { reloadFrames() } }
+    /// 레이어 크기. 프레임을 이 픽셀 크기 그대로 그린다.
+    var canvas = MenuBarCanvas(barHeight: NSStatusBar.system.thickness, zoom: 1, backing: 2) {
+        didSet { if canvas != oldValue { reloadFrames() } }
     }
 
     private var idleTimer: Timer?
@@ -150,14 +148,14 @@ final class SpriteAnimator {
     private var cacheSuffix: String {
         let appearance = appearanceProvider()?.name.rawValue ?? "default"
         return "\(characterProvider().key)|\(themeProvider().rawValue)|\(smoothnessProvider().rawValue)|\(appearance)"
-            + "|\(zoomProvider())|\(pixelScale)"
+            + "|\(canvas.cacheKey)"
     }
 
     private func rasterized(display: SpriteDisplay) -> RasterClip {
         let key = "\(display.key)|\(cacheSuffix)"
         if let cached = rasterCache[key] { return cached }
         let clip = SpriteFrames.clip(for: display, character: characterProvider(), theme: themeProvider(),
-                                     fps: smoothnessProvider().fps)
+                                     fps: smoothnessProvider().fps, visibleY: canvas.visibleY)
         let result = rasterize(clip)
         rasterCache[key] = result
         return result
@@ -171,7 +169,7 @@ final class SpriteAnimator {
         let key = "trick.\(trick.rawValue)|\(cacheSuffix)"
         if let cached = rasterCache[key] { return cached }
         guard let clip = SpriteFrames.clip(for: trick, character: characterProvider(), theme: themeProvider(),
-                                           fps: smoothnessProvider().fps) else { return nil }
+                                           fps: smoothnessProvider().fps, visibleY: canvas.visibleY) else { return nil }
         let result = rasterize(clip)
         rasterCache[key] = result
         trickKeys.append(key)
@@ -183,12 +181,19 @@ final class SpriteAnimator {
 
     private func rasterize(_ clip: SpriteClip) -> RasterClip {
         let appearance = appearanceProvider()
-        let zoom = zoomProvider()
+        let halo = Self.halo(theme: characterProvider().theme(themeProvider()), appearance: appearance)
         let frames = clip.frames.compactMap {
-            SpriteRasterizer.cgImage($0, size: SpriteFrames.spriteSize, appearance: appearance, scale: pixelScale,
-                                     zoom: zoom)
+            SpriteRasterizer.cgImage($0, canvas: canvas, appearance: appearance, halo: halo)
         }
         return RasterClip(frames: frames, interval: clip.interval)
+    }
+
+    /// 컬러로 그리는 러너의 테두리 색. 검은 머리·옷이 어두운 메뉴바에 묻히지 않게 메뉴바와 반대 밝기로 두른다.
+    /// 단색 실루엣은 메뉴바 글자색이라 필요 없다.
+    static func halo(theme: SpriteTheme, appearance: NSAppearance?) -> NSColor? {
+        guard theme == .natural else { return nil }
+        let dark = appearance?.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return dark ? NSColor(white: 1, alpha: 0.55) : NSColor(white: 0, alpha: 0.35)
     }
 
     // MARK: - 장난 타이머

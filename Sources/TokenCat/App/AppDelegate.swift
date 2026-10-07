@@ -14,13 +14,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var settingsWindow: NSWindow?
     private var dailyDetailWindow: NSWindow?
     private var cancellables: Set<AnyCancellable> = []
-    /// 러너 칸 배율. 상태 버튼은 22pt지만 메뉴바 창은 더 높을 수 있어(macOS 27에서 30pt) 창 높이까지 키운다.
-    private var menuScale: CGFloat = 1
-    /// 설정의 메뉴바 크기. 키운 만큼 칸을 옆으로 넓혀 캐릭터가 잘리지 않게 한다.
-    private var menuZoom: CGFloat = 1
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItem = NSStatusBar.system.statusItem(withLength: spriteCanvas.width + 4)
+        animator.canvas = MenuBarCanvas(barHeight: NSStatusBar.system.thickness, zoom: engine.settings.runnerSize.zoom,
+                                        backing: NSScreen.main?.backingScaleFactor ?? 2)
+        statusItem = NSStatusBar.system.statusItem(withLength: animator.canvas.size.width + 4)
         // 이름이 있어야 사용자가 ⌘로 끌어 옮긴 자리를 macOS가 기억한다. 없으면 켤 때마다 맨 왼쪽에 놓여
         // 메뉴가 긴 앱이 앞에 오면 가장 먼저 «로 접힌다.
         statusItem.autosaveName = "TokenCat"
@@ -31,12 +29,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         if let button = statusItem.button {
             // 버튼 크기·글자 배치는 투명한 자리 표시 이미지로 잡고, 러너는 그 위 레이어에서 재생한다.
-            button.image = NSImage(size: NSSize(width: spriteCanvas.width, height: Stage.size.height))
+            button.image = placeholder(for: animator.canvas)
             spriteView.layer = animator.layer
             spriteView.wantsLayer = true
             button.addSubview(spriteView)
-            // 버튼(22pt)이 자식 뷰를 자르면 메뉴바 창 높이까지 키운 러너의 위아래가 잘린다
-            if #available(macOS 14, *) { button.clipsToBounds = false }
             layoutSprite()
         }
         animator.appearanceProvider = { [weak self] in
@@ -53,9 +49,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
         animator.tricksEnabledProvider = { [weak self] in
             self?.engine.settings.tricksEnabled ?? true
-        }
-        animator.zoomProvider = { [weak self] in
-            self?.engine.settings.runnerSize.zoom ?? 1
         }
         animator.set(display: .normal(.sleeping))
         // 메뉴바가 있는 화면이 바뀌면(레티나↔일반, 메뉴바 높이) 레이어 배율과 칸 크기를 맞춘다
@@ -201,7 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         guard let label else {
             button.title = ""
             button.imagePosition = .imageOnly
-            statusItem.length = spriteCanvas.width + 4
+            statusItem.length = animator.canvas.size.width + 4
             DispatchQueue.main.async { self.layoutSprite() }   // 길이가 줄어든 뒤 배치가 끝나면
             return
         }
@@ -220,36 +213,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         DispatchQueue.main.async { self.layoutSprite() }   // 길이가 바뀐 뒤 버튼 배치가 끝나면
     }
 
-    private var spriteCanvas: NSSize {
-        NSSize(width: Stage.size.width * menuZoom * menuScale, height: Stage.size.height * menuScale)
+    /// 버튼 크기·글자 배치를 잡는 투명한 이미지. 높이는 버튼(22pt)에 맞추고 러너 레이어만 위아래로 넘친다.
+    private func placeholder(for canvas: MenuBarCanvas) -> NSImage {
+        NSImage(size: NSSize(width: canvas.size.width, height: Stage.size.height))
     }
 
     /// 자리 표시 이미지가 놓인 자리에 러너 레이어를 맞춘다. 레이어는 버튼 위아래로 넘쳐 메뉴바 창 높이를 채운다.
     private func layoutSprite() {
         guard let button = statusItem.button, let cell = button.cell else { return }
-        let barHeight = button.window?.frame.height ?? NSStatusBar.system.thickness
-        // 노치 화면처럼 메뉴바가 아주 높아도 항목이 너무 넓어져 노치 뒤로 숨지 않게 상한을 둔다
-        let scale = min(max(1, barHeight / Stage.size.height), 1.6)
-        let zoom = engine.settings.runnerSize.zoom
-        if scale != menuScale || zoom != menuZoom {
-            menuScale = scale
-            menuZoom = zoom
-            button.image = NSImage(size: NSSize(width: spriteCanvas.width, height: Stage.size.height))
-            if button.title.isEmpty && button.attributedTitle.length == 0 { statusItem.length = spriteCanvas.width + 4 }
+        let canvas = MenuBarCanvas(barHeight: button.window?.frame.height ?? NSStatusBar.system.thickness,
+                                   zoom: engine.settings.runnerSize.zoom,
+                                   backing: button.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2)
+        if canvas != animator.canvas {
+            animator.canvas = canvas
+            button.image = placeholder(for: canvas)
+            if button.title.isEmpty && button.attributedTitle.length == 0 { statusItem.length = canvas.size.width + 4 }
             DispatchQueue.main.async { self.layoutSprite() }   // 길이가 바뀐 뒤 버튼 배치가 끝나면
             return
         }
         button.layoutSubtreeIfNeeded()
         let imageRect = cell.imageRect(forBounds: button.bounds)
-        let backing = button.window?.backingScaleFactor ?? 2
+        let rect = NSRect(x: imageRect.minX, y: (button.bounds.height - canvas.size.height) / 2,
+                          width: canvas.size.width, height: canvas.size.height)
+        // 버튼(22pt)과 macOS가 그 위에 둔 22pt 뷰가 자식을 잘라, 메뉴바 창 높이를 다 쓰는 콘텐츠 뷰에 얹는다.
+        // 레이어 뷰는 클릭을 그대로 아래 버튼에 넘긴다.
+        let host = button.window?.contentView ?? button
+        if spriteView.superview !== host {
+            spriteView.removeFromSuperview()
+            host.addSubview(spriteView)
+        }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        spriteView.frame = NSRect(x: imageRect.minX, y: (button.bounds.height - spriteCanvas.height) / 2,
-                                  width: spriteCanvas.width, height: spriteCanvas.height)
+        // 픽셀 경계에 맞춰야 프레임이 반 픽셀씩 번지지 않는다
+        spriteView.frame = host.backingAlignedRect(button.convert(rect, to: host),
+                                                   options: [.alignMinXNearest, .alignMinYNearest,
+                                                             .alignWidthNearest, .alignHeightNearest])
         animator.layer.frame = spriteView.bounds
-        animator.layer.contentsScale = backing
+        animator.layer.contentsScale = canvas.backing
         CATransaction.commit()
-        animator.pixelScale = (backing * menuScale * 4).rounded() / 4
     }
 
     /// 메뉴바 아이콘에 마우스를 올리면 현재 사용률을 보여준다.
