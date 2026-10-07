@@ -6,8 +6,9 @@ import AppKit
 /// 테마 변경 시 SpriteAnimator가 캐시를 비우고 다시 만든다.
 enum SpriteRasterizer {
 
+    /// `zoom`이 1보다 크면 위쪽 가운데를 기준으로 확대해 그리고, 칸 밖으로 나간 아래쪽은 잘린다.
     static func rasterize(_ image: NSImage, size: NSSize,
-                          appearance: NSAppearance?, scale: CGFloat = 2) -> NSImage {
+                          appearance: NSAppearance?, scale: CGFloat = 2, zoom: CGFloat = 1) -> NSImage {
         guard let rep = NSBitmapImageRep(
             bitmapDataPlanes: nil,
             pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale),
@@ -19,7 +20,9 @@ enum SpriteRasterizer {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = context
         context.cgContext.scaleBy(x: scale, y: scale)   // 포인트 좌표로 그리면 2x 픽셀로 기록 (레티나)
-        let draw = { image.draw(in: NSRect(origin: .zero, size: size)) }
+        let rect = NSRect(x: size.width * (1 - zoom) / 2, y: size.height * (1 - zoom),
+                          width: size.width * zoom, height: size.height * zoom)
+        let draw = { image.draw(in: rect) }
         if let appearance {
             appearance.performAsCurrentDrawingAppearance(draw)
         } else {
@@ -35,8 +38,9 @@ enum SpriteRasterizer {
     }
 
     /// 레이어에 넘길 CGImage.
-    static func cgImage(_ image: NSImage, size: NSSize, appearance: NSAppearance?, scale: CGFloat = 2) -> CGImage? {
-        let raster = rasterize(image, size: size, appearance: appearance, scale: scale)
+    static func cgImage(_ image: NSImage, size: NSSize, appearance: NSAppearance?, scale: CGFloat = 2,
+                        zoom: CGFloat = 1) -> CGImage? {
+        let raster = rasterize(image, size: size, appearance: appearance, scale: scale, zoom: zoom)
         return (raster.representations.first as? NSBitmapImageRep)?.cgImage
     }
 }

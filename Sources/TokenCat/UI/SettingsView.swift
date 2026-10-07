@@ -43,6 +43,10 @@ struct SettingsView: View {
 
             Section("러너") {
                 RunnerPicker(settings: settings)
+                Picker("메뉴바 크기", selection: $settings.runnerSize) {
+                    ForEach(RunnerSize.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                }
+                .pickerStyle(.segmented)
                 Picker("색상", selection: $settings.spriteTheme) {
                     ForEach(SpriteTheme.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
@@ -61,7 +65,7 @@ struct SettingsView: View {
                     ForEach(Thresholds.Sensitivity.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                Text("민감도가 높을수록 적은 사용량에도 빨리 달립니다. 움직임을 높이면 더 매끄럽지만 CPU를 조금 더 씁니다. '본래 색'은 메뉴바에서도 캐릭터 고유색으로 그립니다.")
+                Text("메뉴바 크기를 크게·최대로 두면 얼굴 쪽을 확대하고 발끝과 양옆, 머리 위 효과 일부가 잘립니다. 민감도가 높을수록 적은 사용량에도 빨리 달립니다. 움직임을 높이면 더 매끄럽지만 CPU를 조금 더 씁니다. '본래 색'은 메뉴바에서도 캐릭터 고유색으로 그립니다.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 

@@ -11,7 +11,7 @@ struct RunnerStage: View {
 
     @StateObject private var model = StageModel()
 
-    static let height: CGFloat = 116
+    static let height: CGFloat = 150
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 60, paused: model.reduceMotion)) { timeline in
@@ -183,7 +183,7 @@ final class StageModel: ObservableObject {
         if playing == nil { gait += dt / CGFloat(display.cycle) }
 
         let groundY = size.height - 15
-        let scale: CGFloat = 3.0
+        let scale: CGFloat = 5.0
         let runnerX = size.width * Self.runnerAnchor + speed / 140 * 16
         let origin = CGPoint(runnerX - Stage.size.width / 2 * scale, groundY - Stage.ground * scale)
         let isSpace = display == .normal(.rainbow)
