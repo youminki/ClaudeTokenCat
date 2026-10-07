@@ -16,6 +16,8 @@ enum GameShots {
         guard let session = model.game else { return }
         let game = session.game
         let pilot = Autopilot(game: game)
+        // 순위 서버 없이 라이벌 목표·깃발·추월 배너가 보이게 가짜 두 명을 둔다
+        session.rivalSource = { [Rival(name: "토큰고양이", score: 160), Rival(name: "bob", score: 430)] }
 
         func step(_ seconds: Double, autoplay: Bool) {
             for _ in 0..<Int(seconds / frame) {
@@ -47,8 +49,8 @@ enum GameShots {
         try shot("1-ready")
         session.press()
         session.release()
-        for k in 1...6 {
-            step(k == 1 ? 3 : 6, autoplay: true)
+        for k in 1...12 {
+            step(3, autoplay: true)
             try shot("2-play-\(k)")
             if game.phase == .over { break }
         }

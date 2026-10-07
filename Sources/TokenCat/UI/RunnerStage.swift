@@ -45,10 +45,14 @@ struct RunnerStage: View {
         .overlay(alignment: .topTrailing) { controls }
         .background(WindowReader { model.window = $0 })
         .onHover { model.setPointer($0) }
-        .onAppear { model.greet(display: display) }
+        .onAppear {
+            model.listenForNews()
+            model.greet(display: display)
+        }
         .onDisappear {
             model.setPointer(false)   // 커서를 올린 채 팝오버가 닫혀도 짝을 맞춘다
             model.popoverClosed()
+            LeaderboardFeed.shared.stageDisappeared()
         }
         .help(model.game == nil ? "러너를 누르면 장난을 쳐요" : "스페이스·↑·클릭 점프(길게 누르면 높이), ↓ 숙이기, esc 나가기")
         .accessibilityElement(children: .contain)
@@ -211,10 +215,15 @@ final class StageModel: ObservableObject {
         let session = GameSession(character: character, live: !rehearsal)
         session.window = { [weak self] in self?.window }
         session.onExit = { [weak self] in self?.endGame() }
+        session.rivalSource = { LeaderboardFeed.shared.rivals }
         session.onFinish = { [weak self, weak session] game in
             if game.isNewRecord { DispatchQueue.main.async { self?.say("신기록!", seconds: 1.6) } }
             guard !rehearsal, let run = session?.runID else { return }
+            // 판 사이에 미뤄 둔 순위 소식
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self?.deliverNews() }
             Leaderboard.shared.submit(game) { result in
+                // 올린 결과로 1위가 됐는지, 라이벌이 바뀌었는지 바로 다시 본다
+                if case .success = result { LeaderboardFeed.shared.refresh() }
                 guard let session, session.runID == run else { return }
                 switch result {
                 case .success(let rank): session.rankLine = "전체 \(rank.rank)위 · \(rank.total)명"
@@ -254,7 +263,28 @@ final class StageModel: ObservableObject {
 
     // MARK: 말풍선·장난
 
+    /// 순위 소식을 듣는다. 열 때 한 번 받고, 열려 있는 동안 30초마다 받는다.
+    func listenForNews() {
+        LeaderboardFeed.shared.onNews = { [weak self] in self?.deliverNews() }
+        LeaderboardFeed.shared.stageAppeared()
+    }
+
+    /// 쌓인 소식을 차례로 말한다. 게임 중이면 판이 끝날 때까지 미룬다.
+    func deliverNews() {
+        guard game?.game.phase != .playing, LeaderboardFeed.shared.hasNews else { return }
+        for (i, line) in LeaderboardFeed.shared.takeNews().enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45 + Double(i) * 2.9) { [weak self] in
+                self?.say(line, seconds: 2.6)
+            }
+        }
+    }
+
     func greet(display: SpriteDisplay) {
+        // 자리를 비운 사이 생긴 순위 소식이 있으면 인사 대신 그것부터
+        if LeaderboardFeed.shared.hasNews {
+            deliverNews()
+            return
+        }
         let hour = Calendar.current.component(.hour, from: Date())
         let line: String
         switch display {

@@ -25,7 +25,8 @@ struct LeaderboardView: View {
         }
         .padding(16)
         .frame(width: 360, height: 500)
-        .onAppear { state.load() }
+        .onAppear { state.start() }
+        .onDisappear { state.stop() }
     }
 
     @ViewBuilder
@@ -43,12 +44,18 @@ struct LeaderboardView: View {
                     }
                 }
             }
-            if let you = result.you {
-                Text("내 순위 \(you.rank)위 · \(result.total)명 중 · 최고 \(you.score)점")
-                    .font(.caption).foregroundStyle(.secondary)
-            } else {
-                Text("\(result.total)명이 참여했습니다.").font(.caption).foregroundStyle(.secondary)
+            HStack {
+                if let you = result.you {
+                    Text("내 순위 \(you.rank)위 · \(result.total)명 중 · 최고 \(you.score)점")
+                } else {
+                    Text("\(result.total)명이 참여했습니다.")
+                }
+                Spacer()
+                if let updated = state.updated {
+                    Text("\(updated.formatted(date: .omitted, time: .shortened)) 갱신").help("열려 있는 동안 30초마다 새로 받습니다")
+                }
             }
+            .font(.caption).foregroundStyle(.secondary)
         } else {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -60,6 +67,10 @@ struct LeaderboardView: View {
                 .font(.system(size: 12, weight: .bold, design: .rounded).monospacedDigit())
                 .foregroundStyle(entry.rank <= 3 ? Color(nsColor: NSColor(hex: 0xE0A82E)) : .secondary)
                 .frame(width: 28, alignment: .trailing)
+            // 같은 점수 1위가 여럿이어도 먼저 세운 맨 위 한 명에게만 (요약의 1위와 같은 기준)
+            if entry.id == state.board?.entries.first?.id {
+                Image(systemName: "crown.fill").font(.system(size: 10)).foregroundStyle(Color(nsColor: NSColor(hex: 0xE0A82E)))
+            }
             Text(entry.nickname).font(.system(size: 12.5, weight: entry.you ? .semibold : .regular)).lineLimit(1)
             if entry.you { Text("나").font(.caption2.weight(.semibold)).foregroundStyle(Color.accentColor) }
             Spacer()
@@ -84,7 +95,7 @@ struct LeaderboardView: View {
             if board.isOn, !Leaderboard.isValid(nickname: board.nickname) {
                 Text("한글·영문·숫자로 2~12자를 넣어야 점수를 보냅니다.").font(.caption).foregroundStyle(.orange)
             }
-            Text("최근 7일 동안 보낸 점수보다 높으면 무작위 ID, 닉네임, 점수, 코인 수, 플레이 시간, 앱 버전만 보냅니다. 사용량이나 Claude 계정 정보는 보내지 않습니다.")
+            Text("참여하면 최근 7일 동안 보낸 점수보다 높을 때 무작위 ID, 닉네임, 점수, 코인 수, 플레이 시간, 앱 버전을 보내고, 순위 소식을 받으려고 10분마다 ID와 함께 순위 요약을 받습니다. 참여하지 않아도 팝오버를 열면 ID 없이 공개 순위 요약을 받습니다. 사용량이나 Claude 계정 정보는 보내지 않습니다.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
@@ -103,16 +114,38 @@ final class LeaderboardState: ObservableObject {
     @Published private(set) var board: Leaderboard.Board?
     @Published private(set) var message: String?
     @Published private(set) var notice: String?
+    @Published private(set) var updated: Date?
+    private var timer: Timer?
 
-    func load() {
-        board = nil
-        message = nil
+    /// 창이 열려 있는 동안 30초마다 새로 받는다. 이미 보이는 표는 받는 동안에도 그대로 둔다.
+    func start() {
+        load()
+        timer?.invalidate()
+        let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in self?.load(keepVisible: true) }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    func load(keepVisible: Bool = false) {
+        if !keepVisible {
+            board = nil
+            message = nil
+        }
         let period = period
         Leaderboard.shared.fetch(period) { [weak self] result in
             guard let self, self.period == period else { return }
             switch result {
-            case .success(let board): self.board = board
-            case .failure(let error): self.message = error.localizedDescription
+            case .success(let board):
+                self.board = board
+                self.message = nil
+                self.updated = Date()
+            case .failure(let error):
+                if self.board == nil { self.message = error.localizedDescription }
             }
         }
     }

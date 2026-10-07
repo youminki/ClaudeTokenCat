@@ -54,6 +54,13 @@ final class GameSession {
     var rankLine: String?
     /// 몇 번째 판인지. 앞 판의 순위 응답이 늦게 와 다음 판 화면에 붙지 않게 비교한다.
     private(set) var runID = 0
+    /// 판을 시작할 때마다 최신 순위에서 앞에 있는 사람들을 받아 목표로 삼는다.
+    var rivalSource: () -> [Rival] = { [] } {
+        didSet { tracker = RivalTracker(rivals: rivalSource()) }
+    }
+    private var tracker = RivalTracker(rivals: [])
+    /// 방금 앞지른 사람 (배너).
+    private var overtaken: (name: String, life: CGFloat)?
     var onExit: () -> Void = {}
 
     init(character: RunnerCharacter, live: Bool = true) {
@@ -111,6 +118,8 @@ final class GameSession {
         finished = false
         rankLine = nil
         runID += 1
+        tracker = RivalTracker(rivals: rivalSource())
+        overtaken = nil
         particles.removeAll()
         popups.removeAll()
         recordBanner = 0
@@ -125,12 +134,16 @@ final class GameSession {
         clock += dt
         game.advance(by: dt)
         for event in game.drainEvents() { handle(event) }
+        if game.phase == .playing {
+            for rival in tracker.update(score: game.score) { pass(rival) }
+        }
 
         let k = CGFloat(dt)
         shake = max(0, shake - k * 14)
         flash = max(0, flash - k * 6)
         milestoneGlow = max(0, milestoneGlow - k * 1.6)
         recordBanner = max(0, recordBanner - k * 0.55)
+        if let current = overtaken { overtaken = current.life > k ? (current.name, current.life - k) : nil }
         for i in particles.indices {
             particles[i].velocity.y += particles[i].gravity * k
             particles[i].position.x += particles[i].velocity.x * k - CGFloat(game.phase == .playing ? game.speed : 0) * k * particles[i].drift
@@ -184,6 +197,20 @@ final class GameSession {
 
     private func play(_ effect: GameSound.Effect) {
         if live { GameSound.shared.play(effect) }
+    }
+
+    private func pass(_ rival: Rival) {
+        play(.milestone)
+        overtaken = (rival.name, 1.6)
+        let center = CGPoint(Self.runnerX + Self.runnerWidth / 2, CGFloat(game.runnerY + Self.runnerHeight))
+        burst(at: center, count: 10, color: NSColor(hex: 0xFFD45E), speed: 90, life: 0.6, drift: 0.4)
+    }
+
+    /// 다음 목표 깃발의 화면 x. 그 지점에 닿으면 점수가 목표를 넘는다 (코인을 먹으면 깃발이 당겨진다).
+    private func flagX() -> CGFloat? {
+        guard game.phase == .playing, let next = tracker.next else { return nil }
+        let need = Double(next.score + 1 - game.coinsTaken * game.tuning.coinValue) / game.tuning.scorePerPoint
+        return screenX(need) + CGFloat(Self.runnerWidth) / 2
     }
 
     // MARK: 화면 효과
@@ -274,6 +301,22 @@ final class GameSession {
                 cg.stroke(CGRect(x: left - 2, y: ground(obstacle.y) - CGFloat(obstacle.height) - 2,
                                  width: CGFloat(obstacle.width) + 4, height: CGFloat(obstacle.height) + 4))
             }
+        }
+
+        // 다음 목표 깃발
+        if let x = flagX(), x > -10, x < size.width + 10 {
+            cg.setStrokeColor(NSColor(white: 0.92, alpha: 0.9).cgColor)
+            cg.setLineWidth(1.5)
+            cg.move(to: CGPoint(x, groundY))
+            cg.addLine(to: CGPoint(x, groundY - 46))
+            cg.strokePath()
+            let wave = CGFloat(sin(time * 8)) * 1.5
+            cg.setFillColor(NSColor(hex: 0xFF6B5E).cgColor)
+            cg.move(to: CGPoint(x, groundY - 46))
+            cg.addLine(to: CGPoint(x + 15, groundY - 41 + wave))
+            cg.addLine(to: CGPoint(x, groundY - 36))
+            cg.closePath()
+            cg.fillPath()
         }
 
         drawRunner(cg, groundY: groundY, stageAnchorX: stageAnchorX, stageScale: stageScale, theme: theme, time: time)
@@ -405,10 +448,27 @@ final class GameSession {
                                     .foregroundColor(gold.opacity(Double(min(1, popup.life * 2)))),
                                 position: CGPoint(popup.position.x, (size.height - 15) - popup.position.y - 14)))
         }
+        if game.phase == .playing, let next = tracker.next {
+            // 오른쪽 위 단추와 겹치지 않게 긴 닉네임은 자른다
+            let name = next.name.count > 6 ? next.name.prefix(6) + "…" : Substring(next.name)
+            labels.append(Label(text: Text("목표 \(String(name)) \(next.score) (-\(max(0, next.score + 1 - game.score)))")
+                                    .font(small).foregroundColor(.white.opacity(0.85)),
+                                position: CGPoint(size.width / 2, 12)))
+            if let x = flagX(), x > 0, x < size.width {
+                labels.append(Label(text: Text(next.name).font(.system(size: 9.5, weight: .bold))
+                                        .foregroundColor(.white),
+                                    position: CGPoint(x + 8, size.height - 15 - 56)))
+            }
+        }
+        if let overtaken, game.phase == .playing {
+            labels.append(Label(text: Text("\(overtaken.name) 추월!").font(.system(size: 14, weight: .heavy, design: .rounded))
+                                    .foregroundColor(gold.opacity(Double(min(1, overtaken.life * 2)))),
+                                position: CGPoint(size.width / 2, 34)))
+        }
         if recordBanner > 0, game.phase == .playing {
             labels.append(Label(text: Text("신기록!").font(.system(size: 13, weight: .heavy, design: .rounded))
                                     .foregroundColor(gold.opacity(Double(min(1, recordBanner * 3)))),
-                                position: CGPoint(size.width / 2, 22)))
+                                position: CGPoint(size.width / 2, overtaken == nil ? 34 : 52)))
         }
 
         let center = CGPoint(size.width / 2, size.height / 2 - 12)

@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import GameCore
 
@@ -41,6 +42,12 @@ final class Leaderboard: ObservableObject {
     }
 
     /// 끝에 /가 있어야 상대 경로가 주소의 경로 뒤에 붙는다 (https://host/api → https://host/api/v1/...).
+    /// 서버가 순위 줄마다 붙이는 사람 키와 같은 값 (server/leaderboard의 playerKey). 참여하지 않아 ID를 보내지 않아도
+    /// 라이벌 중 누가 나인지, 1위가 나인지 알 수 있다.
+    var playerKey: String {
+        SHA256.hash(data: Data("tokencat:\(playerID)".utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
+    }
+
     var baseURL: URL? {
         let custom = defaults.string(forKey: Key.url).flatMap(URL.init(string:)).flatMap { $0.scheme == nil ? nil : $0 }
         guard let url = custom ?? Self.serverURL else { return nil }
@@ -92,6 +99,28 @@ final class Leaderboard: ObservableObject {
         let total: Int
         let entries: [Entry]
         let you: You?
+    }
+
+    /// 주기적으로 받는 요약 (GET /v1/summary).
+    struct Summary: Decodable {
+        struct Champion: Decodable {
+            let nickname: String
+            let score: Int
+            let key: String
+        }
+
+        struct Player: Decodable {
+            let nickname: String
+            let score: Int
+            let key: String
+        }
+
+        let top: Champion?
+        let weekTop: Champion?
+        let total: Int
+        let you: Board.You?
+        /// 나를 뺀 상위 점수들과 내 바로 위 사람들, 높은 점수부터.
+        let rivals: [Player]
     }
 
     private struct ServerMessage: Decodable {
@@ -152,7 +181,12 @@ final class Leaderboard: ObservableObject {
     }
 
     func fetch(_ period: Period, completion: @escaping (Result<Board, Failure>) -> Void) {
-        request("GET", "v1/leaderboard?period=\(period.rawValue)&limit=50", completion: completion)
+        request("GET", "v1/leaderboard?period=\(period.rawValue)&limit=50", identify: isOn, completion: completion)
+    }
+
+    /// 참여하지 않으면 설치 ID 없이 공개 정보(1위, 라이벌 점수)만 받는다.
+    func fetchSummary(completion: @escaping (Result<Summary, Failure>) -> Void) {
+        request("GET", "v1/summary", identify: isOn, completion: completion)
     }
 
     func rename(completion: @escaping (Result<Void, Failure>) -> Void) {
@@ -170,13 +204,15 @@ final class Leaderboard: ObservableObject {
                 self.isOn = false
                 self.defaults.removeObject(forKey: Key.weekBest)
                 self.defaults.removeObject(forKey: Key.weekBestAt)
+                // 내가 지운 기록 때문에 "새 1위" 같은 소식이 나가지 않게 기준부터 다시 잡는다
+                LeaderboardFeed.shared.reset()
             }
             completion(result.map { _ in () })
         }
     }
 
     private func request<T: Decodable>(_ method: String, _ path: String, body: [String: Any]? = nil,
-                                       completion: @escaping (Result<T, Failure>) -> Void) {
+                                       identify: Bool = true, completion: @escaping (Result<T, Failure>) -> Void) {
         guard let base = baseURL, let url = URL(string: path, relativeTo: base) else {
             completion(.failure(.unavailable))
             return
@@ -185,7 +221,7 @@ final class Leaderboard: ObservableObject {
         request.httpMethod = method
         request.setValue("TokenCat", forHTTPHeaderField: "User-Agent")
         // 순위표에서 내 줄을 찾는 데 쓴다. 이 ID로 기록을 지울 수 있어 주소(로그에 남는 곳)에는 싣지 않는다
-        request.setValue(playerID, forHTTPHeaderField: "X-Player")
+        if identify { request.setValue(playerID, forHTTPHeaderField: "X-Player") }
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try? JSONSerialization.data(withJSONObject: body)
