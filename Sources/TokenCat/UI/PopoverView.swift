@@ -34,6 +34,19 @@ struct PopoverView: View {
                 })
     }
 
+    /// 기본 러너, 개인 팩, Petdex 펫, 내 러너를 통틀어 지금과 다른 러너 하나.
+    private func pickRandomRunner() {
+        let builtIns = Runner.allCases.filter { settings.customRunnerID != nil || $0 != settings.runner }
+        let others = (LocalPack.runners.map(LocalPack.storageID) + petdex.pets.map { PetdexStore.storageID($0.slug) }
+            + customRunners.runners.map(\.id)).filter { $0 != settings.customRunnerID }
+        let index = Int.random(in: 0..<(builtIns.count + others.count))
+        if index < builtIns.count {
+            settings.select(builtIns[index])
+        } else {
+            customSelection.wrappedValue = others[index - builtIns.count]
+        }
+    }
+
     private var display: SpriteDisplay {
         SpriteDisplay(state: engine.catState, level: engine.alertLevel)
     }
@@ -89,16 +102,17 @@ struct PopoverView: View {
                 .pickerStyle(.inline)
             }
             if !LocalPack.runners.isEmpty {
+                // 개인 팩과 Petdex는 수십~백 명이라 펼쳐 두면 메뉴가 화면을 넘는다
                 Picker("개인 팩", selection: customSelection) {
                     ForEach(LocalPack.runners, id: \.id) { Text($0.name).tag(Optional(LocalPack.storageID($0))) }
                 }
-                .pickerStyle(.inline)
+                .pickerStyle(.menu)
             }
             if !petdex.pets.isEmpty {
                 Picker("Petdex", selection: customSelection) {
                     ForEach(petdex.pets) { Text($0.name).tag(Optional(PetdexStore.storageID($0.slug))) }
                 }
-                .pickerStyle(.inline)
+                .pickerStyle(.menu)
             }
             if !customRunners.runners.isEmpty {
                 Picker("내 러너", selection: customSelection) {
@@ -106,9 +120,7 @@ struct PopoverView: View {
                 }
                 .pickerStyle(.inline)
             }
-            Button("아무거나") {
-                settings.select(Runner.allCases.filter { $0 != settings.runner }.randomElement() ?? .cat)
-            }
+            Button("아무거나", action: pickRandomRunner)
             Divider()
             Picker("색상", selection: $settings.spriteTheme) {
                 ForEach(SpriteTheme.allCases, id: \.self) { Text($0.displayName).tag($0) }
