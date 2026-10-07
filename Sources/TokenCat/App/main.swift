@@ -38,6 +38,22 @@ if CommandLine.arguments.contains("--report") {
     exit(0)
 }
 
+// 메뉴바 점검: 모든 러너의 잘림·크기·대비를 메뉴바와 같은 칸으로 재고 종료.
+// 예: --menubar-audit out 1 30 1.1 (화면 배율, 메뉴바 높이, 크기 배율)
+if let index = CommandLine.arguments.firstIndex(of: "--menubar-audit") {
+    let args = Array(CommandLine.arguments.dropFirst(index + 1))
+    let number = { (i: Int, fallback: CGFloat) in args.count > i ? CGFloat(Double(args[i]) ?? Double(fallback)) : fallback }
+    let canvas = MenuBarCanvas(barHeight: number(2, 30), zoom: number(3, RunnerSize.large.zoom), backing: number(1, 2))
+    do {
+        try MenuBarAudit.run(to: URL(fileURLWithPath: args.first ?? "menubar-audit"), canvas: canvas)
+        print("saved: \(args.first ?? "menubar-audit") (\(canvas.pixelWidth)×\(canvas.pixelHeight)px)")
+        exit(0)
+    } catch {
+        print("failed: \(error)")
+        exit(1)
+    }
+}
+
 // 디자인 점검용: 모든 러너의 대표 장면을 PNG로 저장하고 종료.
 if let index = CommandLine.arguments.firstIndex(of: "--sprite-sheet") {
     let args = Array(CommandLine.arguments.dropFirst(index + 1))
