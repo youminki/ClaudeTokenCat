@@ -9,6 +9,7 @@ struct RunnerStage: View {
     let character: RunnerCharacter
     let theme: SpriteTheme
     var onPet: (Trick) -> Void = { _ in }
+    var openLeaderboard: () -> Void = {}
 
     @StateObject private var model = StageModel()
     /// 무대를 누르고 있는지. 제스처가 취소돼도 저절로 풀려 게임 입력이 눌린 채 남지 않는다.
@@ -59,6 +60,9 @@ struct RunnerStage: View {
     /// 오른쪽 위 작은 단추: 게임 켜기, 게임 중에는 소리와 나가기.
     private var controls: some View {
         HStack(spacing: 4) {
+            if Leaderboard.shared.isAvailable {
+                StageButton(systemImage: "trophy.fill", action: openLeaderboard).help("순위")
+            }
             if model.game == nil {
                 StageButton(systemImage: "gamecontroller.fill", title: "게임") { model.startGame(character: character) }
                     .help("장애물 피하기 게임 (최고 \(GameRecords.best)점)")
@@ -207,8 +211,16 @@ final class StageModel: ObservableObject {
         let session = GameSession(character: character, live: !rehearsal)
         session.window = { [weak self] in self?.window }
         session.onExit = { [weak self] in self?.endGame() }
-        session.onFinish = { [weak self] _, record in
-            if record { DispatchQueue.main.async { self?.say("신기록!", seconds: 1.6) } }
+        session.onFinish = { [weak self, weak session] game in
+            if game.isNewRecord { DispatchQueue.main.async { self?.say("신기록!", seconds: 1.6) } }
+            guard !rehearsal, let run = session?.runID else { return }
+            Leaderboard.shared.submit(game) { result in
+                guard let session, session.runID == run else { return }
+                switch result {
+                case .success(let rank): session.rankLine = "전체 \(rank.rank)위 · \(rank.total)명"
+                case .failure(let error): session.rankLine = error.localizedDescription
+                }
+            }
         }
         game = session
         bubble = nil

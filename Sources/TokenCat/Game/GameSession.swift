@@ -48,8 +48,12 @@ final class GameSession {
     private var finished = false
     /// 캐릭터별 게임 배율. 서 있는 모습을 재서 정한다.
     private var scaleCache: (key: String, scale: CGFloat)?
-    /// 판이 끝났을 때 바깥(점수판·말풍선)에 알린다.
-    var onFinish: (Int, Bool) -> Void = { _, _ in }
+    /// 판이 끝났을 때 바깥(순위 서버·말풍선)에 알린다.
+    var onFinish: (RunnerGame) -> Void = { _ in }
+    /// 게임 오버 화면에 덧붙일 순위 소식 ("전체 12위 · 340명"). 순위 서버 응답이 오면 바뀐다.
+    var rankLine: String?
+    /// 몇 번째 판인지. 앞 판의 순위 응답이 늦게 와 다음 판 화면에 붙지 않게 비교한다.
+    private(set) var runID = 0
     var onExit: () -> Void = {}
 
     init(character: RunnerCharacter, live: Bool = true) {
@@ -105,6 +109,8 @@ final class GameSession {
 
     private func restarted() {
         finished = false
+        rankLine = nil
+        runID += 1
         particles.removeAll()
         popups.removeAll()
         recordBanner = 0
@@ -171,7 +177,7 @@ final class GameSession {
             if !finished {
                 finished = true
                 if live { GameRecords.finish(score: game.score) }
-                onFinish(game.score, game.isNewRecord)
+                onFinish(game)
             }
         }
     }
@@ -417,15 +423,20 @@ final class GameSession {
             labels.append(Label(text: Text("\(best)길게 누르면 높이, ↓ 숙이기").font(small)
                                     .foregroundColor(.white.opacity(0.65)), position: CGPoint(center.x, center.y + 16)))
         case .over:
-            panels.append(Panel(rect: CGRect(x: center.x - 112, y: center.y - 34, width: 224, height: 66)))
+            let extra: CGFloat = rankLine == nil ? 0 : 14
+            panels.append(Panel(rect: CGRect(x: center.x - 112, y: center.y - 34, width: 224, height: 66 + extra)))
             let title = game.isNewRecord ? "신기록!" : "앗, 부딪혔다"
             labels.append(Label(text: Text(title).font(.system(size: 13, weight: .heavy, design: .rounded))
                                     .foregroundColor(game.isNewRecord ? gold : .white),
                                 position: CGPoint(center.x, center.y - 19)))
             labels.append(Label(text: Text("\(game.score)점").font(.system(size: 20, weight: .heavy, design: .rounded).monospacedDigit())
                                     .foregroundColor(.white), position: CGPoint(center.x, center.y + 1)))
+            if let rankLine {
+                labels.append(Label(text: Text(rankLine).font(small.weight(.semibold)).foregroundColor(gold),
+                                    position: CGPoint(center.x, center.y + 20)))
+            }
             labels.append(Label(text: Text("최고 \(game.best)  ·  스페이스·클릭으로 다시").font(small)
-                                    .foregroundColor(.white.opacity(0.7)), position: CGPoint(center.x, center.y + 21)))
+                                    .foregroundColor(.white.opacity(0.7)), position: CGPoint(center.x, center.y + 21 + extra)))
         default:
             break
         }
