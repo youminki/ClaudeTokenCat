@@ -28,3 +28,12 @@ CREATE TABLE IF NOT EXISTS submit_hits (
   count INTEGER NOT NULL,
   PRIMARY KEY (key, minute)
 );
+
+-- 공개 요약·순위표를 30초 동안 담아 두는 곳. 앱 여러 대가 자주 불러도 무거운 질의는 30초에 한 번만 돈다.
+CREATE TABLE IF NOT EXISTS public_cache (
+  key TEXT PRIMARY KEY,
+  body TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS runs_player ON runs (player_id, created_at);

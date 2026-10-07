@@ -58,6 +58,26 @@ assert.equal(r.status, 200);
 r = await call("GET", "/v1/leaderboard?limit=100", undefined, b);
 assert.equal(r.body.entries.find((e) => e.you)?.nickname, `bobby${tag}`);
 
+// 요약: 1위는 a, 라이벌에는 나를 빼고 담는다
+r = await call("GET", "/v1/summary", undefined, b);
+assert.equal(r.status, 200);
+assert.equal(r.body.top.score, bestA);
+assert.equal(r.body.top.you, false);
+assert.ok(r.body.you.rank >= 2);
+assert.ok(r.body.rivals.some((x) => x.score === bestA), "내 위의 a가 라이벌");
+assert.ok(!r.body.rivals.some((x) => x.nickname === `bobby${tag}`), "나는 라이벌에서 뺀다");
+r = await call("GET", "/v1/summary", undefined, a);
+assert.equal(r.body.top.you, true);
+r = await call("GET", "/v1/summary");
+assert.equal(r.body.you, null, "참여하지 않으면 ID 없이 공개 정보만");
+const keyA = r.body.top.key;
+assert.match(keyA, /^[0-9a-f]{16}$/);
+assert.ok(!JSON.stringify(r.body).includes(a), "설치 ID는 응답에 나가지 않는다");
+r = await call("PUT", `/v1/players/${a}`, { nickname: `새이름${tag}` });
+r = await call("GET", "/v1/summary");
+assert.equal(r.body.top.key, keyA, "이름을 바꿔도 같은 키");
+assert.equal(r.body.top.nickname, `새이름${tag}`, "쓰고 나면 캐시를 비워 바로 보인다");
+
 // 본문이 크면 헤더와 상관없이 끊는다
 r = await call("POST", "/v1/runs", { player: c, nickname: "x".repeat(5000) });
 assert.equal(r.status, 413);
