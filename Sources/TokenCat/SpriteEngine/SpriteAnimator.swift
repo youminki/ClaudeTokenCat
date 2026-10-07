@@ -22,6 +22,12 @@ final class SpriteAnimator {
     var themeProvider: () -> SpriteTheme = { .auto }
     var smoothnessProvider: () -> SpriteSmoothness = { .smooth }
     var tricksEnabledProvider: () -> Bool = { true }
+    /// 메뉴바 러너 확대 배율 (설정의 러너 크기).
+    var zoomProvider: () -> CGFloat = { 1 }
+    /// 프레임 1pt에 쓸 픽셀 수. 레이어를 설계 크기보다 키워 그리므로 화면 배율에 그만큼 곱해 흐려지지 않게 한다.
+    var pixelScale: CGFloat = 2 {
+        didSet { if pixelScale != oldValue { reloadFrames() } }
+    }
 
     private var idleTimer: Timer?
     private(set) var display: SpriteDisplay?
@@ -144,6 +150,7 @@ final class SpriteAnimator {
     private var cacheSuffix: String {
         let appearance = appearanceProvider()?.name.rawValue ?? "default"
         return "\(characterProvider().key)|\(themeProvider().rawValue)|\(smoothnessProvider().rawValue)|\(appearance)"
+            + "|\(zoomProvider())|\(pixelScale)"
     }
 
     private func rasterized(display: SpriteDisplay) -> RasterClip {
@@ -156,7 +163,7 @@ final class SpriteAnimator {
         return result
     }
 
-    /// 동작 클립 캐시. 30fps 이하는 21종을 다 둬도 수 MB라 다 두고, 60fps는 한 동작이 100장을 넘어 최근 것만 둔다.
+    /// 동작 클립 캐시. 30fps 이하는 21종을 다 둬도 십여 MB라 다 두고, 60fps는 한 동작이 100장을 넘어 최근 것만 둔다.
     private var trickKeys: [String] = []
     private var trickCacheLimit: Int { smoothnessProvider() == .max ? 6 : Trick.allCases.count }
 
@@ -176,8 +183,10 @@ final class SpriteAnimator {
 
     private func rasterize(_ clip: SpriteClip) -> RasterClip {
         let appearance = appearanceProvider()
+        let zoom = zoomProvider()
         let frames = clip.frames.compactMap {
-            SpriteRasterizer.cgImage($0, size: SpriteFrames.spriteSize, appearance: appearance)
+            SpriteRasterizer.cgImage($0, size: SpriteFrames.spriteSize, appearance: appearance, scale: pixelScale,
+                                     zoom: zoom)
         }
         return RasterClip(frames: frames, interval: clip.interval)
     }

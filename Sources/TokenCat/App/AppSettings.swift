@@ -10,7 +10,7 @@ final class AppSettings: ObservableObject {
 
     private enum Key: String {
         case officialEnabled, sensitivity, pollInterval, limitAlertsEnabled, newSessionAlertEnabled, spriteTheme
-        case menuBarLabel, runner, smoothness, tricksEnabled, customRunner
+        case menuBarLabel, runner, smoothness, tricksEnabled, customRunner, runnerSize
     }
 
     private let defaults = UserDefaults.standard
@@ -61,6 +61,9 @@ final class AppSettings: ObservableObject {
     /// 가끔 혼자 장난치기 (점프, 하트, 춤 등). 끄면 상태가 바뀔 때만 움직임이 달라진다.
     @Published var tricksEnabled: Bool { didSet { save(tricksEnabled, .tricksEnabled) } }
 
+    /// 메뉴바 러너 크기 (기본 크게).
+    @Published var runnerSize: RunnerSize { didSet { save(runnerSize.rawValue, .runnerSize) } }
+
     /// 메뉴바 고양이 옆에 띄울 사용률 (기본 끔).
     @Published var menuBarLabel: MenuBarLabel { didSet { save(menuBarLabel.rawValue, .menuBarLabel) } }
 
@@ -93,6 +96,7 @@ final class AppSettings: ObservableObject {
         smoothness = SpriteSmoothness(rawValue: string(.smoothness)) ?? .smooth
         tricksEnabled = bool(.tricksEnabled, true)
         menuBarLabel = MenuBarLabel(rawValue: string(.menuBarLabel)) ?? .off
+        runnerSize = RunnerSize(rawValue: string(.runnerSize)) ?? .large
         launchAtLogin = LaunchAtLogin.isEnabled
     }
 
@@ -111,6 +115,27 @@ enum MenuBarLabel: String, CaseIterable {
         case .session: return "세션"
         case .weekly: return "주간"
         case .higher: return "높은 쪽"
+        }
+    }
+}
+
+/// 메뉴바 러너 크기. 메뉴바 높이가 정해져 있어, 크게·최대는 머리 쪽을 기준으로 확대하고 발끝을 잘라 얼굴을 키운다.
+enum RunnerSize: String, CaseIterable {
+    case full, large, max
+
+    var displayName: String {
+        switch self {
+        case .full: return "전신"
+        case .large: return "크게"
+        case .max: return "최대"
+        }
+    }
+
+    var zoom: CGFloat {
+        switch self {
+        case .full: return 1
+        case .large: return 1.3
+        case .max: return 1.6
         }
     }
 }
