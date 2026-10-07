@@ -31,6 +31,8 @@ struct CharacterPose {
     var eyes: Eyes = .open
     /// 헐떡이거나 하품할 때 입을 벌린다.
     var mouthOpen = false
+    /// 손 흔들기 진행(주기 단위). 그림 러너는 시트의 손 흔들기 줄로 그리고, 벡터 러너는 쓰지 않는다.
+    var wave: CGFloat?
 
     var cycle: CGFloat { phase - floor(phase) }
 }

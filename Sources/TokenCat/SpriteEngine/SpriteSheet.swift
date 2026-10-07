@@ -50,6 +50,9 @@ enum SpriteSheet {
         list.append(("walk", SpriteDisplay.normal(.walking).motion(at: 0.2)))
         list.append(("walk", SpriteDisplay.normal(.walking).motion(at: 0.45)))
         list.append(("stand", MotionFrame(pose: CharacterPose(activity: .stand))))
+        var wave = CharacterPose(activity: .stand)
+        wave.wave = 0.4
+        list.append(("wave", MotionFrame(pose: wave)))
         list.append(("sit", SpriteDisplay.tired.motion(at: 0.2)))
         list.append(("sleep", SpriteDisplay.normal(.sleeping).motion(at: 0.2)))
         return list

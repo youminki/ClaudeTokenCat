@@ -3,7 +3,7 @@ import ImageIO
 import UniformTypeIdentifiers
 
 /// 자세별 프레임 PNG가 든 폴더로 그리는 러너 (Petdex 펫, 개인 팩).
-/// 폴더에는 `frames.json`과 `idle_0.png`, `run_0.png`, `sad_0.png`, `wait_0.png` … 가 있다.
+/// 폴더에는 `frames.json`과 `idle_0.png`, `run_0.png`, `sad_0.png`, `wait_0.png`, `wave_0.png` … 가 있다.
 /// 서 있기·달리기 칸(`w`×`h`)이 기준 크기이고, 그보다 넓은 줄(누운 자세 등)은 `rects`의 자리에 같은 배율로 그린다.
 struct SheetRig: CharacterRig {
     let folder: URL
@@ -18,16 +18,18 @@ struct SheetRig: CharacterRig {
 
     func draw(_ s: Sketch) {
         let pose = s.pose
-        let wanted: String
+        // 원하는 줄이 비었으면 뒤의 줄을 쓴다
+        let order: [String]
         switch pose.activity {
-        case .walk, .run: wanted = "run"
-        case .stand: wanted = "idle"
-        case .sit: wanted = "sad"     // 한도 80% 이상 지침
-        case .sleep: wanted = "wait"
+        case .walk, .run: order = ["run", "idle"]
+        case .stand: order = pose.wave == nil ? ["idle", "run"] : ["wave", "idle", "run"]
+        case .sit: order = ["sad", "run", "idle"]     // 한도 80% 이상 지침
+        case .sleep: order = ["wait", "run", "idle"]
         }
-        guard let found = SheetFrames.frames(folder, row: wanted) else { return }
+        guard let found = SheetFrames.frames(folder, rows: order) else { return }
         let (row, frames) = found
-        let image = frames[min(Int(pose.cycle * CGFloat(frames.count)), frames.count - 1)]
+        let cycle = row == "wave" ? (pose.wave ?? 0) - floor(pose.wave ?? 0) : pose.cycle
+        let image = frames[min(Int(cycle * CGFloat(frames.count)), frames.count - 1)]
         // 출력 1px이 차지할 설계 단위. 기준 칸의 키를 목표 키에 맞춘다.
         let unit = FittedRig.targetHeight / CGFloat(max(meta.h, 1))
         let base = CGRect(x: FittedRig.targetCenterX - CGFloat(meta.w) * unit / 2, y: Stage.ground - FittedRig.targetHeight,
@@ -52,7 +54,7 @@ enum SheetFrames {
         var rects: [String: [Int]]?
     }
 
-    static let rows = ["idle", "run", "sad", "wait"]
+    static let rows = ["idle", "run", "sad", "wait", "wave"]
 
     private static var metas: [URL: Meta] = [:]
     private static var cache: [String: [CGImage]] = [:]
@@ -66,12 +68,15 @@ enum SheetFrames {
         return meta
     }
 
-    /// 원하는 줄이 비었으면 달리기, 서 있기 순서로 프레임이 있는 줄을 쓴다.
-    static func frames(_ folder: URL, row wanted: String) -> (row: String, images: [CGImage])? {
+    /// `rows` 순서대로 보며 프레임이 있는 첫 줄. 손 흔들기 줄이 생기기 전에 받은 펫은 그 줄이 없다.
+    static func frames(_ folder: URL, rows: [String]) -> (row: String, images: [CGImage])? {
         guard let meta = meta(folder) else { return nil }
-        for row in [wanted, "run", "idle"] where (meta.counts[row] ?? 0) > 0 {
+        for row in rows where (meta.counts[row] ?? 0) > 0 {
             let key = "\(folder.path)/\(row)"
-            if let cached = cache[key] { return (row, cached) }
+            if let cached = cache[key] {
+                if cached.isEmpty { continue }   // PNG를 못 읽은 줄
+                return (row, cached)
+            }
             let images = (0..<(meta.counts[row] ?? 0)).compactMap { i -> CGImage? in
                 guard let source = CGImageSourceCreateWithURL(folder.appendingPathComponent("\(row)_\(i).png") as CFURL, nil)
                 else { return nil }
@@ -90,7 +95,7 @@ enum SheetFrames {
     }
 }
 
-/// Petdex 스프라이트 시트(192×208 칸, 8열, 9줄 또는 11줄)에서 서 있기(0줄)·달리기(1줄)·슬픔(5줄)·기다리기(6줄)를
+/// Petdex 스프라이트 시트(192×208 칸, 8열, 9줄 또는 11줄)에서 서 있기(0줄)·달리기(1줄)·손 흔들기(3줄)·슬픔(5줄)·기다리기(6줄)를
 /// 뽑아 SheetRig 폴더로 쓴다. 줄 구성은 Petdex 저장소의 src/lib/pet-states.ts, 규격 검사는 src/lib/sprite-atlas.ts를 따른다.
 enum PetdexAtlas {
     enum ExtractError: LocalizedError {
@@ -169,9 +174,10 @@ enum PetdexAtlas {
         }
 
         // 달리기 줄이 비었으면 제자리 달리기(7줄), 그것도 없으면 왼쪽 달리기(2줄)를 뒤집어 쓴다
-        var sources: [String: (row: Int, mirrored: Bool)] = ["idle": (0, false), "sad": (5, false), "wait": (6, false)]
+        var sources: [String: (row: Int, mirrored: Bool)] = ["idle": (0, false), "sad": (5, false), "wait": (6, false),
+                                                             "wave": (3, false)]
         var scanned: [String: (columns: [Int], box: Box?)] = [:]
-        for name in ["idle", "sad", "wait"] { scanned[name] = scan(sources[name]!.row) }
+        for name in ["idle", "sad", "wait", "wave"] { scanned[name] = scan(sources[name]!.row) }
         for (row, mirrored) in [(1, false), (7, false), (2, true)] {
             let result = scan(row)
             if result.box != nil {
@@ -209,8 +215,8 @@ enum PetdexAtlas {
                 let k = CGFloat(frameH) / r.height
                 crops[name] = (r, CGSize(width: r.width * k, height: CGFloat(frameH)))
                 frameW = max(frameW, Int((r.width * k).rounded(.up)))
-            } else if !perRow, name == "sad" || name == "wait", let rowBox {
-                // 서 있기·달리기보다 넓게 그린 줄(누운 자세, 머리 위 표시)은 칸을 넓히되 배율은 그대로 둔다
+            } else if !perRow, ["sad", "wait", "wave"].contains(name), let rowBox {
+                // 서 있기·달리기보다 넓게 그린 줄(누운 자세, 머리 위 표시, 든 손)은 칸을 넓히되 배율은 그대로 둔다
                 let r = padded(shared.union(rowBox))
                 crops[name] = (r, CGSize(width: (r.width * s).rounded(.up), height: (r.height * s).rounded(.up)))
                 if r != base {
