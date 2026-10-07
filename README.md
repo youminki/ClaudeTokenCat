@@ -36,7 +36,7 @@
 | 집계 정확도 | 검증 도구 `ccusage blocks`와 동시점 대조 **오차 0.00%** (샌드위치 검증: 측정→대조→측정)        |
 | 공식 게이지 | 비문서화 OAuth usage 엔드포인트 실측 연동 — 게이지는 공식 값만 표시해 `/usage`와 동일 값       |
 | 성능        | 유휴 CPU **0.05%**, 30fps 질주 **0.5%** (예산 0.5%), 메모리 **17~21MB** (예산 50MB) — 실측      |
-| 품질        | 단위 테스트 **89개** (swift-testing, `./scripts/test.sh`) — 파서·중복제거·블록·게이지·알림·틱 판단, 게임 규칙 |
+| 품질        | 단위 테스트 **90개** (swift-testing, `./scripts/test.sh`) — 파서·중복제거·블록·게이지·알림·틱 판단, 게임 규칙 |
 | 데이터 검증 | 실물 JSONL 1,432건 분석 → **중복 기록(최대 6줄) 발견**, 중복제거 미적용 시 2.9배 과대집계 확인 |
 | 배포        | `git clone` + `./install.sh` 3줄 설치 (로컬 빌드 → Gatekeeper 차단 없음), MIT 오픈소스         |
 
@@ -152,7 +152,14 @@
   러너를 누르면 장난을 치고 메뉴바 러너도 같은 장난을 한다. 화면 주사율대로 그리고 팝오버가 닫히면 멈춘다.
 - 미니게임 "토큰 러너": 무대 오른쪽 위 게임 단추로 켠다. 고른 러너가 장애물(가시·버섯·선인장·나무·걸어오는 게와
   드릴·박쥐)을 뛰어넘거나 숙여 피하고 코인을 모은다. 스페이스·↑·클릭으로 점프(길게 누르면 높이), ↓로 숙이기,
-  esc로 나간다. 속도가 점점 빨라지고 100점마다 점수가 반짝이며, 최고 점수는 이 Mac에만 저장한다.
+  esc로 나간다. 속도가 점점 빨라지고 100점마다 점수가 반짝이며, 최고 점수는 이 Mac에 저장한다.
+  - 순위: 무대의 트로피 단추로 순위표(전체·이번 주)를 연다. 순위표 창에서 참여를 켜고 닉네임을 정하면, 이 Mac에서
+    최근 7일 동안 올린 점수보다 높을 때 점수를 올리고(이번 주 순위가 비지 않게) 게임 오버 화면에 "전체 N위"를
+    보여 준다. 참여는 기본으로 꺼져 있다.
+  - 순위 서버는 `server/leaderboard/`(Cloudflare Workers + D1). 앱이 오픈소스라 조작을 완전히 막을 수는 없어서,
+    플레이 시간 안에 규칙상 낼 수 없는 점수(최고 속도·점수율·코인 상한으로 계산), 같은 사람이 3초 안에 다시 올리는 요청,
+    같은 IP에서 1분에 6번 넘게 올리는 요청을 거른다. IP는 날마다 바뀌는 값과 함께 해시해 횟수만 세고 1시간 뒤 지운다.
+    규칙 숫자는 앱(`RunnerGame.rulesVersion`)과 서버(`rules.js`)에 같이 두고 양쪽 테스트가 같은 값을 확인한다.
   - 규칙은 `GameCore` 라이브러리에 화면과 떼어 두었다. 1/120초 고정 간격 물리, 착지 직전·이륙 직후 입력 보정,
     최소 점프 높이, 너그러운 판정 상자. 판정 상자는 캐릭터와 상관없이 같아 어떤 러너로 해도 조건이 같다.
   - 장애물 간격은 Chromium T-Rex Runner(BSD 3-Clause) 공식을 따르고, 점프 시간으로 잰 하한을 더했다.
@@ -193,7 +200,8 @@ SPM. 테스트 가능한 코어(`UsageCore` 라이브러리)와 앱 계층 분�
 
 ```
 TokenCat/
-├── Sources/GameCore/           # 미니게임 규칙 (물리·장애물·점수) — 게임 테스트 19개의 대상
+├── Sources/GameCore/           # 미니게임 규칙 (물리·장애물·점수) — 게임 테스트 20개의 대상
+├── server/leaderboard/         # 미니게임 순위 서버 (Cloudflare Worker + D1, 규칙·통합 테스트)
 ├── Sources/UsageCore/          # 순수 로직 — 단위 테스트 70개의 대상
 │   ├── JSONLWatcher.swift      #   ~/.claude/projects 재귀 감시, 파일별 오프셋 증분 파싱
 │   ├── JSONLParser.swift       #   스키마-관용 파싱, <synthetic> 스킵
@@ -241,7 +249,9 @@ Claude Code는 macOS에서 OAuth 토큰을 키체인 항목 `Claude Code-credent
 
 **절대 금지**: `security unlock-keychain` 자동화, 키체인 암호 저장·자동입력 —
 편하자고 보안을 무너뜨리는 안티패턴. **OAuth 토큰은 읽기 전용, Anthropic 외
-어디에도 전송·저장·로깅하지 않는다.** (Petdex 목록과 펫 그림은 Petdex에서 찾기를 열 때만 petdex.dev에서 받고, 이때 토큰이나 사용량은 보내지 않는다.)
+어디에도 전송·저장·로깅하지 않는다.** (Petdex 목록과 펫 그림은 Petdex에서 찾기를 열 때만 petdex.dev에서 받고, 이때 토큰이나 사용량은 보내지 않는다.
+미니게임 순위는 참여를 켠 경우에만 무작위 설치 ID·닉네임·점수·코인 수·플레이 시간·앱 버전을 순위 서버로 보내고,
+순위표 창의 "내 기록 지우기"로 서버에서 지울 수 있다.)
 
 ## 7. 트러블슈팅 기록 (5건)
 
@@ -364,6 +374,8 @@ cd ClaudeTokenCat
 - **개발**: `swift run TokenCat` · `./scripts/test.sh`(코어 단위 테스트) · `.build/debug/TokenCat --report`(ccusage 대조) ·
   `--sprite-sheet <폴더>`(러너 점검 시트) · `--hero-gif <파일>`(README GIF) ·
   `--game-shots <폴더> [러너 id]`(미니게임을 자동으로 플레이하며 시작·진행·부딪힘 장면을 PNG로 저장) ·
+  순위 서버 `cd server/leaderboard && npm test`(규칙) · `npm run dev` 후 `node test/e2e.mjs`(통합) ·
+  배포 `npx wrangler@4 login && ./deploy.sh` ·
   `--menubar-audit <폴더> [화면 배율] [메뉴바 높이] [크기 배율]`(모든 러너의 동작·장난을 메뉴바 칸으로 그려
   잘림·키·어두운 윤곽 비율을 report.tsv로, 실제 크기 모습을 시트로 저장) ·
   진단 `log stream --predicate 'subsystem == "dev.tokencat.TokenCat"' --level debug`
