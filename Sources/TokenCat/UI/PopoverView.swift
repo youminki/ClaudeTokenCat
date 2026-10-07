@@ -8,6 +8,7 @@ struct PopoverView: View {
     @ObservedObject var settings: AppSettings
     var openSettings: () -> Void = {}
     var openDailyDetail: () -> Void = {}
+    var openLeaderboard: () -> Void = {}
     /// 무대에서 러너를 누르거나 메뉴에서 동작을 고르면 메뉴바 러너도 같은 동작을 한다.
     var performTrick: (Trick) -> Void = { _ in }
 
@@ -54,7 +55,7 @@ struct PopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             RunnerStage(display: display, character: settings.character, theme: settings.spriteTheme,
-                        onPet: performTrick)
+                        onPet: performTrick, openLeaderboard: openLeaderboard)
             stageCaption.padding(.top, 9)
             Hairline().padding(.vertical, 14)
             HStack(alignment: .top, spacing: 20) {

@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var popover: NSPopover?
     private var settingsWindow: NSWindow?
     private var dailyDetailWindow: NSWindow?
+    private var leaderboardWindow: NSWindow?
     private var cancellables: Set<AnyCancellable> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -123,6 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             rootView: PopoverView(engine: engine, settings: engine.settings,
                                   openSettings: { [weak self] in self?.openSettings() },
                                   openDailyDetail: { [weak self] in self?.openDailyDetail() },
+                                  openLeaderboard: { [weak self] in self?.openLeaderboard() },
                                   performTrick: { [weak self] trick in self?.animator.perform(trick) }))
         if let button = statusItem.button {
             engine.refreshNow()   // 여는 순간 JSONL 재스캔 + 공식 재조회(30초 스로틀)
@@ -149,6 +151,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private func openDailyDetail() {
         dailyDetailWindow = showWindow(dailyDetailWindow, title: "일별 사용량", style: [.titled, .closable]) {
             DailyDetailView(engine: engine)
+        }
+    }
+
+    private func openLeaderboard() {
+        leaderboardWindow = showWindow(leaderboardWindow, title: "토큰 러너 순위", style: [.titled, .closable]) {
+            LeaderboardView()
         }
     }
 
