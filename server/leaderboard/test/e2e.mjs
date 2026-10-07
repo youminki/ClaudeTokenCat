@@ -1,0 +1,74 @@
+// 띄워 둔 서버에 실제 요청을 보내 흐름을 확인한다.
+//   npx wrangler@4 dev --local --port 8799  을 띄운 뒤  BASE=http://127.0.0.1:8799 node test/e2e.mjs
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { maxDistance, RULES } from "../src/rules.js";
+
+const BASE = process.env.BASE ?? "http://127.0.0.1:8799";
+const call = async (method, path, body, player) => {
+  const response = await fetch(BASE + path, {
+    method,
+    headers: { "content-type": "application/json", ...(player ? { "x-player": player } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return { status: response.status, body: await response.json() };
+};
+const honest = (seconds, coins) => ({
+  score: Math.floor(maxDistance(RULES[1], seconds) * 0.04 * 0.9) + coins * 10,
+  coins,
+  durationMs: seconds * 1000,
+  rules: 1,
+  version: "e2e",
+});
+
+const [a, b, c] = [randomUUID(), randomUUID(), randomUUID()];
+const tag = Math.floor(Math.random() * 1000);
+
+let r = await call("POST", "/v1/runs", { player: a, nickname: `가나다${tag}`, ...honest(60, 30) });
+assert.equal(r.status, 200, JSON.stringify(r.body));
+const bestA = r.body.best;
+
+r = await call("POST", "/v1/runs", { player: a, nickname: `가나다${tag}`, ...honest(20, 5) });
+assert.equal(r.status, 429, "같은 사람이 3초 안에 다시 올리면 막는다");
+
+r = await call("POST", "/v1/runs", { player: b, nickname: `bob${tag}`, ...honest(30, 10) });
+assert.equal(r.status, 200);
+assert.ok(r.body.rank > 1, "a보다 낮은 점수면 a 아래");
+
+r = await call("POST", "/v1/runs", { player: c, nickname: "x", ...honest(10, 0) });
+assert.equal(r.status, 400, "닉네임이 짧으면 거절");
+
+r = await call("POST", "/v1/runs", { player: c, nickname: `cheat${tag}`, score: 999999, coins: 0, durationMs: 10000, rules: 1 });
+assert.equal(r.status, 422, "불가능한 점수는 거절");
+
+r = await call("GET", "/v1/leaderboard?limit=100", undefined, a);
+assert.equal(r.status, 200);
+const mine = r.body.entries.find((e) => e.you);
+assert.equal(mine?.score, bestA);
+assert.equal(r.body.you.rank, mine.rank);
+assert.ok(r.body.entries.every((e, i, all) => i === 0 || all[i - 1].score >= e.score), "점수 내림차순");
+
+r = await call("GET", "/v1/leaderboard?period=week", undefined, b);
+assert.equal(r.status, 200);
+assert.equal(r.body.period, "week");
+assert.ok(r.body.you, "이번 주에 올린 b가 보인다");
+
+r = await call("PUT", `/v1/players/${b}`, { nickname: `bobby${tag}` });
+assert.equal(r.status, 200);
+r = await call("GET", "/v1/leaderboard?limit=100", undefined, b);
+assert.equal(r.body.entries.find((e) => e.you)?.nickname, `bobby${tag}`);
+
+// 본문이 크면 헤더와 상관없이 끊는다
+r = await call("POST", "/v1/runs", { player: c, nickname: "x".repeat(5000) });
+assert.equal(r.status, 413);
+
+// 동시에 보낸 두 요청은 하나만 통과한다
+const twin = randomUUID();
+const both = await Promise.all([1, 2].map(() => call("POST", "/v1/runs", { player: twin, nickname: `twin${tag}`, ...honest(15, 3) })));
+assert.deepEqual(both.map((x) => x.status).sort(), [200, 429]);
+
+for (const id of [a, b, twin]) assert.equal((await call("DELETE", `/v1/players/${id}`)).status, 200);
+r = await call("GET", "/v1/leaderboard?limit=100", undefined, a);
+assert.equal(r.body.you, null, "지운 기록은 순위표에서 빠진다");
+
+console.log("e2e ok");
