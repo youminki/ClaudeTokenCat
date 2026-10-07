@@ -1,13 +1,15 @@
 #!/bin/zsh
-# 코어 단위 테스트.
+# 코어 단위 테스트 (사용량 계산, 게임 규칙).
 # Command Line Tools만 있는 환경에선 실행 타깃과 같은 패키지에서 swift-testing 매크로를 찾지 못한다.
 # 코어 소스와 테스트를 링크한 별도 패키지를 .build 안에 만들어 그쪽에서 돌린다.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PKG="$ROOT/.build/core-package"
 mkdir -p "$PKG/Sources" "$PKG/Tests"
-ln -sfn "$ROOT/Sources/UsageCore" "$PKG/Sources/UsageCore"
-ln -sfn "$ROOT/Tests/UsageCoreTests" "$PKG/Tests/UsageCoreTests"
+for MODULE in UsageCore GameCore; do
+    ln -sfn "$ROOT/Sources/$MODULE" "$PKG/Sources/$MODULE"
+    ln -sfn "$ROOT/Tests/${MODULE}Tests" "$PKG/Tests/${MODULE}Tests"
+done
 cat > "$PKG/Package.swift" <<'MANIFEST'
 // swift-tools-version: 5.9
 import PackageDescription
@@ -17,7 +19,9 @@ let package = Package(
     platforms: [.macOS(.v13)],
     targets: [
         .target(name: "UsageCore"),
+        .target(name: "GameCore"),
         .testTarget(name: "UsageCoreTests", dependencies: ["UsageCore"]),
+        .testTarget(name: "GameCoreTests", dependencies: ["GameCore"]),
     ]
 )
 MANIFEST

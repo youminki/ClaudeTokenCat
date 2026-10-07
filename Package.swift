@@ -6,11 +6,13 @@ let package = Package(
     platforms: [.macOS(.v13)],
     targets: [
         .target(name: "UsageCore"),
+        .target(name: "GameCore"),
         .executableTarget(
             name: "TokenCat",
-            dependencies: ["UsageCore"],
+            dependencies: ["UsageCore", "GameCore"],
             resources: [.copy("Assets")]
         ),
         .testTarget(name: "UsageCoreTests", dependencies: ["UsageCore"]),
+        .testTarget(name: "GameCoreTests", dependencies: ["GameCore"]),
     ]
 )
