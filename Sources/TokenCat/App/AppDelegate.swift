@@ -21,6 +21,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: spriteCanvas.width + 4)
+        // 이름이 있어야 사용자가 ⌘로 끌어 옮긴 자리를 macOS가 기억한다. 없으면 켤 때마다 맨 왼쪽에 놓여
+        // 메뉴가 긴 앱이 앞에 오면 가장 먼저 «로 접힌다.
+        statusItem.autosaveName = "TokenCat"
         if let button = statusItem.button {
             button.target = self
             button.action = #selector(togglePopover)
