@@ -79,8 +79,13 @@
 - 러너마다 선 자세의 키와 달리는 동안의 폭을 재서 36×22 설계 칸을 비슷하게 채우도록 자동으로 키운다.
   병아리·펭귄처럼 작게 그린 러너도 메뉴바에서 잘 보인다.
 - 메뉴바 크기: 상태 버튼(22pt)보다 높은 메뉴바 창(macOS 27에서 30pt)까지 러너 칸을 넓혀 그린다.
-  (30pt 창이면 약 49×30pt.) 설정의 크기가 크게(기본)면 머리 위 효과 자리를 줄여 1.12배로 키우고
-  칸을 그만큼 옆으로 넓힌다. 서 있거나 달릴 때는 머리와 발이 잘리지 않는다.
+  (30pt 창이면 약 49×30pt.) 설정의 크기가 크게(기본)면 머리 위 효과 자리를 줄여 최대 1.1배로 키우고
+  (서 있는 몸과 테두리가 칸 높이에 들어가는 만큼까지)
+  칸을 그만큼 옆으로 넓힌다. 프레임은 레이어의 픽셀 크기 그대로 그려 늘려 붙이며 흐려지지 않게 한다.
+- 잘림 방지: 공중제비·깡충·꾸벅처럼 칸 위아래를 벗어나는 장난은 바닥을 기준으로 줄여 칸 안에 넣는다
+  (뛰는 높이도 함께 줄어 제자리에 붙지 않는다. 팝오버 무대도 같다). 반복 동작은 한 주기 전체에 같은 맞춤을 걸어
+  프레임마다 크기가 출렁이지 않는다. 컬러 러너는 메뉴바와 반대 밝기의 1pt 테두리를 둘러 검은 머리·옷이 묻히지 않게 한다.
+- 그림 러너는 투명한 여백을 뺀 실제 그림 영역으로 크기를 맞춘다.
 - 동작 한 주기를 fps로 잘게 나눠 미리 그린다. 설정의 움직임: 절약 12 / 부드럽게 30 / 최고 60fps.
 - 프레임은 Core Animation 키프레임으로 재생해 앱은 상태가 바뀔 때만 깨어난다 (사례 5).
 - 색상 9종: 자동(메뉴바 글자색)·본래 색(캐릭터 고유색)·주황·하늘·분홍·초록·보라·노랑·무지개.
@@ -194,7 +199,7 @@ TokenCat/
 ├── Sources/TokenCat/
 │   ├── App/                    #   AppDelegate(NSStatusItem), UsageEngine, AppSettings
 │   ├── Characters/             #   러너 22종 벡터 골격(Quadruped·Bird·Reptile…), 장난 22종, 효과, 내 러너·Petdex·개인 팩
-│   ├── SpriteEngine/           #   SpriteAnimator(Core Animation 재생), 프레임 생성, 래스터라이저, 점검 시트
+│   ├── SpriteEngine/           #   SpriteAnimator(Core Animation 재생), MenuBarCanvas(칸 크기), 프레임 생성, 래스터라이저, 점검 시트·메뉴바 점검
 │   ├── UI/                     #   PopoverView, RunnerStage(무대), Theme, GaugeBar, Sparkline, SettingsView, RunnerPicker, PetdexBrowser
 │   ├── Services/               #   Notifier(UserNotifications), LaunchAtLogin(SMAppService)
 │   └── Assets/                 #   PNG 넣으면 자동 교체되는 스프라이트 폴더
@@ -348,6 +353,8 @@ cd ClaudeTokenCat
 - **업데이트**: `git pull && ./install.sh` · **제거**: 응용 프로그램 폴더에서 삭제
 - **개발**: `swift run TokenCat` · `./scripts/test.sh`(코어 단위 테스트) · `.build/debug/TokenCat --report`(ccusage 대조) ·
   `--sprite-sheet <폴더>`(러너 점검 시트) · `--hero-gif <파일>`(README GIF) ·
+  `--menubar-audit <폴더> [화면 배율] [메뉴바 높이] [크기 배율]`(모든 러너의 동작·장난을 메뉴바 칸으로 그려
+  잘림·키·어두운 윤곽 비율을 report.tsv로, 실제 크기 모습을 시트로 저장) ·
   진단 `log stream --predicate 'subsystem == "dev.tokencat.TokenCat"' --level debug`
 - **내 그림으로 러너 만들기**: 설정 → 러너 → 그림 불러오기 (GIF 또는 PNG 여러 장). 빌드 없이 바로 적용된다.
 - **Petdex 펫 받기**: 설정 → 러너 → Petdex에서 찾기. 영어·원어 이름으로 검색하고(예: `shinchan`, `doraemon`) 누르면 바로 러너가 된다.
@@ -357,8 +364,9 @@ cd ClaudeTokenCat
 ## 12. 한계 (정직하게)
 
 - 공식 % 조회는 **비문서화 API** — 변경·차단될 수 있고, 그 경우 세션·주간 게이지가 비고 속도·오늘 사용량만 보인다 (앱은 죽지 않는다).
-- Petdex 펫은 사용자가 올린 팬아트다. 원작 권리는 원작자에게 있으니 개인적으로만 쓴다. 메뉴바 크기를 크게로 두면 점프·춤 같은 장난 중 머리 위와 머리 위 효과(Z, 느낌표) 일부가 잘릴 수 있다.
-- 폭이 좁은 화면에서 앞 앱의 메뉴가 길면 macOS가 러너 항목을 숨긴다. ⌘를 누른 채 러너를 오른쪽으로 끌어 두면 덜 숨는다.
+- Petdex 펫은 사용자가 올린 팬아트다. 원작 권리는 원작자에게 있으니 개인적으로만 쓴다. 메뉴바 칸이 30px 안팎이라 효과가 많은 변형(육도선인 나루토 등)은 원본 그림이 뭉쳐 보인다.
+- 폭이 좁은 화면에서 앞 앱의 메뉴가 길면 macOS가 왼쪽 항목부터 «로 접는다. ⌘를 누른 채 러너를 « 오른쪽으로
+  끌어 두면 늘 보이고, 그 자리는 macOS가 기억한다(상태 항목 이름 `TokenCat`).
 - 프로그래매틱(SDK) 판별 마커는 실측 데이터에 SDK 레코드가 없어 "sdk" 포함 여부로 관용 판별 — 추정임을 문서 명시.
 - 키체인 읽기의 `/usr/bin/security` 방식은 "항상 허용" 후 다른 프로세스도 같은 경로로
   읽을 수 있게 되는 트레이드오프 — 숨기지 않고 문서화해 사용자가 선택.
