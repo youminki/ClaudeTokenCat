@@ -11,30 +11,38 @@ struct RunnerPicker: View {
     @StateObject private var petdexSheet = SheetFlag()
     @StateObject private var hover = HoveredRunner()
     @StateObject private var importState = ImportState()
+    @StateObject private var filter = RunnerFilter()
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 4)
 
     var body: some View {
+        let packs = LocalPack.runners.filter { filter.matches($0.name, $0.id) }
+        let pets = petdex.pets.filter { filter.matches($0.name, $0.slug) }
         VStack(alignment: .leading, spacing: 8) {
+            TextField("러너 찾기 (이름)", text: $filter.query)
+                .textFieldStyle(.roundedBorder)
             ForEach(Runner.Group.allCases, id: \.self) { group in
-                groupTitle(group.rawValue)
-                LazyVGrid(columns: columns, spacing: 8) {
-                    ForEach(Runner.runners(in: group), id: \.self) { runner in
-                        let selected = settings.customRunnerID == nil && settings.runner == runner
-                        Button { settings.select(runner) } label: {
-                            tile(runner.character, key: runner.rawValue, selected: selected)
+                let runners = Runner.runners(in: group).filter { filter.matches($0.displayName, $0.rawValue) }
+                if !runners.isEmpty {
+                    groupTitle(group.rawValue)
+                    LazyVGrid(columns: columns, spacing: 8) {
+                        ForEach(runners, id: \.self) { runner in
+                            let selected = settings.customRunnerID == nil && settings.runner == runner
+                            Button { settings.select(runner) } label: {
+                                tile(runner.character, key: runner.rawValue, selected: selected)
+                            }
+                            .buttonStyle(.plain)
+                            .onHover { hover.update(runner.rawValue, $0) }
+                            .accessibilityLabel(runner.displayName)
+                            .accessibilityAddTraits(selected ? .isSelected : [])
                         }
-                        .buttonStyle(.plain)
-                        .onHover { hover.update(runner.rawValue, $0) }
-                        .accessibilityLabel(runner.displayName)
-                        .accessibilityAddTraits(selected ? .isSelected : [])
                     }
                 }
             }
-            if !LocalPack.runners.isEmpty {
-                groupTitle("개인 팩")
+            if !packs.isEmpty {
+                groupTitle("개인 팩 \(packs.count)")
                 LazyVGrid(columns: columns, spacing: 8) {
-                    ForEach(LocalPack.runners, id: \.id) { pack in
+                    ForEach(packs, id: \.id) { pack in
                         let id = LocalPack.storageID(pack)
                         let selected = settings.customRunnerID == id
                         Button { settings.select(pack) } label: {
@@ -48,7 +56,7 @@ struct RunnerPicker: View {
             }
             groupTitle("Petdex")
             LazyVGrid(columns: columns, spacing: 8) {
-                ForEach(petdex.pets) { pet in
+                ForEach(pets) { pet in
                     if let character = petdex.character(for: pet) {
                         let id = PetdexStore.storageID(pet.slug)
                         let selected = settings.customRunnerID == id
@@ -79,7 +87,8 @@ struct RunnerPicker: View {
             }
             groupTitle("내 러너")
             LazyVGrid(columns: columns, spacing: 8) {
-                ForEach(store.runners) { custom in
+                // 내 러너 id는 UUID라 이름으로만 찾는다
+                ForEach(store.runners.filter { filter.matches($0.name, "") }) { custom in
                     let selected = settings.customRunnerID == custom.id
                     Button { settings.select(custom) } label: {
                         tile(custom.character, key: custom.id, selected: selected)
@@ -243,6 +252,18 @@ struct CharacterCanvas: View {
         for effect in frame.effects {
             effect.draw(in: cg, around: scene.placedBounds, tint: .white)
         }
+    }
+}
+
+/// 러너 검색어. `@State`를 못 쓰는 이유는 HoverFlag 참고.
+final class RunnerFilter: ObservableObject {
+    @Published var query = ""
+
+    /// 이름이나 id에 검색어가 모두 들어 있는지. 비어 있으면 모두 보인다.
+    func matches(_ name: String, _ id: String) -> Bool {
+        let words = query.lowercased().split(separator: " ")
+        let haystack = "\(name) \(id)".lowercased()
+        return words.allSatisfy { haystack.contains($0) }
     }
 }
 
