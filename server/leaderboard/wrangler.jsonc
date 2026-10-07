@@ -9,7 +9,7 @@
       "binding": "DB",
       "database_name": "tokencat-leaderboard",
       // deploy.sh가 처음 배포할 때 만든 데이터베이스 ID로 바꾼다
-      "database_id": "00000000-0000-0000-0000-000000000000"
+      "database_id": "7df2c54d-e7af-487f-b305-d133a8d7e4d4"
     }
   ]
 }
