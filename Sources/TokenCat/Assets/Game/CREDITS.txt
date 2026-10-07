@@ -1,0 +1,10 @@
+게임 그림과 효과음 출처. 모두 Kenney(www.kenney.nl)의 CC0(퍼블릭 도메인) 에셋이다.
+http://creativecommons.org/publicdomain/zero/1.0/
+
+그림: Pixel Platformer 1.2 (https://kenney.nl/assets/pixel-platformer)
+  spikes.png tile_0068, mushroom.png tile_0128, cactus.png tile_0127, tree.png tile_0126,
+  coin_0.png tile_0151, coin_1.png tile_0152,
+  crab_0~1.png Characters/tile_0018~0019, drill_0~2.png Characters/tile_0015~0017, bat_0~2.png Characters/tile_0024~0026
+
+효과음: Digital Audio (https://kenney.nl/assets/digital-audio), ogg를 m4a로 바꿨다.
+  jump.m4a phaseJump2, coin.m4a phaserUp6, hit.m4a lowDown, milestone.m4a twoTone1, record.m4a powerUp12

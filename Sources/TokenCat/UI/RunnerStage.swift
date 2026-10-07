@@ -3,6 +3,7 @@ import UsageCore
 
 /// 팝오버 맨 위 무대. 러너가 시간대별 하늘 아래를 달리고, 속도에 맞춰 배경이 겹겹이 흘러간다.
 /// 메뉴바와 달리 프레임을 미리 굽지 않고 화면 주사율대로 매번 계산해 그린다 (팝오버가 열려 있을 때만).
+/// 오른쪽 위 '게임'을 누르면 같은 무대에서 장애물 피하기 게임(GameSession)을 한다.
 struct RunnerStage: View {
     let display: SpriteDisplay
     let character: RunnerCharacter
@@ -10,16 +11,20 @@ struct RunnerStage: View {
     var onPet: (Trick) -> Void = { _ in }
 
     @StateObject private var model = StageModel()
+    /// 무대를 누르고 있는지. 제스처가 취소돼도 저절로 풀려 게임 입력이 눌린 채 남지 않는다.
+    @GestureState private var pressed = false
 
     static let height: CGFloat = 150
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60, paused: model.reduceMotion)) { timeline in
+        // 게임은 사용자가 직접 켠 것이라 동작 줄이기 설정이어도 움직인다
+        TimelineView(.animation(minimumInterval: 1.0 / 60, paused: model.reduceMotion && model.game == nil)) { timeline in
             Canvas { context, size in
                 context.withCGContext { cg in
                     model.draw(cg, size: size, date: timeline.date, display: display, character: character,
                                theme: character.theme(theme))
                 }
+                if let game = model.game { Self.drawOverlay(game.overlay(size: size), in: &context) }
             }
         }
         .frame(height: Self.height)
@@ -27,14 +32,58 @@ struct RunnerStage: View {
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.white.opacity(0.07)))
         .overlay { bubbleLayer }
         .contentShape(Rectangle())
-        .onTapGesture { onPet(model.pet(character: character, display: display)) }
+        // 누르는 순간과 떼는 순간을 따로 받아야 게임에서 길게 누르면 높이 뛴다
+        .gesture(DragGesture(minimumDistance: 0)
+            .updating($pressed) { _, state, _ in state = true }
+            .onEnded { value in
+                // 게임 밖에서는 끌지 않고 누른 것만 쓰다듬기로 받는다
+                guard model.game == nil, hypot(value.translation.width, value.translation.height) < 6 else { return }
+                onPet(model.pet(character: character, display: display))
+            })
+        .onChange(of: pressed) { model.setPressed($0) }
+        .overlay(alignment: .topTrailing) { controls }
+        .background(WindowReader { model.window = $0 })
         .onHover { model.setPointer($0) }
         .onAppear { model.greet(display: display) }
-        .onDisappear { model.setPointer(false) }   // 커서를 올린 채 팝오버가 닫혀도 짝을 맞춘다
-        .help("러너를 누르면 장난을 쳐요")
-        .accessibilityElement()
+        .onDisappear {
+            model.setPointer(false)   // 커서를 올린 채 팝오버가 닫혀도 짝을 맞춘다
+            model.popoverClosed()
+        }
+        .help(model.game == nil ? "러너를 누르면 장난을 쳐요" : "스페이스·↑·클릭 점프(길게 누르면 높이), ↓ 숙이기, esc 나가기")
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(character.name)
         .accessibilityAddTraits(.isButton)
+        .accessibilityAction { onPet(model.pet(character: character, display: display)) }
+    }
+
+    /// 오른쪽 위 작은 단추: 게임 켜기, 게임 중에는 소리와 나가기.
+    private var controls: some View {
+        HStack(spacing: 4) {
+            if model.game == nil {
+                StageButton(systemImage: "gamecontroller.fill", title: "게임") { model.startGame(character: character) }
+                    .help("장애물 피하기 게임 (최고 \(GameRecords.best)점)")
+            } else {
+                StageButton(systemImage: model.soundOn ? "speaker.wave.2.fill" : "speaker.slash.fill") {
+                    model.toggleSound()
+                }
+                .help(model.soundOn ? "효과음 끄기" : "효과음 켜기")
+                StageButton(systemImage: "xmark") { model.endGame() }
+                    .help("게임 나가기 (esc)")
+            }
+        }
+        .padding(7)
+    }
+
+    static func drawOverlay(_ overlay: (panels: [GameSession.Panel], labels: [GameSession.Label]),
+                                    in context: inout GraphicsContext) {
+        for panel in overlay.panels {
+            let shape = Path(roundedRect: panel.rect, cornerRadius: 10, style: .continuous)
+            context.fill(shape, with: .color(.black.opacity(0.5)))
+            context.stroke(shape, with: .color(.white.opacity(0.12)), lineWidth: 1)
+        }
+        for label in overlay.labels {
+            context.draw(label.text, at: label.position, anchor: label.anchor)
+        }
     }
 
     private var bubbleLayer: some View {
@@ -79,10 +128,53 @@ private struct SpeechBubble: View {
     }
 }
 
+/// 무대 위 반투명 작은 단추.
+private struct StageButton: View {
+    let systemImage: String
+    var title: String?
+    let action: () -> Void
+    @StateObject private var hover = HoverFlag()
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: systemImage).font(.system(size: 10, weight: .semibold))
+                if let title { Text(title).font(.system(size: 10.5, weight: .semibold)) }
+            }
+            .foregroundStyle(.white.opacity(hover.on ? 1 : 0.85))
+            .padding(.horizontal, title == nil ? 6 : 8)
+            .frame(height: 22)
+            .background(Capsule().fill(Color.black.opacity(hover.on ? 0.5 : 0.32)))
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.14)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover.on = $0 }
+    }
+}
+
+/// 무대가 놓인 창. 게임을 켤 때 팝오버 창이 키 입력을 받게 한다.
+private struct WindowReader: NSViewRepresentable {
+    let found: (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { found(view.window) }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
 // MARK: - 무대 상태와 그리기
 
 final class StageModel: ObservableObject {
     @Published var bubble: String?
+    @Published private(set) var game: GameSession?
+    @Published private(set) var soundOn = GameSound.shared.isOn
+    weak var window: NSWindow?
+    /// 게임 때문에 앱을 앞으로 가져왔는지. 팝오버가 닫히면 키 입력을 원래 앱에 돌려준다.
+    private var activatedForGame = false
     let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
 
     /// 러너가 서는 가로 위치 (무대 폭 대비).
@@ -105,6 +197,47 @@ final class StageModel: ObservableObject {
         guard inside != pointerPushed else { return }
         inside ? NSCursor.pointingHand.push() : NSCursor.pop()
         pointerPushed = inside
+    }
+
+    // MARK: 게임
+
+    /// `rehearsal`이면 키를 받지 않고 기록도 남기지 않는다 (화면 점검 도구).
+    func startGame(character: RunnerCharacter, rehearsal: Bool = false) {
+        guard game == nil else { return }
+        let session = GameSession(character: character, live: !rehearsal)
+        session.window = { [weak self] in self?.window }
+        session.onExit = { [weak self] in self?.endGame() }
+        session.onFinish = { [weak self] _, record in
+            if record { DispatchQueue.main.async { self?.say("신기록!", seconds: 1.6) } }
+        }
+        game = session
+        bubble = nil
+        guard !rehearsal else { return }
+        // 메뉴바 앱은 평소 앞에 나서지 않으니, 게임을 켤 때만 팝오버 창이 키를 받게 한다
+        if !NSApp.isActive {
+            NSApp.activate(ignoringOtherApps: true)
+            activatedForGame = true
+        }
+        window?.makeKey()
+    }
+
+    func endGame() {
+        game = nil
+    }
+
+    func popoverClosed() {
+        endGame()
+        if activatedForGame, NSApp.isActive { NSApp.deactivate() }
+        activatedForGame = false
+    }
+
+    func toggleSound() {
+        GameSound.shared.isOn.toggle()
+        soundOn = GameSound.shared.isOn
+    }
+
+    func setPressed(_ down: Bool) {
+        down ? game?.press() : game?.release()
     }
 
     // MARK: 말풍선·장난
@@ -167,6 +300,10 @@ final class StageModel: ObservableObject {
 
     func draw(_ cg: CGContext, size: CGSize, date: Date, display: SpriteDisplay, character: RunnerCharacter,
               theme: SpriteTheme) {
+        if let game {
+            drawGame(game, cg, size: size, date: date, character: character, theme: theme)
+            return
+        }
         let dt = CGFloat(min(max(date.timeIntervalSince(lastDate ?? date), 0), 0.1))
         lastDate = date
         let time = CGFloat(date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 10_000))
@@ -264,6 +401,24 @@ final class StageModel: ObservableObject {
         case .normal(.dashing): return 88
         case .normal(.rainbow): return 140
         }
+    }
+
+    private func drawGame(_ game: GameSession, _ cg: CGContext, size: CGSize, date: Date, character: RunnerCharacter,
+                          theme: SpriteTheme) {
+        game.use(character)
+        game.update(date: date)
+        lastDate = date
+        let groundY = size.height - 15
+        let time = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 10_000)
+        scroll = CGFloat(game.game.distance)
+        let sky = Sky.at(hour: Calendar.current.component(.hour, from: date), space: false)
+        let shake = game.shakeOffset
+        cg.saveGState()
+        cg.translateBy(x: shake.x, y: shake.y)
+        drawBackdrop(cg, size: size, sky: sky, time: CGFloat(time), groundY: groundY)
+        game.drawWorld(cg, size: size, groundY: groundY, stageAnchorX: size.width * Self.runnerAnchor, stageScale: 5,
+                       theme: theme, time: time)
+        cg.restoreGState()
     }
 
     // MARK: 배경
