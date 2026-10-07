@@ -10,7 +10,7 @@ final class Leaderboard: ObservableObject {
 
     /// 배포한 순위 서버 주소. 비어 있으면 순위 기능을 숨긴다.
     /// 직접 띄운 서버로 바꾸려면 `defaults write dev.tokencat.TokenCat leaderboardURL <주소>`.
-    static let serverURL: URL? = nil
+    static let serverURL = URL(string: "https://tokencat-leaderboard.youminki.workers.dev")
 
     private enum Key {
         static let on = "leaderboardOn", name = "leaderboardName", player = "leaderboardPlayer"
