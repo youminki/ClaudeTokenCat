@@ -76,8 +76,11 @@
   과 판타지 7종(유령·슬라임·로봇·UFO·닌자·유니콘·드래곤). 모두 직접 그린 벡터 캐릭터다.
 - 도형(타원, 2관절 다리, 끝이 가늘어지는 꼬리)으로 그리고 발은 땅을 짚었다 들리는 궤적을 계산한다
   (`Characters/`). 메뉴바는 단색 실루엣, 팝오버·설정은 외곽선과 명암을 넣은 컬러.
-- 러너마다 선 자세의 키와 달리는 동안의 폭을 재서 36×22pt 칸을 비슷하게 채우도록 자동으로 키운다.
+- 러너마다 선 자세의 키와 달리는 동안의 폭을 재서 36×22 설계 칸을 비슷하게 채우도록 자동으로 키운다.
   병아리·펭귄처럼 작게 그린 러너도 메뉴바에서 잘 보인다.
+- 메뉴바 크기: 상태 버튼(22pt)보다 높은 메뉴바 창(macOS 27에서 30pt)까지 러너 칸을 넓혀 그린다.
+  (30pt 창이면 약 49×30pt.) 설정의 크기가 크게(기본)·최대면 머리 쪽을 기준으로 1.3·1.6배 확대해 얼굴을 키우고,
+  칸 밖으로 나가는 발끝과 양옆, 머리 위 효과 일부는 잘린다.
 - 동작 한 주기를 fps로 잘게 나눠 미리 그린다. 설정의 움직임: 절약 12 / 부드럽게 30 / 최고 60fps.
 - 프레임은 Core Animation 키프레임으로 재생해 앱은 상태가 바뀔 때만 깨어난다 (사례 5).
 - 색상 9종: 자동(메뉴바 글자색)·본래 색(캐릭터 고유색)·주황·하늘·분홍·초록·보라·노랑·무지개.
@@ -85,6 +88,9 @@
   (25~70초마다 하나), 기상·하품·신남(상태가 바뀔 때), 뒤척·코풍선·꿈(잘 때). 설정에서 끌 수 있다.
 - 내 러너: GIF나 PNG(여러 장이면 파일 이름 순서)를 불러와 러너로 쓴다. 테두리에 붙은 단색 배경은 지우고
   이 Mac의 Application Support에만 저장한다. 사용량에 따라 빨라지고 장난도 똑같이 한다.
+- Petdex: 설정 → 러너 → Petdex에서 찾기로 [petdex.dev](https://petdex.dev)의 Codex 펫(약 4,900개)을 검색해
+  고른 펫만 내려받는다. 시트에서 서 있기·달리기·슬픔·기다리기 줄을 잘라 각각 선 자세·달리기·지침·잠에 쓴다.
+  펫은 사용자가 올린 팬아트라 앱에 싣지 않는다.
 - 개인 팩: `Sources/TokenCat/LocalPack/`(.gitignore)에 `LocalRunnerPack`을 따르는 러너를 두면 그 Mac에서 빌드한
   앱에만 더해진다. 그림 러너의 프레임은 `Sources/TokenCat/Assets/LocalPack/`(역시 .gitignore)에 두면 앱 번들에 함께
   들어간다. 저작권이 있는 캐릭터를 공개 저장소에 싣지 않고 개인적으로 쓰는 경우를 위한 연결 고리다.
@@ -161,7 +167,7 @@
 ### F5. 설정 (UserDefaults)
 
 - 공식 연동 on/off (끄거나 조회에 실패하면 세션·주간 게이지를 비운다)
-- 민감도 3단 / 러너(22종 + 내 러너, 움직이는 미리보기 타일)·색상 9종 /
+- 민감도 3단 / 러너(22종 + Petdex 펫 + 내 러너, 움직이는 미리보기 타일)·메뉴바 크기 3단·색상 9종 /
   움직임(12·30·60fps) / 가끔 장난치기 / 메뉴바 사용률 / 한도·새 세션 알림 /
   로그인 시 자동 시작(SMAppService) / 폴링 주기(기본 3초)
 - 정보: 버전과 빌드 커밋(설치된 앱이 어느 커밋인지 확인용), 데이터 폴더 열기
@@ -186,9 +192,9 @@ TokenCat/
 │   └── UsageAlerts.swift       #   80/95% 알림 정책 (창별 1회)
 ├── Sources/TokenCat/
 │   ├── App/                    #   AppDelegate(NSStatusItem), UsageEngine, AppSettings
-│   ├── Characters/             #   러너 22종 벡터 골격(Quadruped·Bird·Reptile…), 장난 22종, 효과, 내 러너·개인 팩
+│   ├── Characters/             #   러너 22종 벡터 골격(Quadruped·Bird·Reptile…), 장난 22종, 효과, 내 러너·Petdex·개인 팩
 │   ├── SpriteEngine/           #   SpriteAnimator(Core Animation 재생), 프레임 생성, 래스터라이저, 점검 시트
-│   ├── UI/                     #   PopoverView, RunnerStage(무대), Theme, GaugeBar, Sparkline, SettingsView, RunnerPicker
+│   ├── UI/                     #   PopoverView, RunnerStage(무대), Theme, GaugeBar, Sparkline, SettingsView, RunnerPicker, PetdexBrowser
 │   ├── Services/               #   Notifier(UserNotifications), LaunchAtLogin(SMAppService)
 │   └── Assets/                 #   PNG 넣으면 자동 교체되는 스프라이트 폴더
 ├── docs/                       #   jsonl-schema.md, usage-endpoint.md (M0 실측 산출물)
@@ -219,7 +225,7 @@ Claude Code는 macOS에서 OAuth 토큰을 키체인 항목 `Claude Code-credent
 
 **절대 금지**: `security unlock-keychain` 자동화, 키체인 암호 저장·자동입력 —
 편하자고 보안을 무너뜨리는 안티패턴. **OAuth 토큰은 읽기 전용, Anthropic 외
-어디에도 전송·저장·로깅하지 않는다.**
+어디에도 전송·저장·로깅하지 않는다.** (Petdex 목록과 펫 그림은 Petdex에서 찾기를 열 때만 petdex.dev에서 받고, 이때 토큰이나 사용량은 보내지 않는다.)
 
 ## 7. 트러블슈팅 기록 (5건)
 
@@ -343,12 +349,14 @@ cd ClaudeTokenCat
   `--sprite-sheet <폴더>`(러너 점검 시트) · `--hero-gif <파일>`(README GIF) ·
   진단 `log stream --predicate 'subsystem == "dev.tokencat.TokenCat"' --level debug`
 - **내 그림으로 러너 만들기**: 설정 → 러너 → 그림 불러오기 (GIF 또는 PNG 여러 장). 빌드 없이 바로 적용된다.
+- **Petdex 펫 받기**: 설정 → 러너 → Petdex에서 찾기. 영어·원어 이름으로 검색하고(예: `shinchan`, `doraemon`) 누르면 바로 러너가 된다.
 - **스프라이트 교체(빌드 시)**: `Sources/TokenCat/Assets/`에 `<러너>_run_0~7.png`(예: `cat_run_0.png`) 등
   규격 PNG를 넣고 재빌드하면 그 러너를 대신한다
 
 ## 12. 한계 (정직하게)
 
 - 공식 % 조회는 **비문서화 API** — 변경·차단될 수 있고, 그 경우 세션·주간 게이지가 비고 속도·오늘 사용량만 보인다 (앱은 죽지 않는다).
+- Petdex 펫은 사용자가 올린 팬아트다. 원작 권리는 원작자에게 있으니 개인적으로만 쓴다. 메뉴바 크기를 크게·최대로 두면 발끝과 양옆, 머리 위 효과 일부가 잘린다.
 - 프로그래매틱(SDK) 판별 마커는 실측 데이터에 SDK 레코드가 없어 "sdk" 포함 여부로 관용 판별 — 추정임을 문서 명시.
 - 키체인 읽기의 `/usr/bin/security` 방식은 "항상 허용" 후 다른 프로세스도 같은 경로로
   읽을 수 있게 되는 트레이드오프 — 숨기지 않고 문서화해 사용자가 선택.
