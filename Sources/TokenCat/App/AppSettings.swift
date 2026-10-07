@@ -32,13 +32,14 @@ final class AppSettings: ObservableObject {
     @Published var runner: Runner { didSet { save(runner.rawValue, .runner) } }
     @Published var spriteTheme: SpriteTheme { didSet { save(spriteTheme.rawValue, .spriteTheme) } }
 
-    /// 내 러너(사용자가 불러온 그림)나 개인 팩 러너를 쓰는 중이면 그 id. 기본 러너를 고르면 nil.
+    /// 내 러너(사용자가 불러온 그림), Petdex 펫, 개인 팩 러너를 쓰는 중이면 그 id. 기본 러너를 고르면 nil.
     @Published var customRunnerID: String? { didSet { save(customRunnerID ?? "", .customRunner) } }
 
     /// 지금 그릴 러너. 내 러너를 지웠거나 개인 팩이 없는 빌드면 기본 러너로 돌아간다.
     var character: RunnerCharacter {
         LocalPack.runner(storageID: customRunnerID)?.character
             ?? CustomRunnerStore.shared.runner(id: customRunnerID)?.character
+            ?? PetdexStore.shared.pet(storageID: customRunnerID).flatMap(PetdexStore.shared.character(for:))
             ?? runner.character
     }
 
@@ -92,6 +93,7 @@ final class AppSettings: ObservableObject {
         // 내 러너 목록에서 사라진 id는 버린다 (그대로 두면 메뉴·고르기에서 아무 것도 선택되지 않아 보인다)
         let savedCustom = string(.customRunner)
         let known = CustomRunnerStore.shared.runner(id: savedCustom) != nil || LocalPack.runner(storageID: savedCustom) != nil
+            || PetdexStore.shared.pet(storageID: savedCustom) != nil
         customRunnerID = known ? savedCustom : nil
         smoothness = SpriteSmoothness(rawValue: string(.smoothness)) ?? .smooth
         tricksEnabled = bool(.tricksEnabled, true)

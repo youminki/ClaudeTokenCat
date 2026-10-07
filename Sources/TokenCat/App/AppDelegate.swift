@@ -87,7 +87,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                    engine.settings.$smoothness.dropFirst().map { _ in },
                    engine.settings.$customRunnerID.dropFirst().map { _ in },
                    engine.settings.$runnerSize.dropFirst().map { _ in },
-                   CustomRunnerStore.shared.$runners.dropFirst().map { _ in })
+                   CustomRunnerStore.shared.$runners.dropFirst().map { _ in },
+                   PetdexStore.shared.$pets.dropFirst().map { _ in })
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.animator.reloadFrames() }
             .store(in: &cancellables)
