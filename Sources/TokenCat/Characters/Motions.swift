@@ -85,6 +85,9 @@ enum Trick: String, CaseIterable {
         }
     }
 
+    /// 손 흔들기 줄 한 바퀴(초).
+    private static let waveCycle: CGFloat = 0.9
+
     /// 진행도 t(0~1)의 모습.
     func frame(at t: CGFloat) -> MotionFrame {
         let seconds = t * CGFloat(duration)
@@ -119,6 +122,7 @@ enum Trick: String, CaseIterable {
 
         case .love:
             stand.eyes = .happy
+            stand.wave = seconds / Self.waveCycle
             f.pose = stand
             f.transform.squash = 1 + 0.05 * sin(tau * t * 3)
             f.effects = [.hearts(t)]
@@ -126,12 +130,14 @@ enum Trick: String, CaseIterable {
         case .sing:
             stand.eyes = .happy
             stand.mouthOpen = sin(tau * t * 5) > 0
+            stand.wave = seconds / Self.waveCycle
             f.pose = stand
             f.transform.rotation = 0.1 * sin(tau * t * 2)
             f.effects = [.notes(t)]
 
         case .dance:
             stand.eyes = .happy
+            stand.wave = seconds / Self.waveCycle
             f.pose = stand
             f.transform.offset.y = -2.2 * abs(sin(.pi * t * 6))
             f.transform.scaleX = tanh(5 * cos(tau * t * 1.5))
@@ -179,6 +185,7 @@ enum Trick: String, CaseIterable {
 
         case .sparkle:
             stand.eyes = .happy
+            stand.wave = seconds / Self.waveCycle
             f.pose = stand
             f.transform.offset.y = -1.2 * abs(sin(.pi * t * 3))
             f.effects = [.sparkles(t)]
