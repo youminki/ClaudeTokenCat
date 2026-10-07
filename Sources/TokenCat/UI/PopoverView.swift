@@ -13,6 +13,7 @@ struct PopoverView: View {
 
     @StateObject private var sparklineHover = HoverIndex()
     @ObservedObject private var customRunners = CustomRunnerStore.shared
+    @ObservedObject private var petdex = PetdexStore.shared
 
     /// 메뉴의 기본 러너 선택. 내 러너를 쓰는 중이면 아무 것도 체크하지 않는다.
     private var builtInSelection: Binding<Runner?> {
@@ -25,6 +26,8 @@ struct PopoverView: View {
                 set: { id in
                     if let pack = LocalPack.runner(storageID: id) {
                         settings.select(pack)
+                    } else if petdex.pet(storageID: id) != nil {
+                        settings.customRunnerID = id
                     } else if let custom = customRunners.runner(id: id) {
                         settings.select(custom)
                     }
@@ -88,6 +91,12 @@ struct PopoverView: View {
             if !LocalPack.runners.isEmpty {
                 Picker("개인 팩", selection: customSelection) {
                     ForEach(LocalPack.runners, id: \.id) { Text($0.name).tag(Optional(LocalPack.storageID($0))) }
+                }
+                .pickerStyle(.inline)
+            }
+            if !petdex.pets.isEmpty {
+                Picker("Petdex", selection: customSelection) {
+                    ForEach(petdex.pets) { Text($0.name).tag(Optional(PetdexStore.storageID($0.slug))) }
                 }
                 .pickerStyle(.inline)
             }

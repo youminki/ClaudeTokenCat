@@ -3,10 +3,12 @@ import UniformTypeIdentifiers
 import UsageCore
 
 /// 러너 고르기. 각 러너를 컬러로 보여 주고, 고른 러너와 마우스를 올린 러너는 실시간으로 달린다.
-/// 맨 아래 '내 러너'는 사용자가 불러온 GIF·PNG로 만든 러너다.
+/// 'Petdex'는 petdex.dev에서 골라 받은 펫, 맨 아래 '내 러너'는 사용자가 불러온 GIF·PNG로 만든 러너다.
 struct RunnerPicker: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject private var store = CustomRunnerStore.shared
+    @ObservedObject private var petdex = PetdexStore.shared
+    @StateObject private var petdexSheet = SheetFlag()
     @StateObject private var hover = HoveredRunner()
     @StateObject private var importState = ImportState()
 
@@ -44,6 +46,37 @@ struct RunnerPicker: View {
                     }
                 }
             }
+            groupTitle("Petdex")
+            LazyVGrid(columns: columns, spacing: 8) {
+                ForEach(petdex.pets) { pet in
+                    if let character = petdex.character(for: pet) {
+                        let id = PetdexStore.storageID(pet.slug)
+                        let selected = settings.customRunnerID == id
+                        Button { settings.customRunnerID = id } label: {
+                            tile(character, key: id, selected: selected)
+                        }
+                        .buttonStyle(.plain)
+                        .onHover { hover.update(id, $0) }
+                        .accessibilityLabel(pet.name)
+                        .contextMenu {
+                            Button("Petdex에서 보기") {
+                                if let url = URL(string: "https://petdex.dev/pets/\(pet.slug)") { NSWorkspace.shared.open(url) }
+                            }
+                            Divider()
+                            Button("삭제") {
+                                if selected { settings.customRunnerID = nil }
+                                petdex.delete(pet)
+                            }
+                        }
+                        .help("오른쪽 클릭: Petdex에서 보기, 삭제")
+                    }
+                }
+                Button { petdexSheet.isPresented = true } label: {
+                    actionTile(icon: "magnifyingglass", title: "Petdex에서 찾기")
+                }
+                .buttonStyle(.plain)
+                .help("petdex.dev에 올라온 펫 수천 개 중에서 골라 러너로 받기")
+            }
             groupTitle("내 러너")
             LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(store.runners) { custom in
@@ -56,7 +89,7 @@ struct RunnerPicker: View {
                     .contextMenu { customMenu(custom) }
                     .help("오른쪽 클릭: 이름 바꾸기, 실루엣, 삭제")
                 }
-                Button(action: importRunner) { addTile }
+                Button(action: importRunner) { actionTile(icon: "plus", title: "그림 불러오기") }
                     .buttonStyle(.plain)
                     .help("GIF나 PNG(여러 장이면 파일 이름 순서가 프레임 순서)로 러너 만들기")
             }
@@ -68,6 +101,9 @@ struct RunnerPicker: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, 4)
+        .sheet(isPresented: $petdexSheet.isPresented) {
+            PetdexBrowser(settings: settings) { petdexSheet.isPresented = false }
+        }
     }
 
     private func groupTitle(_ text: String) -> some View {
@@ -90,7 +126,7 @@ struct RunnerPicker: View {
                     CharacterCanvas(character: character, theme: settings.spriteTheme, date: nil, activity: .stand)
                 }
             }
-            .frame(height: 40)
+            .frame(height: 56)
             Text(character.name)
                 .font(.system(size: 11, weight: selected ? .semibold : .regular))
                 .foregroundStyle(selected ? .primary : .secondary)
@@ -105,13 +141,13 @@ struct RunnerPicker: View {
         .contentShape(Rectangle())
     }
 
-    private var addTile: some View {
+    private func actionTile(icon: String, title: String) -> some View {
         VStack(spacing: 3) {
-            Image(systemName: "plus")
+            Image(systemName: icon)
                 .font(.system(size: 15, weight: .regular))
                 .foregroundStyle(.secondary)
-                .frame(height: 40)
-            Text("그림 불러오기").font(.system(size: 11)).foregroundStyle(.secondary)
+                .frame(height: 56)
+            Text(title).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
