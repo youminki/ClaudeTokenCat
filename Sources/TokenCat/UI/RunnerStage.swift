@@ -280,7 +280,15 @@ final class StageModel: ObservableObject {
     }
 
     func greet(display: SpriteDisplay) {
-        // 자리를 비운 사이 생긴 순위 소식이 있으면 인사 대신 그것부터
+        AppUpdater.shared.checkIfStale()
+        // 업데이트 소식, 자리를 비운 사이 생긴 순위 소식 순서로 인사 대신 먼저 말한다
+        if let update = AppUpdater.shared.takeBubble() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+                self?.say(update, seconds: 2.8)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { self?.deliverNews() }
+            }
+            return
+        }
         if LeaderboardFeed.shared.hasNews {
             deliverNews()
             return

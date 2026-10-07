@@ -38,9 +38,27 @@ if [ -d .build/release/TokenCat_TokenCat.bundle ]; then
 fi
 cp scripts/Info.plist "$APP/Contents/Info.plist"
 # 설정 화면에서 지금 설치된 빌드가 어느 커밋인지 확인할 수 있게 남긴다 (+ = 커밋 안 된 변경 포함)
+# 앱 안의 업데이터는 이 클론 위치·저장소·기본 브랜치로 새 커밋을 확인하고, 이 클론에서 다시 빌드한다
 if COMMIT=$(git rev-parse --short HEAD 2>/dev/null); then
-  [ -z "$(git status --porcelain 2>/dev/null)" ] || COMMIT="$COMMIT+"
-  /usr/libexec/PlistBuddy -c "Add :TokenCatCommit string $COMMIT" "$APP/Contents/Info.plist"
+  PLIST="$APP/Contents/Info.plist"
+  DIRTY=false
+  # 업데이터와 같은 기준: 추적하는 파일을 고쳤을 때만 (작업 메모 같은 untracked 파일은 세지 않는다)
+  [ -z "$(git status --porcelain --untracked-files=no 2>/dev/null)" ] || { COMMIT="$COMMIT+"; DIRTY=true; }
+  # 따옴표·백슬래시가 든 경로나 제목도 그대로 들어가게 plutil로 넣는다
+  put() { plutil -insert "$1" -string "$2" "$PLIST"; }
+  put TokenCatCommit "$COMMIT"
+  put TokenCatCommitSHA "$(git rev-parse HEAD)"
+  put TokenCatCommitSubject "$(git log -1 --format=%s)"
+  put TokenCatSourcePath "$PWD"
+  plutil -insert TokenCatDirty -bool "$DIRTY" "$PLIST"
+  # https://(user@)github.com/o/r(.git)(/), git@github.com:o/r.git, ssh://git@github.com/o/r 에서 o/r만 뽑는다.
+  # origin이나 origin/HEAD가 없는 클론도 설치는 되어야 해서 실패를 무시한다
+  REPO=$( (git remote get-url origin 2>/dev/null || true) \
+    | sed -E 's#^(https://([^@/]+@)?|ssh://git@|git@)github\.com[:/]##; s#/$##; s#\.git$##' \
+    | grep -E '^[^/ ]+/[^/ ]+$' || true)
+  BRANCH=$( (git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true) | sed 's#^origin/##')
+  [ -n "$REPO" ] && put TokenCatRepo "$REPO"
+  put TokenCatBranch "${BRANCH:-main}"
 fi
 cp assets/AppIcon.icns "$APP/Contents/Resources/"
 

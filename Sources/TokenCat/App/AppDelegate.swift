@@ -53,6 +53,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
         animator.set(display: .normal(.sleeping))
         LeaderboardFeed.shared.start()
+        AppUpdater.shared.isInUse = { [weak self] in self?.popover?.isShown ?? false }
+        AppUpdater.shared.start()
         // 메뉴바가 있는 화면이 바뀌면(레티나↔일반, 메뉴바 높이) 레이어 배율과 칸 크기를 맞춘다
         NotificationCenter.default.publisher(for: NSWindow.didChangeBackingPropertiesNotification)
             .merge(with: NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification),
@@ -140,6 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         guard let closed = notification.object as? NSPopover, closed === popover else { return }
         closed.contentViewController = nil
         popover = nil
+        AppUpdater.shared.popoverClosed()
     }
 
     private func openSettings() {

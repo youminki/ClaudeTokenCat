@@ -71,6 +71,7 @@ struct SettingsView: View {
 
             Section("정보") {
                 LabeledContent("버전", value: Self.versionText)
+                UpdateRow(updater: AppUpdater.shared)
                 LabeledContent("데이터 폴더") {
                     Button("Finder에서 열기") { NSWorkspace.shared.open(Self.projectsDirectory) }
                         .controlSize(.small)
@@ -110,6 +111,53 @@ struct SettingsView: View {
         case .live: return .green
         case .waiting, .disabled: return .secondary
         case .stale, .failed: return .orange
+        }
+    }
+}
+
+/// 설정 > 정보의 업데이트 줄. 새 커밋이 있으면 단추 하나로 받아 다시 빌드한다.
+private struct UpdateRow: View {
+    @ObservedObject var updater: AppUpdater
+
+    var body: some View {
+        LabeledContent("업데이트") {
+            HStack(spacing: 8) {
+                Text(status).foregroundStyle(statusColor).lineLimit(2).multilineTextAlignment(.trailing)
+                switch updater.state {
+                case .available:
+                    Button("지금 업데이트") { updater.update() }.controlSize(.small)
+                case .checking, .updating:
+                    ProgressView().controlSize(.small)
+                case .unavailable:
+                    EmptyView()
+                default:
+                    Button("확인") { updater.check() }.controlSize(.small)
+                }
+            }
+        }
+        if updater.canCheck {
+            Toggle("자동으로 업데이트", isOn: $updater.autoUpdate)
+                .help("새 커밋이 올라오면 묻지 않고 받아서 다시 빌드합니다. 빌드하는 1~2분 동안 메뉴바 러너가 잠깐 사라집니다.")
+        }
+    }
+
+    private var status: String {
+        switch updater.state {
+        case .unavailable(let reason): return reason
+        case .idle: return "6시간마다 확인"
+        case .checking: return "확인 중…"
+        case .upToDate: return "최신 버전"
+        case .available(let count, let latest): return "새 커밋 \(count)개: \(latest)"
+        case .updating: return "받아서 빌드하는 중… (끝나면 다시 켜집니다)"
+        case .failed(let reason): return reason
+        }
+    }
+
+    private var statusColor: Color {
+        switch updater.state {
+        case .available: return .accentColor
+        case .failed: return .orange
+        default: return .secondary
         }
     }
 }
