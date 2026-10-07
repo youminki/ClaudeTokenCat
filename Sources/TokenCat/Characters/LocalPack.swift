@@ -20,13 +20,24 @@ struct PackRunner {
 
     var character: RunnerCharacter {
         RunnerCharacter(key: "pack.\(id)", name: name, sound: lines.randomElement() ?? name,
-                        rig: FittedRig(rig), assetPrefix: nil, fixedTheme: .natural)
+                        rig: LocalPack.fitted(self), assetPrefix: nil, fixedTheme: .natural)
     }
 }
 
 enum LocalPack {
     /// 팩 클래스를 이름으로 찾는다. 팩 파일이 없으면 빈 목록.
     static let runners: [PackRunner] = (NSClassFromString("TokenCatLocalPack") as? LocalRunnerPack.Type)?.runners ?? []
+
+    private static var fittedRigs: [String: CharacterRig] = [:]
+
+    /// 크기 맞춤은 장면 10개를 재므로 러너마다 한 번만 한다. 설정 목록은 다시 그릴 때마다 모든 러너를 읽는다.
+    /// 메인 스레드에서만 쓴다.
+    static func fitted(_ runner: PackRunner) -> CharacterRig {
+        if let cached = fittedRigs[runner.id] { return cached }
+        let fitted = FittedRig(runner.rig)
+        fittedRigs[runner.id] = fitted
+        return fitted
+    }
 
     /// 저장 id는 내 러너(UUID)와 겹치지 않게 앞에 붙인다.
     static func storageID(_ runner: PackRunner) -> String { "pack:\(runner.id)" }
