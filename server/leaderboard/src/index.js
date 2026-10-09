@@ -3,8 +3,8 @@
 //   GET    /v1/leaderboard          순위표 (?period=all|week, ?limit). 내 줄은 X-Player 헤더로 찾는다.
 //   GET    /v1/summary              앱이 주기적으로 받는 요약: 전체·이번 주 1위, 내 순위, 라이벌 점수
 // 공개 순위와 요약은 public_cache에 30초 담아 두어, 앱이 많아도 D1 읽기가 사람 수에 비례해 늘지 않게 했다.
-//   POST   /v1/ghosts               내 최고 기록 판의 고스트 올리기 (순위 점수와 같은 점수일 때만)
-//   GET    /v1/ghosts/top           1위 고스트 (고스트를 올린 사람 가운데 가장 높은 점수)
+//   POST   /v1/ghosts               방금 올린 판의 고스트 (역대·이번 주 최고 점수와 같을 때만 그 기간에 둔다)
+//   GET    /v1/ghosts/top           1위 고스트 (?period=all|week, 고스트를 올린 사람 가운데 가장 높은 점수)
 //   PUT    /v1/players/:id          닉네임 바꾸기
 //   DELETE /v1/players/:id          내 기록 지우기
 // 매일 한 번(예약 작업) 주간 순위에 쓰지 않는 오래된 판과 제출 횟수 기록을 지운다.
@@ -21,7 +21,7 @@ export default {
       if (request.method === "GET" && url.pathname === "/v1/leaderboard") return await leaderboard(request, url, env);
       if (request.method === "GET" && url.pathname === "/v1/summary") return await summary(request, env);
       if (request.method === "POST" && url.pathname === "/v1/ghosts") return await submitGhost(request, env);
-      if (request.method === "GET" && url.pathname === "/v1/ghosts/top") return await topGhost(env);
+      if (request.method === "GET" && url.pathname === "/v1/ghosts/top") return await topGhost(url, env);
       const player = url.pathname.match(/^\/v1\/players\/([^/]+)$/)?.[1];
       if (player && request.method === "PUT") return await rename(player, request, env);
       if (player && request.method === "DELETE") return await forget(player, env);
@@ -269,25 +269,35 @@ async function submitGhost(request, env) {
   const now = Date.now();
   // 순위에 오른 점수와 같은 판만 자기 줄에 받아, 순위표의 점수와 고스트가 어긋나지 않게 한다.
   // 판 올리기를 통과해야 쓸 수 있어 IP 제한은 따로 걸지 않는다 (걸면 판 하나가 두 번 세어진다).
-  const result = await env.DB.prepare(
-    `INSERT INTO ghosts (player_id, score, seed, inputs, layout, runner, created_at)
-     SELECT id, ?2, ?3, ?4, ?5, ?6, ?7 FROM players WHERE id = ?1 AND best = ?2
-     ON CONFLICT(player_id) DO UPDATE SET score = ?2, seed = ?3, inputs = ?4, layout = ?5, runner = ?6, created_at = ?7`,
-  ).bind(player, ghost.score, ghost.seed, ghost.inputs, ghost.layout, ghost.runner, now).run();
-  if (result.meta.changes === 0) return json({ error: "not your best" }, 409);
+  const store = (period, condition, ...params) => env.DB.prepare(
+    `INSERT INTO ghosts (player_id, period, score, seed, inputs, layout, runner, created_at)
+     SELECT ?1, '${period}', ?2, ?3, ?4, ?5, ?6, ?7 WHERE ${condition}
+     ON CONFLICT(player_id, period) DO UPDATE SET score = ?2, seed = ?3, inputs = ?4, layout = ?5, runner = ?6, created_at = ?7`,
+  ).bind(player, ghost.score, ghost.seed, ghost.inputs, ghost.layout, ghost.runner, now, ...params);
+  const [all, week] = await env.DB.batch([
+    store("all", "?2 = (SELECT best FROM players WHERE id = ?1)"),
+    store("week", "?2 = (SELECT MAX(score) FROM runs WHERE player_id = ?1 AND created_at >= ?8)", now - WEEK_MS),
+  ]);
+  if (all.meta.changes === 0 && week.meta.changes === 0) return json({ error: "not your best" }, 409);
   await invalidate(env);
   return json({ saved: true });
 }
 
-/// 최고 점수 그대로인 고스트 가운데 가장 높은 것. 1위가 고스트를 올리지 않았으면 그다음 사람 것이고, rank로 알린다.
-async function topGhost(env) {
-  const ghost = await cached(env, "ghost:top", PUBLIC_TTL, async () => {
+/// 그 기간 최고 점수 그대로인 고스트 가운데 가장 높은 것. 1위가 고스트를 올리지 않았으면 그다음 사람 것이고, rank로 알린다.
+async function topGhost(url, env) {
+  const week = url.searchParams.get("period") === "week";
+  const ghost = await cached(env, `ghost:top:${week ? "week" : "all"}`, PUBLIC_TTL, async () => {
+    const since = Date.now() - WEEK_MS;
+    const [board, params] = week ? weekBoard() : ["SELECT id, best AS score FROM players WHERE best > 0", []];
+    const current = week
+      ? "g.score = (SELECT MAX(score) FROM runs WHERE player_id = g.player_id AND created_at >= ?) AND g.created_at >= ?"
+      : "g.score = p.best";
     const row = await env.DB.prepare(
       `SELECT p.id, p.nickname, g.score, g.seed, g.inputs, g.layout, g.runner,
-              (SELECT COUNT(*) FROM players q WHERE q.best > g.score) + 1 AS rank
+              (SELECT COUNT(*) FROM (${board}) WHERE score > g.score) + 1 AS rank
        FROM ghosts g JOIN players p ON p.id = g.player_id
-       WHERE g.score = p.best ORDER BY g.score DESC, p.best_at ASC LIMIT 1`,
-    ).first();
+       WHERE g.period = ? AND ${current} ORDER BY g.score DESC, g.created_at ASC LIMIT 1`,
+    ).bind(...params, week ? "week" : "all", ...(week ? [since, since] : [])).first();
     if (!row) return null;
     const { id, ...rest } = row;
     return { ...rest, key: await playerKey(id) };

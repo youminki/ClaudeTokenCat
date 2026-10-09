@@ -234,9 +234,9 @@ final class StageModel: ObservableObject {
             let ghost = GhostStore.record(of: game, runner: AppSettings.shared.shareableRunnerID)
             Leaderboard.shared.submit(game) { result in
                 // 올린 결과로 1위가 됐는지, 라이벌이 바뀌었는지 바로 다시 본다
-                if case .success(let rank) = result {
+                if case .success = result {
                     LeaderboardFeed.shared.refresh()
-                    if rank.best == ghost.score { Leaderboard.shared.uploadGhost(ghost) }
+                    Leaderboard.shared.uploadGhost(ghost)
                 }
                 guard let session, session.runID == run else { return }
                 switch result {

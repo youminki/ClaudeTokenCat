@@ -93,7 +93,8 @@ final class GameSession {
                           best: live ? GameRecords.best : 0)
         if live {
             savedGhost = GhostStore.load(for: game)
-            TopGhost.shared.refresh(for: game)
+            TopGhost.all.refresh(for: game)
+            TopGhost.week.refresh(for: game)
             installKeys()
         }
     }
@@ -130,6 +131,13 @@ final class GameSession {
         game.release()
     }
 
+    /// 주간 1위 고스트. 전체 1위와 같은 판이면 두 번 보이지 않게 뺀다.
+    var weekGhost: GhostRecord? {
+        guard let week = TopGhost.week.record else { return nil }
+        let all = TopGhost.all.record
+        return all?.seed == week.seed && all?.score == week.score ? nil : week
+    }
+
     /// 지금 점수에서 고스트 판의 최종 점수를 뺀 값 (겨루는 중에만). 넘으면 이긴다.
     var raceLead: Int? {
         guard isRace, let raceTarget else { return nil }
@@ -161,9 +169,13 @@ final class GameSession {
             case 124, 2:        // →, D
                 self.game.setMove(forward: down)
                 return nil
-            case 5, 18 where self.game.phase != .playing:   // G 내 고스트, 1 1위 고스트
+            case 5, 18, 19 where self.game.phase != .playing:   // G 내 고스트, 1 전체 1위, 2 주간 1위 고스트
                 if down, !event.isARepeat {
-                    self.startRace(event.keyCode == 5 ? self.savedGhost : TopGhost.shared.record)
+                    switch event.keyCode {
+                    case 5: self.startRace(self.savedGhost)
+                    case 18: self.startRace(TopGhost.all.record)
+                    default: self.startRace(self.weekGhost)
+                    }
                 }
                 return nil
             case 53:            // esc
@@ -719,8 +731,11 @@ final class GameSession {
         // 고스트 단축키. 겨룰 고스트 한 줄, 코드 복사·붙여넣기 한 줄
         var races: [String] = []
         if let savedGhost { races.append("G 내 고스트 \(savedGhost.score)") }
-        if let top = TopGhost.shared.record {
-            races.append("1 \(top.rank.map { "\($0)위" } ?? "1위") \(Self.shortName(top.name)) \(top.score)")
+        if let top = TopGhost.all.record {
+            races.append("1 \(top.rank.map { "\($0)위" } ?? "1위") \(Self.shortName(top.name))")
+        }
+        if let week = weekGhost {
+            races.append("2 주간 \(Self.shortName(week.name))")
         }
         let ghostLines = races.isEmpty ? [] : [races.joined(separator: " · ")]
         let ghostColors = ghostLines.map { _ in gold.opacity(0.9) }

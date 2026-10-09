@@ -181,7 +181,7 @@ final class Leaderboard: ObservableObject {
         return true
     }
 
-    /// 순위에 오른 최고 판의 고스트를 올린다. 서버는 순위 점수와 같은 판만 받는다.
+    /// 방금 올린 판의 고스트를 올린다. 서버는 역대나 이번 주 최고 점수와 같은 판만 그 기간에 둔다.
     /// 고스트를 받지 않는 옛 서버면 404가 오는데, 순위에는 영향이 없어 무시한다.
     func uploadGhost(_ record: GhostRecord) {
         guard canSubmit, let inputs = GhostStore.packInputs(record.inputs) else { return }
@@ -202,10 +202,10 @@ final class Leaderboard: ObservableObject {
         let runner: String?
     }
 
-    /// 1위 고스트. 서버에 고스트가 없으면 nil. 공개 정보라 설치 ID를 보내지 않는다.
-    func fetchTopGhost(completion: @escaping (Result<RemoteGhost?, Failure>) -> Void) {
+    /// 그 기간 1위 고스트. 서버에 고스트가 없으면 nil. 공개 정보라 설치 ID를 보내지 않는다.
+    func fetchTopGhost(_ period: Period, completion: @escaping (Result<RemoteGhost?, Failure>) -> Void) {
         struct Response: Decodable { let ghost: RemoteGhost? }
-        request("GET", "v1/ghosts/top", identify: false) { (result: Result<Response, Failure>) in
+        request("GET", "v1/ghosts/top?period=\(period.rawValue)", identify: false) { (result: Result<Response, Failure>) in
             completion(result.map(\.ghost))
         }
     }

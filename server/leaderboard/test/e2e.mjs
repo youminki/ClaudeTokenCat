@@ -102,6 +102,9 @@ assert.equal(r.body.ghost.rank, 1);
 assert.equal(r.body.ghost.key, keyA);
 assert.equal(r.body.ghost.seed, ghost.seed, "씨앗은 글자 그대로");
 assert.ok(!JSON.stringify(r.body).includes(a), "설치 ID는 나가지 않는다");
+r = await call("GET", "/v1/ghosts/top?period=week");
+assert.equal(r.body.ghost.score, bestA, "이번 주에 올린 최고 판이라 주간 1위 고스트이기도 하다");
+assert.equal(r.body.ghost.rank, 1);
 r = await call("POST", "/v1/ghosts", { player: a, score: bestA, ...ghost, inputs: "A".repeat(60 * 1024) });
 assert.equal(r.status, 413, "너무 큰 고스트는 끊는다");
 

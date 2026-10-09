@@ -84,9 +84,15 @@ enum GhostStore {
 
 /// 순위 1위(고스트를 올린 사람 가운데 가장 높은 점수)의 고스트. 게임을 켤 때 받아 두고 1분마다 새로 받는다.
 final class TopGhost {
-    static let shared = TopGhost()
+    static let all = TopGhost(.all)
+    static let week = TopGhost(.week)
 
+    let period: Leaderboard.Period
     private(set) var record: GhostRecord?
+
+    private init(_ period: Leaderboard.Period) {
+        self.period = period
+    }
     private var fetchedAt: Date?
     private var loading = false
 
@@ -97,7 +103,7 @@ final class TopGhost {
         loading = true
         let layout = GhostStore.layout(of: game)
         let tuning = game.tuning, width = game.runnerWidth, height = game.runnerHeight
-        Leaderboard.shared.fetchTopGhost { [weak self] result in
+        Leaderboard.shared.fetchTopGhost(period) { [weak self] result in
             guard let self else { return }
             self.fetchedAt = Date()
             guard case .success(let remote) = result, let remote, remote.layout == layout,
