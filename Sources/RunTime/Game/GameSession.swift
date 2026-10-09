@@ -61,6 +61,11 @@ final class GameSession {
     private var tracker = RivalTracker(rivals: [])
     /// 방금 앞지른 사람 (배너).
     private var overtaken: (name: String, life: CGFloat)?
+    /// 하늘 구간. 500점마다 다음 하늘로 넘어가고, 1.5초 동안 섞어 바꾼다.
+    private var skyFrom = 0
+    private var skyTo: Int?
+    private var skyBlend: CGFloat = 1
+    private var zoneBanner: (text: String, life: CGFloat)?
     /// 게임 밖에서 온 소식 (Claude 작업 끝). 판을 멈추지 않고 아래쪽에 잠깐 띄운다.
     private var notice: (text: String, life: CGFloat)?
     var onExit: () -> Void = {}
@@ -200,6 +205,8 @@ final class GameSession {
         particles.removeAll()
         popups.removeAll()
         recordBanner = 0
+        skyTo = nil
+        zoneBanner = nil
     }
 
     // MARK: 한 프레임
@@ -223,6 +230,8 @@ final class GameSession {
         recordBanner = max(0, recordBanner - k * 0.55)
         if let current = overtaken { overtaken = current.life > k ? (current.name, current.life - k) : nil }
         if let current = notice { notice = current.life > k ? (current.text, current.life - k) : nil }
+        if let current = zoneBanner { zoneBanner = current.life > k ? (current.text, current.life - k) : nil }
+        skyBlend = min(1, skyBlend + k / 1.5)
         for i in particles.indices {
             particles[i].velocity.y += particles[i].gravity * k
             particles[i].position.x += particles[i].velocity.x * k - CGFloat(game.phase == .playing ? game.speed : 0) * k * particles[i].drift
@@ -257,6 +266,10 @@ final class GameSession {
         case .milestone:
             play(.milestone)
             milestoneGlow = 1
+        case .nearMiss:
+            let point = CGPoint(runnerLeft + Self.runnerWidth / 2, CGFloat(game.runnerY + Self.runnerHeight * 0.6))
+            burst(at: point, count: 6, color: NSColor(hex: 0x8FD3FF), speed: 60, life: 0.4, drift: 0.5)
+            popups.append(Popup(text: "아슬!", position: point, life: 0.7))
         case .newRecord where !isRace:
             play(.record)
             recordBanner = 1
@@ -301,6 +314,47 @@ final class GameSession {
         guard game.phase == .playing, let next = tracker.next else { return nil }
         let need = Double(next.score + 1 - game.coinsTaken * game.tuning.coinValue) / game.tuning.scorePerPoint
         return screenX(need) + CGFloat(game.runnerOffset) + CGFloat(Self.runnerWidth) / 2
+    }
+
+    // MARK: 하늘 구간
+
+    private static let zoneNames = ["새벽", "낮", "노을", "밤", "우주"]
+    private static let zoneHours = [6, 12, 18, 22]
+    /// 우주에 닿으면 더 바뀌지 않는다.
+    static let zoneScore = 500
+
+    private static func zone(hour: Int) -> Int {
+        switch hour {
+        case 5..<8: 0
+        case 8..<17: 1
+        case 17..<20: 2
+        default: 3
+        }
+    }
+
+    private static func sky(zone: Int) -> Sky {
+        zone >= zoneHours.count ? Sky.at(hour: 0, space: true) : Sky.at(hour: zoneHours[zone], space: false)
+    }
+
+    /// 지금 그릴 하늘. 지금 시각의 하늘에서 시작해 점수가 오를수록 다음 하늘로 간다.
+    func sky(hour: Int) -> Sky {
+        let start = Self.zone(hour: hour)
+        let target = game.phase == .ready ? start : min(start + game.score / Self.zoneScore, Self.zoneNames.count - 1)
+        if skyTo == nil {
+            skyFrom = target
+            skyTo = target
+        } else if target != skyTo {
+            skyFrom = skyTo ?? target
+            skyTo = target
+            skyBlend = 0
+            if game.phase == .playing {
+                zoneBanner = ("\(Self.zoneNames[target]) 구간", 2)
+                play(.record)
+            }
+        }
+        let from = Self.sky(zone: skyFrom), to = Self.sky(zone: skyTo ?? target)
+        let t = skyBlend * skyBlend * (3 - 2 * skyBlend)
+        return t >= 1 ? to : from.mixed(with: to, t)
     }
 
     // MARK: 화면 효과
@@ -579,6 +633,11 @@ final class GameSession {
             labels.append(Label(text: Text("\(overtaken.name) 추월!").font(.system(size: 14, weight: .heavy, design: .rounded))
                                     .foregroundColor(gold.opacity(Double(min(1, overtaken.life * 2)))),
                                 position: CGPoint(size.width / 2, 34)))
+        }
+        if let zoneBanner, game.phase == .playing {
+            labels.append(Label(text: Text(zoneBanner.text).font(.system(size: 13, weight: .heavy, design: .rounded))
+                                    .foregroundColor(.white.opacity(Double(min(1, zoneBanner.life * 2)))),
+                                position: CGPoint(size.width / 2, 52)))
         }
         if let notice {
             labels.append(Label(text: Text(notice.text).font(.system(size: 11, weight: .bold))

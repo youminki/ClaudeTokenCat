@@ -487,7 +487,7 @@ final class StageModel: ObservableObject {
         let groundY = size.height - 15
         let time = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 10_000)
         scroll = CGFloat(game.game.distance)
-        let sky = Sky.at(hour: Sky.hourOverride ?? Calendar.current.component(.hour, from: date), space: false)
+        let sky = game.sky(hour: Sky.hourOverride ?? Calendar.current.component(.hour, from: date))
         let shake = game.shakeOffset
         cg.saveGState()
         cg.translateBy(x: shake.x, y: shake.y)
@@ -671,6 +671,19 @@ struct Sky {
 
     /// 화면 점검(--ui-shots)에서 시간대별 하늘을 찍으려고 시각을 고정한다.
     static var hourOverride: Int?
+
+    /// 두 하늘 사이 (게임 구간이 바뀔 때).
+    func mixed(with other: Sky, _ t: CGFloat) -> Sky {
+        func mix(_ a: NSColor, _ b: NSColor) -> NSColor { a.blended(withFraction: t, of: b) ?? b }
+        var sky = Sky(top: mix(top, other.top), bottom: mix(bottom, other.bottom), far: mix(far, other.far),
+                      near: mix(near, other.near), ground: mix(ground, other.ground), edge: mix(edge, other.edge),
+                      orb: mix(orb, other.orb))
+        sky.stars = stars + (other.stars - stars) * t
+        sky.clouds = clouds + (other.clouds - clouds) * t
+        sky.moon = t < 0.5 ? moon : other.moon
+        sky.orbLow = t < 0.5 ? orbLow : other.orbLow
+        return sky
+    }
 
     static func at(hour: Int, space: Bool) -> Sky {
         if space {

@@ -24,6 +24,8 @@ public final class RunnerGame {
         case milestone(Int)
         /// 이번 판에서 처음으로 지난 최고 점수를 넘었을 때 한 번.
         case newRecord
+        /// 장애물을 아주 가깝게 넘기거나 지나쳤다. 점수는 주지 않고 화면 연출만 한다.
+        case nearMiss(id: Int)
         case crashed
     }
 
@@ -128,6 +130,8 @@ public final class RunnerGame {
         public var duckRatio: Double = 0.55
         /// 판정은 보이는 모습보다 조금 너그럽게 한다.
         public var hitInset: Double = 2.5
+        /// 장애물과 위아래로 이보다 가깝게 지나가면 아슬아슬하게 피한 것으로 친다.
+        public var nearMissGap: Double = 7
         /// 1pt당 점수와 코인 하나의 점수.
         public var scorePerPoint: Double = 0.04
         public var coinValue = 10
@@ -199,6 +203,8 @@ public final class RunnerGame {
     private var upcoming: ObstacleKind?
     private var recentKinds: [String] = []
     private var lastMilestone = 0
+    /// 러너와 앞뒤로 겹친 동안 장애물과 위아래로 가장 가까웠던 거리.
+    private var closestGap: [Int: Double] = [:]
     private var announcedRecord = false
     private var nextID = 0
     /// 판정 없이 배치만 길게 볼 때 (테스트).
@@ -369,6 +375,7 @@ public final class RunnerGame {
         upcoming = nil
         recentKinds = []
         lastMilestone = 0
+        closestGap = [:]
         announcedRecord = false
     }
 
@@ -419,6 +426,7 @@ public final class RunnerGame {
             crash(into: hit)
             return
         }
+        trackNearMisses()
         updateScore()
     }
 
@@ -480,6 +488,19 @@ public final class RunnerGame {
     }
 
     private func hits(_ obstacle: Obstacle) -> Bool { runnerBox.intersects(box(obstacle)) }
+
+    private func trackNearMisses() {
+        let runner = runnerBox
+        for obstacle in obstacles {
+            let b = box(obstacle)
+            if b.minX < runner.maxX, runner.minX < b.maxX {
+                let gap = max(runner.minY - b.maxY, b.minY - runner.maxY)
+                closestGap[obstacle.id] = min(closestGap[obstacle.id] ?? .infinity, gap)
+            } else if b.maxX <= runner.minX, let gap = closestGap.removeValue(forKey: obstacle.id) {
+                if gap < tuning.nearMissGap { events.append(.nearMiss(id: obstacle.id)) }
+            }
+        }
+    }
 
     private func collectCoins() {
         let runner = runnerBox

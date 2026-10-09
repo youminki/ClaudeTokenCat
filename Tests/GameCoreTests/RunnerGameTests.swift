@@ -424,3 +424,39 @@ private func meetings(seed: UInt64, seconds: Double) -> [(time: Double, obstacle
         #expect(a.coins == b.coins)
     }
 }
+
+@Suite struct RunnerGameNearMissTests {
+    private func nearMisses(seed: UInt64, gap: Double) -> (ids: [Int], game: RunnerGame) {
+        var tuning = RunnerGame.Tuning()
+        tuning.catalog = catalog()
+        tuning.nearMissGap = gap
+        let game = RunnerGame(tuning: tuning, runnerWidth: runnerSize.width, runnerHeight: runnerSize.height, seed: seed)
+        let pilot = Autopilot(game: game)
+        game.press()
+        var ids: [Int] = []
+        for _ in 0..<(60 * 60) where game.phase == .playing {
+            pilot.step()
+            game.advance(by: 1.0 / 60)
+            for case .nearMiss(let id) in game.drainEvents() { ids.append(id) }
+        }
+        return (ids, game)
+    }
+
+    @Test func firesOncePerObstacleWithoutChangingScore() {
+        var total = 0
+        for seed in 1...6 as ClosedRange<UInt64> {
+            let (ids, _) = nearMisses(seed: seed, gap: 7)
+            #expect(Set(ids).count == ids.count)
+            total += ids.count
+        }
+        #expect(total > 0)
+        // 연출만 하므로 같은 판이면 기준을 바꿔도 점수가 같다
+        let loose = nearMisses(seed: 3, gap: 1000).game
+        let strict = nearMisses(seed: 3, gap: -1000).game
+        #expect(loose.score == strict.score)
+    }
+
+    @Test func wideClearanceIsNotNearMiss() {
+        #expect(nearMisses(seed: 2, gap: -1000).ids.isEmpty)
+    }
+}
