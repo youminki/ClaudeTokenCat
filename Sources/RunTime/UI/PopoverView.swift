@@ -54,7 +54,8 @@ struct PopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             RunnerStage(display: display, character: settings.character, theme: settings.spriteTheme,
-                        onPet: performTrick, openLeaderboard: openLeaderboard, trickRequest: page.trick)
+                        onPet: performTrick, openLeaderboard: openLeaderboard, trickRequest: page.trick,
+                        claudeFinished: engine.turnEnded.eraseToAnyPublisher())
             stageCaption.padding(.top, 10).padding(.horizontal, 2)
             if page.showsRunners {
                 runnerPage.padding(.top, 10)

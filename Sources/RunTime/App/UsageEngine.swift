@@ -52,6 +52,9 @@ final class UsageEngine: ObservableObject {
     static let rolloverRefetchInterval: TimeInterval = 30
 
     private let watcher = JSONLWatcher()
+    private var turnDetector = TurnEndDetector()
+    /// Claude가 대화 차례를 마쳤다 (폴더 이름). 메인 스레드에서 보낸다.
+    let turnEnded = PassthroughSubject<String?, Never>()
     private let store = UsageStore()
     private let meter = BurnRateMeter()
     private let provider = OAuthUsageProvider()
@@ -220,7 +223,12 @@ final class UsageEngine: ObservableObject {
         let weeklyStart = nextWeeklyReset.map { $0.addingTimeInterval(-WeeklyWindow.duration) }
             ?? WeeklyWindow.rollingStart(now: now)
 
-        store.add(watcher.scan(now: now))
+        let scanned = watcher.scan(now: now)
+        let finished = turnDetector.finishedTurns(in: scanned, now: now)
+        store.add(scanned)
+        if let last = finished.last {
+            DispatchQueue.main.async { self.turnEnded.send(last.project) }
+        }
         let snap = store.snapshot(now: now, weeklySince: weeklyStart)
         if let version = snap.latestClientVersion { clientVersion = version }
         let rate = meter.update(tokensInLastMinute: snap.tokensLast60s)

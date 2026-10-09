@@ -122,6 +122,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             .sink { [weak self] display in self?.animator.set(display: display) }
             .store(in: &cancellables)
 
+        // Claude가 일을 마치면 메뉴바 러너가 축하 동작으로 알린다 (다른 창을 보고 있어도 눈에 띄게)
+        engine.turnEnded
+            .sink { [weak self] _ in _ = self?.animator.perform(.celebrate) }
+            .store(in: &cancellables)
+
         GlobalHotKey.shared.action = { [weak self] in
             // 다른 앱이 앞에 있을 때 누르므로, 열 때는 앱을 앞으로 가져와야 키 입력과 바깥 클릭 닫기가 된다
             if self?.popover?.isShown != true { NSApp.activate(ignoringOtherApps: true) }

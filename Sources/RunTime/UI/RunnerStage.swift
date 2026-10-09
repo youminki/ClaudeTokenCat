@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import UsageCore
 
@@ -12,6 +13,8 @@ struct RunnerStage: View {
     var openLeaderboard: () -> Void = {}
     /// 메뉴에서 고른 동작. 바뀔 때마다 무대 러너가 그 동작을 한다.
     var trickRequest: TrickRequest?
+    /// Claude가 대화 차례를 마쳤다 (폴더 이름).
+    var claudeFinished: AnyPublisher<String?, Never> = Empty().eraseToAnyPublisher()
 
     @StateObject private var model = StageModel()
     /// 무대를 누르고 있는지. 제스처가 취소돼도 저절로 풀려 게임 입력이 눌린 채 남지 않는다.
@@ -34,6 +37,7 @@ struct RunnerStage: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.white.opacity(0.07)))
         .overlay { bubbleLayer }
+        .onReceive(claudeFinished) { model.claudeFinished(project: $0) }
         .contentShape(Rectangle())
         // 누르는 순간과 떼는 순간을 따로 받아야 게임에서 길게 누르면 높이 뛴다
         .gesture(DragGesture(minimumDistance: 0)
@@ -334,6 +338,16 @@ final class StageModel: ObservableObject {
         let line = Bool.random() ? "\(character.sound)!" : (Self.phrases(for: display).randomElement() ?? character.sound)
         say(line, seconds: 1.8)
         return kind
+    }
+
+    /// 게임 중이면 판을 멈추지 않고 화면 위에 알리고, 아니면 러너가 말한다.
+    func claudeFinished(project: String?) {
+        let name = project.map { " · \($0)" } ?? ""
+        if let game, game.game.phase == .playing {
+            game.announce("Claude 작업 끝\(name)")
+        } else {
+            say("Claude가 끝났어요\(name)", seconds: 3)
+        }
     }
 
     func say(_ text: String, seconds: Double) {

@@ -61,6 +61,8 @@ final class GameSession {
     private var tracker = RivalTracker(rivals: [])
     /// 방금 앞지른 사람 (배너).
     private var overtaken: (name: String, life: CGFloat)?
+    /// 게임 밖에서 온 소식 (Claude 작업 끝). 판을 멈추지 않고 아래쪽에 잠깐 띄운다.
+    private var notice: (text: String, life: CGFloat)?
     var onExit: () -> Void = {}
     /// 이 Mac의 최고 판. 고스트와 겨룰 때 같은 코스와 그때 움직임을 다시 돌린다.
     var savedGhost: GhostRecord?
@@ -184,6 +186,7 @@ final class GameSession {
         milestoneGlow = max(0, milestoneGlow - k * 1.6)
         recordBanner = max(0, recordBanner - k * 0.55)
         if let current = overtaken { overtaken = current.life > k ? (current.name, current.life - k) : nil }
+        if let current = notice { notice = current.life > k ? (current.text, current.life - k) : nil }
         for i in particles.indices {
             particles[i].velocity.y += particles[i].gravity * k
             particles[i].position.x += particles[i].velocity.x * k - CGFloat(game.phase == .playing ? game.speed : 0) * k * particles[i].drift
@@ -238,6 +241,11 @@ final class GameSession {
                 onFinish(game)
             }
         }
+    }
+
+    func announce(_ text: String) {
+        notice = (text, 3.5)
+        play(.record)
     }
 
     private func play(_ effect: GameSound.Effect) {
@@ -534,6 +542,11 @@ final class GameSession {
             labels.append(Label(text: Text("\(overtaken.name) 추월!").font(.system(size: 14, weight: .heavy, design: .rounded))
                                     .foregroundColor(gold.opacity(Double(min(1, overtaken.life * 2)))),
                                 position: CGPoint(size.width / 2, 34)))
+        }
+        if let notice {
+            labels.append(Label(text: Text(notice.text).font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(Color(nsColor: NSColor(hex: 0x8FD3FF)).opacity(Double(min(1, notice.life * 2)))),
+                                position: CGPoint(size.width / 2, 70)))
         }
         if recordBanner > 0, game.phase == .playing {
             labels.append(Label(text: Text("신기록!").font(.system(size: 13, weight: .heavy, design: .rounded))

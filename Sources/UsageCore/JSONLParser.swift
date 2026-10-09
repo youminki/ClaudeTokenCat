@@ -10,12 +10,15 @@ public enum JSONLParser {
         let requestId: String?
         let entrypoint: String?
         let version: LenientString?
+        let cwd: LenientString?
+        let isSidechain: LenientBool?
         let message: Message?
 
         struct Message: Decodable {
             let id: String?
             let model: String?
             let usage: Usage?
+            let stop_reason: LenientString?
         }
 
         /// 문자열이 아니면 nil. 부가 정보 하나 때문에 사용량 레코드가 통째로 버려지지 않게 한다.
@@ -23,6 +26,13 @@ public enum JSONLParser {
             let value: String?
             init(from decoder: Decoder) throws {
                 value = try? decoder.singleValueContainer().decode(String.self)
+            }
+        }
+
+        struct LenientBool: Decodable {
+            let value: Bool?
+            init(from decoder: Decoder) throws {
+                value = try? decoder.singleValueContainer().decode(Bool.self)
             }
         }
 
@@ -58,7 +68,10 @@ public enum JSONLParser {
             cacheCreationTokens: usage.cache_creation_input_tokens ?? 0,
             cacheReadTokens: usage.cache_read_input_tokens ?? 0,
             entrypoint: record.entrypoint,
-            clientVersion: record.version?.value
+            clientVersion: record.version?.value,
+            // 서브에이전트(사이드체인)가 끝난 것은 사람이 기다리는 대화가 끝난 것이 아니다
+            endsTurn: message.stop_reason?.value == "end_turn" && record.isSidechain?.value != true,
+            project: record.cwd?.value.map { URL(fileURLWithPath: $0).lastPathComponent }
         )
     }
 
