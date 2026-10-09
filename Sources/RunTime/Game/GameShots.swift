@@ -101,3 +101,44 @@ enum GameShots {
         print("score \(game.score), coins \(game.coinsTaken), \(String(format: "%.1f", game.elapsed))s, speed \(Int(game.speed))")
     }
 }
+
+/// 그리기 시간 재기 (`--game-bench`). 팝오버 무대와 같은 코드로 무대만, 게임(꾸미기·능력·고스트 포함)을
+/// 2배 크기 비트맵에 여러 장 그려 한 장면에 드는 시간을 낸다. 1초 60장이면 장면마다 16.7ms 안이어야 한다.
+enum GameBench {
+    @MainActor
+    static func run(character: RunnerCharacter) {
+        let size = CGSize(width: 344, height: RunnerStage.height)
+        guard let cg = CGContext(data: nil, width: Int(size.width * 2), height: Int(size.height * 2), bitsPerComponent: 8,
+                                 bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+        cg.scaleBy(x: 2, y: 2)
+        let frames = Int(ProcessInfo.processInfo.environment["BENCH_FRAMES"] ?? "") ?? 600
+        var date = Date()
+
+        func measure(_ name: String, _ model: StageModel, before: () -> Void = {}) {
+            let start = Date()
+            for _ in 0..<frames {
+                before()
+                date = date.addingTimeInterval(1.0 / 60)
+                model.draw(cg, size: size, date: date, display: .normal(.dashing), character: character,
+                           theme: character.theme(.natural))
+            }
+            let ms = Date().timeIntervalSince(start) * 1000 / Double(frames)
+            print(String(format: "%@: 장면마다 %.2fms (60fps의 %.0f%%)", name, ms, ms / (1000.0 / 60) * 100))
+        }
+
+        measure("무대", StageModel())
+
+        let model = StageModel()
+        model.startGame(character: character, rehearsal: true)
+        guard let session = model.game else { return }
+        let game = session.game
+        game.setAbilities(.init(airJumps: 1, shields: 2, magnet: 3, glide: true))
+        GameWallet.shared.preview = [.rainbowTrail, .rainbowDust, .fireworksCrash]
+        let pilot = Autopilot(game: game)
+        session.press()
+        session.release()
+        measure("게임", model) { pilot.step() }
+        GameWallet.shared.preview = nil
+    }
+}

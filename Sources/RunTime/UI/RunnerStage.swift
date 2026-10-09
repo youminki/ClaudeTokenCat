@@ -23,8 +23,10 @@ struct RunnerStage: View {
     static let height: CGFloat = 150
 
     var body: some View {
-        // 게임은 사용자가 직접 켠 것이라 동작 줄이기 설정이어도 움직인다
-        TimelineView(.animation(minimumInterval: 1.0 / 60, paused: model.reduceMotion && model.game == nil)) { timeline in
+        // 게임은 사용자가 직접 켠 것이라 동작 줄이기 설정이어도 움직이고, 손맛을 위해 늘 1초 60장으로 그린다.
+        // 게임이 아니면 메뉴바 러너와 같은 '움직임' 설정(12·30·60장)을 따라 팝오버를 열어 둔 동안의 CPU를 줄인다
+        TimelineView(.animation(minimumInterval: 1.0 / (model.game == nil ? AppSettings.shared.smoothness.fps : 60),
+                                paused: model.reduceMotion && model.game == nil)) { timeline in
             Canvas { context, size in
                 context.withCGContext { cg in
                     model.draw(cg, size: size, date: timeline.date, display: display, character: character,

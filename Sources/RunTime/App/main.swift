@@ -74,6 +74,15 @@ if let index = CommandLine.arguments.firstIndex(of: "--game-shots") {
     dispatchMain()
 }
 
+// 성능 점검: 무대와 게임 한 장면을 그리는 데 드는 시간을 재고 종료.
+if CommandLine.arguments.contains("--game-bench") {
+    Task { @MainActor in
+        GameBench.run(character: Runner.cat.character)
+        exit(0)
+    }
+    dispatchMain()
+}
+
 // 디자인 점검용: 모든 러너의 대표 장면을 PNG로 저장하고 종료.
 if let index = CommandLine.arguments.firstIndex(of: "--sprite-sheet") {
     let args = Array(CommandLine.arguments.dropFirst(index + 1))

@@ -92,7 +92,7 @@ struct SettingsView: View {
         GroupedList {
             runnerHero
 
-            GroupedSection("모습", footer: "'크게'는 머리 위 여백을 줄여 캐릭터를 키웁니다. 움직임은 1초에 바뀌는 그림 수(절약 12, 부드럽게 30, 최고 60)로, 많을수록 매끄럽지만 CPU를 조금 더 씁니다. '본래 색'을 고르면 메뉴바에서도 캐릭터 고유색으로 그립니다.") {
+            GroupedSection("모습", footer: "'크게'는 머리 위 여백을 줄여 캐릭터를 키웁니다. 움직임은 1초에 바뀌는 그림 수(절약 12, 부드럽게 30, 최고 60)로, 메뉴바와 사용량 창 무대에 함께 쓰입니다. 많을수록 매끄럽지만 CPU를 조금 더 씁니다. '본래 색'을 고르면 메뉴바에서도 캐릭터 고유색으로 그립니다.") {
                 GroupedRow("메뉴바 크기", icon: "textformat.size", tint: Palette.indigo) {
                     segmented("메뉴바 크기", $settings.runnerSize, RunnerSize.allCases) { $0.displayName }
                 }
