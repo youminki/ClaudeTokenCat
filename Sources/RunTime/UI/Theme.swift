@@ -12,15 +12,16 @@ enum Theme {
     /// 카드 바탕. 구획선 대신 옅은 면으로 묶어 숫자가 먼저 읽히게 한다.
     static let surface = Color.white.opacity(0.045)
 
-    static let normal = Color(white: 0.88)
-    static let warning = Color(red: 0.94, green: 0.66, blue: 0.27)
-    static let critical = Color(red: 0.93, green: 0.36, blue: 0.32)
-    static let positive = Color(red: 0.40, green: 0.78, blue: 0.50)
+    // 팝오버는 늘 다크라 iOS 다크 모드 시스템 색을 그대로 쓴다
+    static let accent = Color(nsColor: NSColor(hex: 0x0A84FF))
+    static let warning = Color(nsColor: NSColor(hex: 0xFF9F0A))
+    static let critical = Color(nsColor: NSColor(hex: 0xFF453A))
+    static let positive = Color(nsColor: NSColor(hex: 0x30D158))
 
-    /// 사용률 단계 색. 80% 전까지는 색을 쓰지 않는다.
-    static func level(_ percent: Double) -> Color {
+    /// 사용률 링 색: 80% 전 파랑, 80% 주황, 95% 빨강.
+    static func ring(_ percent: Double) -> Color {
         switch percent {
-        case ..<80: return normal
+        case ..<80: return accent
         case ..<95: return warning
         default: return critical
         }
@@ -87,26 +88,6 @@ struct PaceBadge: View {
         case .fast: return Theme.warning
         case .critical: return Theme.critical
         }
-    }
-}
-
-/// 큰 숫자 + 작은 단위 (예: 42 %).
-struct Figure: View {
-    let value: String
-    let unit: String
-    var color: Color = Theme.primary
-    var size: CGFloat = 28
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 1) {
-            Text(value)
-                .font(.system(size: size, weight: .semibold).monospacedDigit())
-                .tracking(-0.6)
-            Text(unit)
-                .font(.system(size: size * 0.5, weight: .medium))
-                .foregroundStyle(color.opacity(0.7))
-        }
-        .foregroundStyle(color)
     }
 }
 

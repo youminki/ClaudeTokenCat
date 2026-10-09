@@ -57,17 +57,20 @@ struct PopoverView: View {
             RunnerStage(display: display, character: settings.character, theme: settings.spriteTheme,
                         onPet: performTrick, openLeaderboard: openLeaderboard)
             stageCaption.padding(.top, 10).padding(.horizontal, 2)
-            HStack(alignment: .top, spacing: 8) {
-                sessionColumn
-                weeklyColumn
+            // 배터리 위젯처럼 한도 두 줄을 한 카드에: 작은 링, 이름과 초기화, 오른쪽 큰 %
+            Card(padding: 0) {
+                VStack(spacing: 0) {
+                    sessionRow
+                    Hairline().padding(.leading, 64)
+                    weeklyRow
+                }
             }
-            .fixedSize(horizontal: false, vertical: true)   // 두 카드 높이를 맞춘다
             .padding(.top, 12)
-            Card {
-                VStack(alignment: .leading, spacing: 10) {
-                    speedSection
+            Card(padding: 0) {
+                VStack(spacing: 0) {
+                    activitySection.padding(12)
                     Hairline()
-                    todayRow
+                    statColumns
                 }
             }
             .padding(.top, 8)
@@ -83,10 +86,6 @@ struct PopoverView: View {
         HStack(spacing: 0) {
             runnerMenu
             Spacer(minLength: 8)
-            Text(engine.burnRate >= 1 ? "\(Format.tokens(Int(engine.burnRate))) 토큰/분" : "멈춤")
-                .font(Theme.caption.monospacedDigit())
-                .foregroundStyle(Theme.secondary)
-                .help("최근 1분 동안 쓴 토큰 (이 Mac의 Claude Code)")
         }
     }
 
@@ -157,30 +156,71 @@ struct PopoverView: View {
 
     // MARK: 세션 · 주간
 
-    private var sessionColumn: some View {
+    private var sessionRow: some View {
         let gauge = engine.sessionGauge
         let elapsed = elapsed(until: engine.sessionResetsAt, duration: BlockCalculator.blockDuration)
-        return Card { VStack(alignment: .leading, spacing: 0) {
-            columnTitle("세션", detail: "5시간", gauge: gauge, elapsed: elapsed, reachesLimit: sessionReachesLimit)
-            figure(gauge).padding(.top, 4)
-            GaugeBar(percent: gauge?.percent, elapsed: elapsed)
-                .padding(.top, 6)
+        let detail: String
+        if gauge == nil {
+            detail = unavailableNote
+        } else if gauge?.source == .rolledOver {
+            detail = "초기화됨 · 새 값 확인 중"
+        } else if let reset = engine.sessionResetsAt {
+            detail = Format.resetCountdown(until: reset)
+        } else {
+            detail = "사용하면 5시간 창 시작"
+        }
+        return limitRow(title: "세션", window: "5시간", gauge: gauge, elapsed: elapsed, detail: detail,
+                        reachesLimit: sessionReachesLimit) { sessionOutlook }
+            .help("이번 세션에 이 Mac의 Claude Code가 쓴 토큰: \(Format.tokens(engine.snapshot?.currentBlock?.totalTokens ?? 0))"
+                  + elapsedNote(elapsed))
+    }
+
+    private var weeklyRow: some View {
+        let gauge = engine.weeklyGauge
+        let elapsed = gauge == nil ? nil : elapsed(until: engine.nextWeeklyReset, duration: WeeklyWindow.duration)
+        let detail: String
+        if gauge == nil {
+            detail = unavailableNote
+        } else if let reset = engine.nextWeeklyReset {
+            detail = "\(Format.weekdayTime(reset)) 초기화"
+        } else {
+            detail = "사용하면 7일 창 시작"
+        }
+        return limitRow(title: "주간", window: "7일", gauge: gauge, elapsed: elapsed, detail: detail, reachesLimit: false) {
+            if let shares = weeklyShares { caption(shares, color: Theme.tertiary) }
+        }
+        .help(elapsedNote(elapsed).trimmingCharacters(in: .newlines))
+    }
+
+    /// 한도 한 줄. 왼쪽 링은 모양으로, 오른쪽 숫자는 정확한 값으로 같은 사용률을 보여 준다.
+    private func limitRow<Extra: View>(title: String, window: String, gauge: GaugeReading?, elapsed: Double?,
+                                       detail: String, reachesLimit: Bool,
+                                       @ViewBuilder extra: () -> Extra) -> some View {
+        HStack(spacing: 12) {
+            RingGauge(percent: gauge?.percent, label: nil, elapsed: elapsed, lineWidth: 6, showsLabel: false)
+                .frame(width: 40, height: 40)
+                .accessibilityHidden(true)   // 같은 값을 오른쪽 숫자가 읽힌다
             VStack(alignment: .leading, spacing: 2) {
-                if gauge == nil {
-                    caption(unavailableNote)
-                } else if gauge?.source == .rolledOver {
-                    caption("초기화됨 · 새 값 확인 중")
-                } else if let reset = engine.sessionResetsAt {
-                    caption(Format.resetCountdown(until: reset))
-                } else {
-                    caption("사용하면 5시간 창 시작")
+                HStack(spacing: 5) {
+                    Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.primary)
+                    Text(window).font(Theme.caption).foregroundStyle(Theme.tertiary)
+                    paceBadge(gauge: gauge, elapsed: elapsed, reachesLimit: reachesLimit)
                 }
-                sessionOutlook
+                caption(detail)
+                extra()
             }
-            .padding(.top, 6)
-            Spacer(minLength: 0)
-        } }
-        .help("이번 세션에 이 기기의 Claude Code가 쓴 토큰: \(Format.tokens(engine.snapshot?.currentBlock?.totalTokens ?? 0))")
+            Spacer(minLength: 8)
+            HStack(alignment: .firstTextBaseline, spacing: 1) {
+                Text(gauge.map { "\($0.displayPercent)" } ?? "--")
+                    .font(.system(size: 26, weight: .semibold, design: .rounded).monospacedDigit())
+                    .contentTransition(.numericText())
+                Text("%").font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundStyle(Theme.secondary)
+            }
+            .foregroundStyle(gauge == nil ? Theme.tertiary : gauge!.percent >= 80 ? Theme.ring(gauge!.percent) : Theme.primary)
+            .animation(.easeOut(duration: 0.25), value: gauge?.displayPercent)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 
     @ViewBuilder
@@ -197,31 +237,6 @@ struct PopoverView: View {
         }
     }
 
-    private var weeklyColumn: some View {
-        let gauge = engine.weeklyGauge
-        let elapsed = gauge == nil ? nil : elapsed(until: engine.nextWeeklyReset, duration: WeeklyWindow.duration)
-        return Card { VStack(alignment: .leading, spacing: 0) {
-            columnTitle("주간", detail: "7일", gauge: gauge, elapsed: elapsed, reachesLimit: false)
-            figure(gauge).padding(.top, 4)
-            GaugeBar(percent: gauge?.percent, elapsed: elapsed)
-                .padding(.top, 6)
-            VStack(alignment: .leading, spacing: 2) {
-                if gauge == nil {
-                    caption(unavailableNote)
-                } else if let reset = engine.nextWeeklyReset {
-                    caption("\(Format.weekdayTime(reset)) 초기화")
-                } else {
-                    caption("사용하면 7일 창 시작")
-                }
-                if let shares = weeklyShares {
-                    caption(shares, color: Theme.tertiary)
-                }
-            }
-            .padding(.top, 6)
-            Spacer(minLength: 0)
-        } }
-    }
-
     /// 최근 속도로는 초기화 전에 한도에 닿는지. 평균 페이스가 여유여도 배지를 빠름으로 올려 아래 문구와 맞춘다.
     private var sessionReachesLimit: Bool {
         guard case .reachesLimit = GaugeMath.limitOutlook(minutesLeft: engine.sessionMinutesLeft,
@@ -229,31 +244,19 @@ struct PopoverView: View {
         return true
     }
 
-    /// 제목 오른쪽에 시간 대비 속도 배지. 눈금을 읽지 않아도 지금 페이스가 보이게 한다.
-    private func columnTitle(_ title: String, detail: String, gauge: GaugeReading?, elapsed: Double?,
-                             reachesLimit: Bool) -> some View {
-        HStack(spacing: 4) {
-            Text(title).foregroundStyle(Theme.secondary)
-            Text(detail).foregroundStyle(Theme.tertiary)
-            Spacer(minLength: 4)
-            if let gauge, gauge.source != .rolledOver, let elapsed {
-                let pace = GaugeMath.pace(percent: gauge.percent, elapsed: elapsed)
-                PaceBadge(pace: reachesLimit && (pace == .relaxed || pace == .steady) ? .fast : pace)
-                    .help("사용 \(gauge.displayPercent)% · 시간 \(Int((elapsed * 100).rounded()))% 지남"
-                          + (reachesLimit ? "\n최근 속도로는 초기화 전에 한도에 닿습니다" : ""))
-            }
-        }
-        .font(Theme.label)
-        .frame(height: 16)
+    private func elapsedNote(_ elapsed: Double?) -> String {
+        elapsed.map { "\n링 위 흰 눈금: 이번 창 시간의 \(Int(($0 * 100).rounded()))% 지남" } ?? ""
     }
 
-    /// 공식 값이 없으면 "--". 로컬 기록으로 추정하면 `/usage`와 어긋나서 숫자를 지어내지 않는다.
-    private func figure(_ gauge: GaugeReading?) -> some View {
-        let percent = gauge?.percent ?? 0
-        return Figure(value: gauge.map { "\($0.displayPercent)" } ?? "--", unit: "%",
-                      color: gauge == nil ? Theme.tertiary : percent >= 80 ? Theme.level(percent) : Theme.primary)
-            .contentTransition(.numericText())
-            .animation(.easeOut(duration: 0.25), value: gauge?.displayPercent)
+    /// 시간 대비 속도 배지. 눈금을 읽지 않아도 지금 페이스가 보이게 한다.
+    @ViewBuilder
+    private func paceBadge(gauge: GaugeReading?, elapsed: Double?, reachesLimit: Bool) -> some View {
+        if let gauge, gauge.source != .rolledOver, let elapsed {
+            let pace = GaugeMath.pace(percent: gauge.percent, elapsed: elapsed)
+            PaceBadge(pace: reachesLimit && (pace == .relaxed || pace == .steady) ? .fast : pace)
+                .help("사용 \(gauge.displayPercent)% · 시간 \(Int((elapsed * 100).rounded()))% 지남"
+                      + (reachesLimit ? "\n최근 속도로는 초기화 전에 한도에 닿습니다" : ""))
+        }
     }
 
     /// 게이지를 비운 이유. 자세한 사유는 아래 상태 줄에 있다.
@@ -286,41 +289,48 @@ struct PopoverView: View {
 
     // MARK: 속도 · 오늘
 
-    private var speedSection: some View {
-        let sparkline = engine.snapshot?.sparkline ?? []
-        return VStack(alignment: .leading, spacing: 7) {
+    private var activitySection: some View {
+        let values = engine.snapshot?.sparkline ?? []
+        return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text("최근 30분").font(Theme.label).foregroundStyle(Theme.secondary)
                 Spacer()
-                if let i = sparklineHover.index, sparkline.indices.contains(i) {
-                    let minutesAgo = sparkline.count - 1 - i
-                    caption("\(minutesAgo == 0 ? "지금" : "\(minutesAgo)분 전") \(Format.tokens(sparkline[i]))/분",
+                if let i = sparklineHover.index, values.indices.contains(i) {
+                    let minutesAgo = values.count - 1 - i
+                    caption("\(minutesAgo == 0 ? "지금" : "\(minutesAgo)분 전") \(Format.tokens(values[i]))/분",
                             color: Theme.primary)
-                } else if let peak = sparkline.max(), peak > 0 {
+                } else if let peak = values.max(), peak > 0 {
                     caption("최고 \(Format.tokens(peak))/분", color: Theme.tertiary)
+                } else {
+                    caption("쓴 기록 없음", color: Theme.tertiary)
                 }
             }
-            Sparkline(values: sparkline, hoverIndex: $sparklineHover.index)
+            ActivityBars(values: values, hoverIndex: $sparklineHover.index)
+            HStack {
+                Text("30분 전")
+                Spacer()
+                Text("지금")
+            }
+            .font(.system(size: 9.5))
+            .foregroundStyle(Theme.tertiary)
         }
     }
 
-    private var todayRow: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("오늘").font(Theme.label).foregroundStyle(Theme.secondary)
-                Spacer()
-                Text("\(Format.tokens(engine.snapshot?.todayTokens ?? 0)) 토큰")
-                    .font(Theme.value)
-                    .foregroundStyle(Theme.primary)
-                Text("약 \(Format.usd(engine.snapshot?.todayCostUSD ?? 0))")
-                    .font(Theme.caption.monospacedDigit())
-                    .foregroundStyle(Theme.tertiary)
-                    .help("API 단가로 환산한 추정 비용")
-            }
-            if let programmatic = engine.snapshot?.todayProgrammaticTokens, programmatic > 0 {
-                caption("SDK 사용 \(Format.tokens(programmatic)) 토큰 포함 (별도 한도)", color: Theme.tertiary)
-            }
+    /// 오늘 쓴 양, 예상 비용, 지금 속도. 모두 이 Mac의 Claude Code 기록 기준.
+    private var statColumns: some View {
+        let today = engine.snapshot?.todayTokens ?? 0
+        let programmatic = engine.snapshot?.todayProgrammaticTokens ?? 0
+        return HStack(spacing: 0) {
+            StatColumn(label: programmatic > 0 ? "오늘 (SDK 포함)" : "오늘", value: Format.tokens(today), unit: "토큰")
+                .help(programmatic > 0 ? "SDK 사용 \(Format.tokens(programmatic)) 토큰 포함 (별도 한도)" : "이 Mac의 Claude Code 기록 기준")
+            Rectangle().fill(Theme.hairline).frame(width: 1)
+            StatColumn(label: "추정 비용", value: Format.usd(engine.snapshot?.todayCostUSD ?? 0))
+                .help("오늘 쓴 토큰을 API 단가로 환산한 참고값")
+            Rectangle().fill(Theme.hairline).frame(width: 1)
+            StatColumn(label: "지금 속도", value: engine.burnRate >= 1 ? Format.tokens(Int(engine.burnRate)) : "0", unit: "/분")
+                .help("최근 1분 동안 쓴 토큰")
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: 상태 · 도구
