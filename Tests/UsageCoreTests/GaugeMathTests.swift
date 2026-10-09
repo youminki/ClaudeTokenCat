@@ -115,4 +115,14 @@ struct OfficialTrendTests {
         trend.record(window(16, minute: 6, resetMinute: 300.01))   // resets_at이 0.6초 흔들림
         #expect(trend.ratePerMinute(now: at(6)) == 1)
     }
+
+    @Test func paceComparesUsageWithElapsedTime() {
+        #expect(GaugeMath.pace(percent: 40, elapsed: 0.2) == .fast)       // 시간 20%에 40% 사용
+        #expect(GaugeMath.pace(percent: 10, elapsed: 0.5) == .relaxed)    // 절반 지났는데 10%
+        #expect(GaugeMath.pace(percent: 55, elapsed: 0.5) == .steady)     // 차이가 10%p 안쪽
+        #expect(GaugeMath.pace(percent: 60, elapsed: 0.5) == .steady)     // 경계는 적정
+        #expect(GaugeMath.pace(percent: 96, elapsed: 0.99) == .critical)  // 95% 넘으면 시간과 상관없이
+        #expect(GaugeMath.pace(percent: 12, elapsed: 0.02) == .steady)    // 창이 막 시작했을 때는 판단하지 않음
+        #expect(GaugeMath.pace(percent: 96, elapsed: 0.02) == .critical)
+    }
 }

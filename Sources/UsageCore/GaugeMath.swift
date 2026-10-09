@@ -70,6 +70,22 @@ public enum GaugeMath {
         return min(max(1 - resetsAt.timeIntervalSince(now) / duration, 0), 1)
     }
 
+    /// 시간 대비 사용 속도. 게이지 눈금을 읽지 않아도 한눈에 보이게 한 단어로 줄인다.
+    public enum Pace: Equatable, Sendable {
+        case relaxed, steady, fast, critical
+    }
+
+    /// 지난 시간 비율보다 사용률이 `margin`%p 넘게 앞서면 빠름, 뒤처지면 여유. 95% 이상은 시간과 상관없이 한도 임박.
+    /// 창이 막 시작했을 때(5% 미만)는 몇 번만 써도 빠름이 되어 판단하지 않는다.
+    public static func pace(percent: Double, elapsed: Double, margin: Double = 10) -> Pace {
+        if percent >= 95 { return .critical }
+        if elapsed < 0.05 { return .steady }
+        let lead = percent - elapsed * 100
+        if lead > margin { return .fast }
+        if lead < -margin { return .relaxed }
+        return .steady
+    }
+
     public enum LimitOutlook: Equatable, Sendable {
         /// 리셋 전에 한도에 닿는다. 남은 분.
         case reachesLimit(minutes: Int)
