@@ -1,7 +1,7 @@
-# 🐱 TokenCat
+# 🐱 RunTime
 
 <p align="center">
-  <img src="assets/tokencat-run.gif" width="252" alt="TokenCat — 달리는 러너들">
+  <img src="assets/tokencat-run.gif" width="252" alt="RunTime — 달리는 러너들">
 </p>
 
 > **한 줄 정의**: macOS 메뉴바에서 러너(고양이 등 22종)가 뛰어다니고, Claude(Claude Code) 토큰
@@ -14,7 +14,7 @@
 | **기간**        | 2026.07 (이틀 — 기획안 작성 → M0~M3 → v1.1 → 오픈소스 배포)                          |
 | **스택**        | Swift 5.9 · SwiftUI + AppKit(NSStatusItem) · SPM · macOS 13+                         |
 | **레퍼런스 UX** | RunCat(메뉴바 러너 + 다크 팝오버) × 냥캣(무지개 트레일)                              |
-| **저장소**      | https://github.com/youminki/ClaudeTokenCat (MIT, 소스 배포 — `./install.sh` 한 줄 설치) |
+| **저장소**      | https://github.com/youminki/RunTime (MIT, 소스 배포 — `./install.sh` 한 줄 설치) |
 
 ---
 
@@ -205,7 +205,7 @@
 SPM. 테스트 가능한 코어(`UsageCore` 라이브러리)와 앱 계층 분리.
 
 ```
-TokenCat/
+RunTime/
 ├── Sources/GameCore/           # 미니게임 규칙 (물리·장애물·점수) — 게임 테스트 32개의 대상
 ├── server/leaderboard/         # 미니게임 순위 서버 (Cloudflare Worker + D1, 규칙·통합 테스트)
 ├── Sources/UsageCore/          # 순수 로직 — 단위 테스트 70개의 대상
@@ -370,14 +370,17 @@ Claude Code는 macOS에서 OAuth 토큰을 키체인 항목 `Claude Code-credent
 **설치 (터미널 3줄)** — 로컬 빌드라 Gatekeeper "확인되지 않은 개발자" 차단이 없다:
 
 ```bash
-git clone https://github.com/youminki/ClaudeTokenCat.git
-cd ClaudeTokenCat
+git clone https://github.com/youminki/RunTime.git
+cd RunTime
 ./install.sh     # 서명 identity 준비 → 빌드 → /Applications 설치 → 실행
 ```
 
 - **요구사항**: macOS 13+, Claude Code 로그인, Swift 툴체인(`xcode-select --install`)
 - **첫 실행 (각 1회)**: 키체인 프롬프트에 **[항상 허용]**, 서명 신뢰 등록 암호 1회, 알림 권한
-- **다시 켜기**: Spotlight(`⌘+Space` → TokenCat) / `open -a TokenCat` / 설정의 "로그인 시 자동 시작"
+- **이름 변경**: 앱 이름은 RunTime(옛 이름 TokenCat)이다. 설정·최고 점수·순위 참여 정보가 이어지도록 번들 ID
+  `dev.tokencat.TokenCat`, 데이터 폴더, 소스 타깃 이름은 TokenCat 그대로 둔다. install.sh는 옛 `TokenCat.app`을 지우고,
+  거기서 켜 둔 로그인 시 자동 시작을 새 앱으로 옮기며, 클론의 origin을 새 저장소 주소로 바꾼다.
+- **다시 켜기**: Spotlight(`⌘+Space` → RunTime) / `open -a RunTime` / 설정의 "로그인 시 자동 시작"
 - **업데이트**: 앱이 6시간마다(팝오버를 열 때는 1시간 넘었으면) GitHub의 기본 브랜치에 새 커밋이 있는지 본다.
   있으면 러너가 말풍선으로 알리고, 설정 > 정보의 "지금 업데이트"가 설치한 클론에서 `git pull --ff-only && ./install.sh`를
   앱과 떨어진 프로세스로 돌려 다시 빌드하고 새 버전을 띄운다(로그 `~/Library/Logs/TokenCat/update.log`).
