@@ -59,6 +59,14 @@ private func find(_ query: String) -> [String] {
         #expect(HangulSearch.search("나루토", in: list) { HangulSearch.Target($0.slug, $0.name) }.map(\.slug) == ["naruto"])
     }
 
+    @Test func generatedAliasesMergeWithHandPickedOnes() {
+        // Wikidata로 만든 사전이 들어 있고, 손으로 고른 별칭도 그대로 쓴다
+        #expect(!KoreanAliases.generated.isEmpty)
+        #expect(KoreanAliases.terms["짱구"]?.contains("shinchan") == true)
+        // 괄호 속 동음이의 말은 검색어가 아니다
+        #expect(KoreanAliases.generated["만화"] == nil)
+    }
+
     @Test func keepsExistingBehaviour() {
         #expect(find("망그러진") == ["mangeureojin-gom"])
         #expect(find("home") == ["homelander"])

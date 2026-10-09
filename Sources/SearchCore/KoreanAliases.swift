@@ -1,8 +1,9 @@
 /// 한글 이름 → 영어·로마자 검색어. 소리로는 닿지 않는 이름(영어 이름, 한국에서 따로 부르는 이름)과 흔한 동물·사물.
 /// 값은 Petdex 펫의 slug나 이름에 들어 있는 낱말이다 (소문자). 한 이름을 여러 표기로 적어 둔다.
+/// Wikidata에서 만든 `generated`(scripts/update-aliases.py)에 손으로 고른 `table`을 더한다.
 enum KoreanAliases {
     static let terms: [String: [String]] = {
-        var map: [String: [String]] = [:]
+        var map = generated
         for (names, values) in table {
             for name in names.split(separator: "/") { map[String(name), default: []] += values }
         }
