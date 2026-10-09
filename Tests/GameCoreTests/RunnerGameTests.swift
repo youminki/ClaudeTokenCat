@@ -300,3 +300,66 @@ private func meetings(seed: UInt64, seconds: Double) -> [(time: Double, obstacle
         #expect(apex >= game.tuning.minJumpHeight)
     }
 }
+
+@Suite struct RunnerGameMoveTests {
+    @Test func movesWithinRange() {
+        let game = makeGame(catalog: [])
+        game.press()
+        game.release()
+        game.setMove(forward: true)
+        game.advance(by: 0.25)
+        #expect(game.runnerOffset > 0)
+        game.advance(by: 0.25)
+        game.advance(by: 0.25)
+        game.advance(by: 0.25)
+        #expect(game.runnerOffset == game.tuning.maxAdvance)
+        game.setMove(back: true)
+        game.advance(by: 0.25)
+        #expect(game.runnerOffset == game.tuning.maxAdvance)   // 둘 다 누르면 서 있는다
+        game.setMove(forward: false)
+        for _ in 0..<8 { game.advance(by: 0.25) }
+        #expect(game.runnerOffset == -game.tuning.maxRetreat)
+    }
+
+    @Test func doesNotMoveBeforeStart() {
+        let game = makeGame(catalog: [])
+        game.setMove(forward: true)
+        game.advance(by: 1)
+        #expect(game.runnerOffset == 0)
+    }
+
+    @Test func movingShiftsHitBoxButNotScore() {
+        let still = makeGame(seed: 3)
+        let moving = makeGame(seed: 3)
+        for game in [still, moving] {
+            game.ignoresCollisions = true
+            game.press()
+            game.release()
+        }
+        moving.setMove(forward: true)
+        for _ in 0..<600 {
+            still.advance(by: 1.0 / 120)
+            moving.advance(by: 1.0 / 120)
+        }
+        #expect(moving.runnerBox.minX - still.runnerBox.minX == moving.runnerOffset)
+        #expect(moving.runnerOffset == moving.tuning.maxAdvance)
+        // 코인을 더 먹었을 수 있으니 거리 점수만 비교한다
+        let distanceScore = { (g: RunnerGame) in g.score - g.coinsTaken * g.tuning.coinValue }
+        #expect(distanceScore(moving) == distanceScore(still))
+    }
+
+    @Test func restartReturnsHomeAndReleasesKeys() {
+        let game = makeGame()
+        game.press()
+        game.release()
+        game.setMove(forward: true)
+        for _ in 0..<(60 * 60) where game.phase == .playing { game.advance(by: 1.0 / 60) }
+        #expect(game.phase == .over)
+        #expect(game.runnerOffset > 0)
+        game.advance(by: 1)
+        game.press()
+        #expect(game.phase == .playing)
+        #expect(game.runnerOffset == 0)
+        #expect(game.moveDirection == 0)
+    }
+}

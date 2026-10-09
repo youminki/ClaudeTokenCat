@@ -88,6 +88,11 @@ public final class RunnerGame {
         public var minJumpHeight: Double = 30
         /// 공중에서 숙이기를 누르면 빨리 내려온다.
         public var fastFallGravity: Double = 6200
+        /// ←→로 땅 위에서 앞뒤로 움직이는 속도(pt/초)와 범위. 점수는 거리로만 세서 움직여도 점수 상한은 같다.
+        /// 앞으로 갈수록 장애물을 볼 시간이 줄고, 공중에서 앞으로 밀면 더 길게 넘는다.
+        public var moveSpeed: Double = 170
+        public var maxAdvance: Double = 110
+        public var maxRetreat: Double = 24
         public var startSpeed: Double = 220
         /// 무대 폭(약 290pt 앞까지 보임)에서 장애물을 보고 반응할 시간이 0.6초는 남게 둔다.
         public var maxSpeed: Double = 440
@@ -134,6 +139,10 @@ public final class RunnerGame {
     public private(set) var runnerY: Double = 0
     public private(set) var velocityY: Double = 0
     public private(set) var isOnGround = true
+    /// 시작 자리에서 앞(+)·뒤(-)로 움직인 거리.
+    public private(set) var runnerOffset: Double = 0
+    /// 지금 누르고 있는 방향 (-1 뒤, 0, 1 앞).
+    public var moveDirection: Int { (rightHeld ? 1 : 0) - (leftHeld ? 1 : 0) }
     public private(set) var obstacles: [Obstacle] = []
     public private(set) var coins: [Coin] = []
     public private(set) var coinsTaken = 0
@@ -156,6 +165,8 @@ public final class RunnerGame {
     /// 최소 높이에 닿기 전에 뗀 점프. 닿는 순간 끊는다.
     private var cutPending = false
     private var duckHeld = false
+    private var leftHeld = false
+    private var rightHeld = false
     private var coyote: Double = 0
     private var buffered: Double = 0
     private var nextSpawnX: Double = 0
@@ -226,6 +237,12 @@ public final class RunnerGame {
         if held { buffered = 0 }
     }
 
+    /// ←·→를 누르거나 뗐다. 둘 다 누르면 서 있는다.
+    public func setMove(back: Bool? = nil, forward: Bool? = nil) {
+        if let back { leftHeld = back }
+        if let forward { rightHeld = forward }
+    }
+
     /// 쌓인 일을 꺼내 간다 (그린 뒤 소리·파티클로).
     public func drainEvents() -> [Event] {
         defer { events.removeAll() }
@@ -261,6 +278,7 @@ public final class RunnerGame {
         runnerY = 0
         velocityY = 0
         isOnGround = true
+        runnerOffset = 0
         obstacles = []
         coins = []
         coinsTaken = 0
@@ -271,6 +289,8 @@ public final class RunnerGame {
         overClock = 0
         jumpHeld = false
         cutPending = false
+        leftHeld = false
+        rightHeld = false
         coyote = 0
         buffered = 0
         nextSpawnX = Self.firstSpawn(tuning)
@@ -284,6 +304,8 @@ public final class RunnerGame {
         elapsed += dt
         speed = min(tuning.maxSpeed, speed + tuning.acceleration * dt)
         distance += speed * dt
+        runnerOffset = min(tuning.maxAdvance,
+                           max(-tuning.maxRetreat, runnerOffset + Double(moveDirection) * tuning.moveSpeed * dt))
         for i in obstacles.indices where obstacles[i].kind.approachSpeed > 0 {
             obstacles[i].x -= obstacles[i].kind.approachSpeed * dt
         }
@@ -363,10 +385,11 @@ public final class RunnerGame {
 
     // MARK: 판정
 
-    /// 러너 상자 (세계 좌표). 러너의 왼쪽 끝이 distance에 있다.
+    /// 러너 상자 (세계 좌표). 러너의 왼쪽 끝이 distance + runnerOffset에 있다.
     public var runnerBox: Box {
         let height = isDucking ? runnerHeight * tuning.duckRatio : runnerHeight
-        return Box(minX: distance + 2, maxX: distance + runnerWidth - 2, minY: runnerY, maxY: runnerY + height)
+        let left = distance + runnerOffset
+        return Box(minX: left + 2, maxX: left + runnerWidth - 2, minY: runnerY, maxY: runnerY + height)
     }
 
     public struct Box: Equatable {

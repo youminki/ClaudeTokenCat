@@ -105,6 +105,12 @@ final class GameSession {
             case 125, 1:        // ↓, S
                 self.game.setDuck(down)
                 return nil
+            case 123, 0:        // ←, A
+                self.game.setMove(back: down)
+                return nil
+            case 124, 2:        // →, D
+                self.game.setMove(forward: down)
+                return nil
             case 53:            // esc
                 if down { self.onExit() }
                 return nil
@@ -159,7 +165,7 @@ final class GameSession {
     }
 
     private func handle(_ event: RunnerGame.Event) {
-        let feet = CGPoint(Self.runnerX + Self.runnerWidth / 2, 0)
+        let feet = CGPoint(runnerLeft + Self.runnerWidth / 2, 0)
         switch event {
         case .started:
             restarted()
@@ -185,7 +191,7 @@ final class GameSession {
             play(.hit)
             shake = 1
             flash = 1
-            let center = CGPoint(Self.runnerX + Self.runnerWidth / 2, CGFloat(game.runnerY + Self.runnerHeight / 2))
+            let center = CGPoint(runnerLeft + Self.runnerWidth / 2, CGFloat(game.runnerY + Self.runnerHeight / 2))
             burst(at: center, count: 12, color: .white, speed: 120, life: 0.55, drift: 0)
             if !finished {
                 finished = true
@@ -202,15 +208,16 @@ final class GameSession {
     private func pass(_ rival: Rival) {
         play(.milestone)
         overtaken = (rival.name, 1.6)
-        let center = CGPoint(Self.runnerX + Self.runnerWidth / 2, CGFloat(game.runnerY + Self.runnerHeight))
+        let center = CGPoint(runnerLeft + Self.runnerWidth / 2, CGFloat(game.runnerY + Self.runnerHeight))
         burst(at: center, count: 10, color: NSColor(hex: 0xFFD45E), speed: 90, life: 0.6, drift: 0.4)
     }
 
-    /// 다음 목표 깃발의 화면 x. 그 지점에 닿으면 점수가 목표를 넘는다 (코인을 먹으면 깃발이 당겨진다).
+    /// 다음 목표 깃발의 화면 x. 러너가 닿으면 점수가 목표를 넘는다 (코인을 먹으면 깃발이 당겨진다).
+    /// 점수는 거리로만 세므로 앞뒤로 움직인 만큼 깃발도 같이 옮겨, 러너가 닿는 때와 넘는 때를 맞춘다.
     private func flagX() -> CGFloat? {
         guard game.phase == .playing, let next = tracker.next else { return nil }
         let need = Double(next.score + 1 - game.coinsTaken * game.tuning.coinValue) / game.tuning.scorePerPoint
-        return screenX(need) + CGFloat(Self.runnerWidth) / 2
+        return screenX(need) + CGFloat(game.runnerOffset) + CGFloat(Self.runnerWidth) / 2
     }
 
     // MARK: 화면 효과
@@ -247,6 +254,9 @@ final class GameSession {
     // MARK: 그리기
 
     func screenX(_ worldX: Double) -> CGFloat { Self.runnerX + CGFloat(worldX - game.distance) }
+
+    /// 지금 러너 왼쪽 끝의 화면 x (←→로 움직인 만큼).
+    private var runnerLeft: CGFloat { Self.runnerX + CGFloat(game.runnerOffset) }
 
     /// 무대가 열린 뒤 게임 화면으로 넘어가는 정도 (0~1). 러너가 작아지며 왼쪽으로 간다.
     var entrance: CGFloat {
@@ -364,9 +374,11 @@ final class GameSession {
             // 오를 때 살짝 들고, 내려올 때 숙인다
             frame.transform.rotation = CGFloat(-game.velocityY / game.tuning.jumpVelocity) * 0.12
         case .playing:
-            // 보폭 70pt마다 한 걸음 주기
-            frame = MotionFrame(pose: CharacterPose(activity: .run, phase: CGFloat(game.distance / 70), speed: 1.25))
+            // 보폭 70pt마다 한 걸음 주기. 앞으로 움직이면 발이 빨라지고 몸을 앞으로 기울인다
+            frame = MotionFrame(pose: CharacterPose(activity: .run, phase: CGFloat((game.distance + game.runnerOffset) / 70),
+                                                    speed: 1.25))
             if game.isDucking { frame.transform.squash = 0.6 }
+            frame.transform.rotation = CGFloat(game.moveDirection) * 0.08
         case .over:
             frame = MotionFrame(pose: CharacterPose(activity: .sit, phase: CGFloat(time / 1.1), mouthOpen: true))
             frame.effects = [.dizzyStars(CGFloat(time.truncatingRemainder(dividingBy: 1)))]
@@ -375,7 +387,7 @@ final class GameSession {
         let gameScale = scale(for: rig)
         let e = entrance
         let scale = stageScale + (gameScale - stageScale) * e
-        let center = stageAnchorX + (Self.runnerX + CGFloat(Self.runnerWidth) / 2 - stageAnchorX) * e
+        let center = stageAnchorX + (runnerLeft + CGFloat(Self.runnerWidth) / 2 - stageAnchorX) * e
         let feet = groundY - CGFloat(game.runnerY)
 
         var scene = CharacterScene(rig: rig, pose: frame.pose, transform: frame.transform)
@@ -480,7 +492,7 @@ final class GameSession {
             labels.append(Label(text: Text("스페이스·클릭으로 시작").font(.system(size: 11, weight: .semibold))
                                     .foregroundColor(.white.opacity(0.9)), position: CGPoint(center.x, center.y)))
             let best = game.best > 0 ? "최고 \(game.best)  ·  " : ""
-            labels.append(Label(text: Text("\(best)길게 누르면 높이, ↓ 숙이기").font(small)
+            labels.append(Label(text: Text("\(best)↑ 길게 높이 · ↓ 숙이기 · ←→ 이동").font(small)
                                     .foregroundColor(.white.opacity(0.65)), position: CGPoint(center.x, center.y + 16)))
         case .over:
             let extra: CGFloat = rankLine == nil ? 0 : 14

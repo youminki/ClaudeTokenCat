@@ -54,6 +54,12 @@ enum GameShots {
             try shot("2-play-\(k)")
             if game.phase == .over { break }
         }
+        // →를 눌러 앞으로 나간 모습. 자동 플레이는 앞뒤 이동을 셈하지 않아 마지막에 찍는다
+        if game.phase == .playing {
+            game.setMove(forward: true)
+            step(0.6, autoplay: true)
+            try shot("2-play-forward")
+        }
         // 손을 놓고 부딪히게 둔다
         while game.phase == .playing { step(0.25, autoplay: false) }
         try shot("3-crash")
