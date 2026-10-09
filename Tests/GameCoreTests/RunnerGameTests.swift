@@ -363,3 +363,64 @@ private func meetings(seed: UInt64, seconds: Double) -> [(time: Double, obstacle
         #expect(game.moveDirection == 0)
     }
 }
+
+@Suite struct GhostRunnerTests {
+    /// 사람처럼 들쭉날쭉한 프레임 간격에, 프레임 사이에 키를 넣으며 한 판을 끝까지 한다.
+    private func playOnce(_ game: RunnerGame, seed: UInt64) {
+        var rng = SplitMix64(seed: seed)
+        let pilot = Autopilot(game: game)
+        game.setDuck(true)   // 시작 전부터 누르고 있던 키도 고스트가 따라 해야 한다
+        game.press()
+        game.setDuck(false)
+        for frame in 0..<(60 * 120) where game.phase == .playing {
+            pilot.step()
+            if frame % 47 == 0 { game.setMove(forward: rng.unit() < 0.5) }
+            if frame % 31 == 0 { game.setMove(back: rng.unit() < 0.3) }
+            if frame % 53 == 0 { game.setDuck(rng.unit() < 0.2) }
+            game.advance(by: 1.0 / 60 + (rng.unit() - 0.5) * 0.008)
+        }
+    }
+
+    private func replay(_ game: RunnerGame) -> RunnerGame {
+        let ghost = GhostRunner(tuning: game.tuning, runnerWidth: game.runnerWidth, runnerHeight: game.runnerHeight,
+                                seed: game.seed, inputs: game.inputLog)
+        for _ in 0..<(60 * 180) where ghost.game.phase == .playing { ghost.advance(by: 1.0 / 90) }
+        return ghost.game
+    }
+
+    @Test(arguments: [1, 2, 3] as [UInt64]) func replaysTheSameRun(seed: UInt64) {
+        let game = makeGame(seed: seed)
+        playOnce(game, seed: seed)
+        #expect(game.phase == .over)
+        let ghost = replay(game)
+        #expect(ghost.phase == .over)
+        #expect(ghost.ticks == game.ticks)
+        #expect(ghost.score == game.score)
+        #expect(ghost.coinsTaken == game.coinsTaken)
+        #expect(ghost.runnerOffset == game.runnerOffset)
+    }
+
+    @Test func restartedRunGetsNewSeedAndReplays() {
+        let game = makeGame(seed: 5)
+        playOnce(game, seed: 5)
+        let first = game.seed
+        game.advance(by: 1)
+        playOnce(game, seed: 6)
+        #expect(game.seed != first)
+        #expect(replay(game).score == game.score)
+    }
+
+    @Test func preparedSeedGivesSameCourse() {
+        let a = makeGame(seed: 1)
+        let b = makeGame(seed: 2)
+        a.prepare(seed: 99)
+        b.prepare(seed: 99)
+        for game in [a, b] {
+            game.ignoresCollisions = true
+            game.press()
+            game.advance(by: 5)
+        }
+        #expect(a.obstacles == b.obstacles)
+        #expect(a.coins == b.coins)
+    }
+}

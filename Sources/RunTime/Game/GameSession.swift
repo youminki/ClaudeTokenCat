@@ -62,6 +62,11 @@ final class GameSession {
     /// 방금 앞지른 사람 (배너).
     private var overtaken: (name: String, life: CGFloat)?
     var onExit: () -> Void = {}
+    /// 이 Mac의 최고 판. 고스트와 겨룰 때 같은 코스와 그때 움직임을 다시 돌린다.
+    var savedGhost: GhostRecord?
+    private var ghost: GhostRunner?
+    /// 고스트와 겨루는 판. 코스를 미리 알고 하는 판이라 기록과 순위에 넣지 않는다.
+    private(set) var isRace = false
 
     init(character: RunnerCharacter, live: Bool = true) {
         self.character = character
@@ -70,7 +75,10 @@ final class GameSession {
         tuning.catalog = GameAssets.catalog(runnerHeight: Self.runnerHeight)
         game = RunnerGame(tuning: tuning, runnerWidth: Self.runnerWidth, runnerHeight: Self.runnerHeight,
                           best: live ? GameRecords.best : 0)
-        if live { installKeys() }
+        if live {
+            savedGhost = GhostStore.load(for: game)
+            installKeys()
+        }
     }
 
     deinit {
@@ -83,8 +91,30 @@ final class GameSession {
 
     func press() {
         let wasOver = game.phase == .over
+        if game.phase != .playing {
+            isRace = false
+            ghost = nil
+        }
         game.press()
         if wasOver, game.phase == .playing { restarted() }
+    }
+
+    /// 최고 판과 같은 코스에서 그 판의 고스트와 함께 달린다.
+    func startRace() {
+        guard let record = savedGhost, let seed = record.seedValue, game.phase != .playing else { return }
+        game.prepare(seed: seed)
+        guard game.phase == .ready else { return }   // 부딪힌 직전이라 아직 다시 시작할 수 없음
+        ghost = GhostRunner(tuning: game.tuning, runnerWidth: Self.runnerWidth, runnerHeight: Self.runnerHeight,
+                            seed: seed, inputs: record.inputs)
+        isRace = true
+        game.press()
+        game.release()
+    }
+
+    /// 지금 점수에서 고스트 판의 최종 점수를 뺀 값 (겨루는 중에만). 넘으면 이긴다.
+    var raceLead: Int? {
+        guard isRace, let savedGhost else { return nil }
+        return game.score - savedGhost.score
     }
 
     func release() { game.release() }
@@ -111,6 +141,9 @@ final class GameSession {
             case 124, 2:        // →, D
                 self.game.setMove(forward: down)
                 return nil
+            case 5 where self.game.phase != .playing && self.savedGhost != nil:   // G
+                if down, !event.isARepeat { self.startRace() }
+                return nil
             case 53:            // esc
                 if down { self.onExit() }
                 return nil
@@ -124,7 +157,7 @@ final class GameSession {
         finished = false
         rankLine = nil
         runID += 1
-        tracker = RivalTracker(rivals: rivalSource())
+        tracker = RivalTracker(rivals: isRace ? [] : rivalSource())
         overtaken = nil
         particles.removeAll()
         popups.removeAll()
@@ -139,6 +172,7 @@ final class GameSession {
         lastDate = date
         clock += dt
         game.advance(by: dt)
+        ghost?.advance(by: dt)
         for event in game.drainEvents() { handle(event) }
         if game.phase == .playing {
             for rival in tracker.update(score: game.score) { pass(rival) }
@@ -184,18 +218,23 @@ final class GameSession {
         case .milestone:
             play(.milestone)
             milestoneGlow = 1
-        case .newRecord:
+        case .newRecord where !isRace:
             play(.record)
             recordBanner = 1
+        case .newRecord:
+            break
         case .crashed:
             play(.hit)
             shake = 1
             flash = 1
             let center = CGPoint(runnerLeft + Self.runnerWidth / 2, CGFloat(game.runnerY + Self.runnerHeight / 2))
             burst(at: center, count: 12, color: .white, speed: 120, life: 0.55, drift: 0)
-            if !finished {
+            if !finished, !isRace {
                 finished = true
-                if live { GameRecords.finish(score: game.score) }
+                if live {
+                    GameRecords.finish(score: game.score)
+                    if game.score > savedGhost?.score ?? 0, let record = GhostStore.save(game) { savedGhost = record }
+                }
                 onFinish(game)
             }
         }
@@ -329,7 +368,20 @@ final class GameSession {
             cg.fillPath()
         }
 
-        drawRunner(cg, groundY: groundY, stageAnchorX: stageAnchorX, stageScale: stageScale, theme: theme, time: time)
+        if let ghost = ghost?.game {
+            let left = Self.runnerX + CGFloat(ghost.distance + ghost.runnerOffset - game.distance)
+            if left > -60, left < size.width + 20 {
+                cg.saveGState()
+                cg.setAlpha(0.38)
+                cg.beginTransparencyLayer(auxiliaryInfo: nil)
+                drawRunner(cg, ghost, left: left, groundY: groundY, stageAnchorX: stageAnchorX, stageScale: stageScale,
+                           theme: theme, time: time)
+                cg.endTransparencyLayer()
+                cg.restoreGState()
+            }
+        }
+        drawRunner(cg, game, left: runnerLeft, groundY: groundY, stageAnchorX: stageAnchorX, stageScale: stageScale,
+                   theme: theme, time: time)
 
         // 파티클
         for p in particles {
@@ -362,8 +414,9 @@ final class GameSession {
         }
     }
 
-    private func drawRunner(_ cg: CGContext, groundY: CGFloat, stageAnchorX: CGFloat, stageScale: CGFloat,
-                            theme: SpriteTheme, time: Double) {
+    /// 러너 하나 (내 러너 또는 고스트). 무대에서 게임으로 넘어가는 움직임은 내 러너에만 준다.
+    private func drawRunner(_ cg: CGContext, _ game: RunnerGame, left: CGFloat, groundY: CGFloat, stageAnchorX: CGFloat,
+                            stageScale: CGFloat, theme: SpriteTheme, time: Double) {
         let rig = character.rig
         var frame: MotionFrame
         switch game.phase {
@@ -385,9 +438,9 @@ final class GameSession {
         }
 
         let gameScale = scale(for: rig)
-        let e = entrance
+        let e = game === self.game ? entrance : 1
         let scale = stageScale + (gameScale - stageScale) * e
-        let center = stageAnchorX + (runnerLeft + CGFloat(Self.runnerWidth) / 2 - stageAnchorX) * e
+        let center = stageAnchorX + (left + CGFloat(Self.runnerWidth) / 2 - stageAnchorX) * e
         let feet = groundY - CGFloat(game.runnerY)
 
         var scene = CharacterScene(rig: rig, pose: frame.pose, transform: frame.transform)
@@ -472,6 +525,11 @@ final class GameSession {
                                     position: CGPoint(x + 8, size.height - 15 - 56)))
             }
         }
+        if game.phase == .playing, let lead = raceLead, let savedGhost {
+            let text = lead > 0 ? "고스트 추월! +\(lead)" : "고스트 \(savedGhost.score) (-\(1 - lead))"
+            labels.append(Label(text: Text(text).font(small).foregroundColor(lead > 0 ? gold : .white.opacity(0.85)),
+                                position: CGPoint(size.width / 2, 12)))
+        }
         if let overtaken, game.phase == .playing {
             labels.append(Label(text: Text("\(overtaken.name) 추월!").font(.system(size: 14, weight: .heavy, design: .rounded))
                                     .foregroundColor(gold.opacity(Double(min(1, overtaken.life * 2)))),
@@ -484,9 +542,14 @@ final class GameSession {
         }
 
         let center = CGPoint(size.width / 2, size.height / 2 - 12)
+        let ghostLine: Label? = savedGhost.map {
+            Label(text: Text("G  고스트와 겨루기 (\($0.score)점 판)").font(small).foregroundColor(gold.opacity(0.9)),
+                  position: .zero)
+        }
         switch game.phase {
         case .ready where entrance >= 1:
-            panels.append(Panel(rect: CGRect(x: center.x - 112, y: center.y - 34, width: 224, height: 62)))
+            let extra: CGFloat = ghostLine == nil ? 0 : 14
+            panels.append(Panel(rect: CGRect(x: center.x - 112, y: center.y - 34, width: 224, height: 62 + extra)))
             labels.append(Label(text: Text("토큰 러너").font(.system(size: 14, weight: .heavy, design: .rounded))
                                     .foregroundColor(.white), position: CGPoint(center.x, center.y - 18)))
             labels.append(Label(text: Text("스페이스·클릭으로 시작").font(.system(size: 11, weight: .semibold))
@@ -494,21 +557,31 @@ final class GameSession {
             let best = game.best > 0 ? "최고 \(game.best)  ·  " : ""
             labels.append(Label(text: Text("\(best)↑ 길게 높이 · ↓ 숙이기 · ←→ 이동").font(small)
                                     .foregroundColor(.white.opacity(0.65)), position: CGPoint(center.x, center.y + 16)))
+            if let ghostLine { labels.append(Label(text: ghostLine.text, position: CGPoint(center.x, center.y + 30))) }
         case .over:
-            let extra: CGFloat = rankLine == nil ? 0 : 14
+            // 겨루는 판은 순위 대신 고스트와의 차이를 보여 준다
+            let raceLine = raceLead.map { lead in
+                lead > 0 ? "고스트보다 \(lead)점 앞섬 · 기록에는 남지 않음" : "고스트까지 \(-lead + 1)점 모자람"
+            }
+            let middle = raceLine ?? rankLine
+            let extra: CGFloat = (middle == nil ? 0 : 14) + (ghostLine == nil ? 0 : 14)
             panels.append(Panel(rect: CGRect(x: center.x - 112, y: center.y - 34, width: 224, height: 66 + extra)))
-            let title = game.isNewRecord ? "신기록!" : "앗, 부딪혔다"
+            let won = (raceLead ?? 0) > 0
+            let title = isRace ? (won ? "고스트를 이겼다!" : "고스트에게 졌다")
+                : game.isNewRecord ? "신기록!" : "앗, 부딪혔다"
             labels.append(Label(text: Text(title).font(.system(size: 13, weight: .heavy, design: .rounded))
-                                    .foregroundColor(game.isNewRecord ? gold : .white),
+                                    .foregroundColor(won || (!isRace && game.isNewRecord) ? gold : .white),
                                 position: CGPoint(center.x, center.y - 19)))
             labels.append(Label(text: Text("\(game.score)점").font(.system(size: 20, weight: .heavy, design: .rounded).monospacedDigit())
                                     .foregroundColor(.white), position: CGPoint(center.x, center.y + 1)))
-            if let rankLine {
-                labels.append(Label(text: Text(rankLine).font(small.weight(.semibold)).foregroundColor(gold),
+            if let middle {
+                labels.append(Label(text: Text(middle).font(small.weight(.semibold)).foregroundColor(gold),
                                     position: CGPoint(center.x, center.y + 20)))
             }
-            labels.append(Label(text: Text("최고 \(game.best)  ·  스페이스·클릭으로 다시").font(small)
-                                    .foregroundColor(.white.opacity(0.7)), position: CGPoint(center.x, center.y + 21 + extra)))
+            let bottom = center.y + 21 + (middle == nil ? 0 : 14)
+            labels.append(Label(text: Text("최고 \(game.best)  ·  스페이스·클릭으로 새 판").font(small)
+                                    .foregroundColor(.white.opacity(0.7)), position: CGPoint(center.x, bottom)))
+            if let ghostLine { labels.append(Label(text: ghostLine.text, position: CGPoint(center.x, bottom + 14))) }
         default:
             break
         }

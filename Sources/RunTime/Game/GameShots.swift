@@ -65,6 +65,20 @@ enum GameShots {
         try shot("3-crash")
         step(0.6, autoplay: false)
         try shot("4-over")
+
+        // 방금 판을 고스트로 두고 겨룬다. 같은 자동 플레이에 앞으로 조금 나가 고스트와 겹치지 않게 한다
+        session.savedGhost = GhostRecord(seed: String(game.seed), score: game.score, layout: GhostStore.layout(of: game),
+                                         inputs: game.inputLog)
+        try shot("5-over-ghost")
+        session.startRace()
+        game.setMove(forward: true)
+        step(0.4, autoplay: true)
+        game.setMove(forward: false)
+        step(2.6, autoplay: true)
+        try shot("6-race")
+        while game.phase == .playing { step(0.25, autoplay: false) }
+        step(0.6, autoplay: false)
+        try shot("7-race-over")
         print("score \(game.score), coins \(game.coinsTaken), \(String(format: "%.1f", game.elapsed))s, speed \(Int(game.speed))")
     }
 }

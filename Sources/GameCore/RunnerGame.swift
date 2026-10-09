@@ -79,6 +79,23 @@ public final class RunnerGame {
         public internal(set) var taken = false
     }
 
+    /// 판에 들어온 입력. 같은 씨앗에 같은 틱으로 다시 넣으면 같은 판이 나온다 (고스트).
+    public enum Input: Equatable, Codable {
+        case press, release
+        case duck(Bool), back(Bool), forward(Bool)
+    }
+
+    public struct InputRecord: Equatable, Codable {
+        /// 이 입력 뒤에 처음 진행한 틱 번호.
+        public let tick: Int
+        public let input: Input
+
+        public init(tick: Int, input: Input) {
+            self.tick = tick
+            self.input = input
+        }
+    }
+
     public struct Tuning {
         public var gravity: Double = 2400
         public var jumpVelocity: Double = 560
@@ -132,6 +149,14 @@ public final class RunnerGame {
     public let runnerHeight: Double
 
     public private(set) var phase: Phase = .ready
+    /// 이번 판의 씨앗. 새 판마다 바뀐다.
+    public private(set) var seed: UInt64
+    /// 이번 판에 들어온 입력. 시작할 때 누르고 있던 키부터 담는다.
+    public private(set) var inputLog: [InputRecord] = []
+    /// 판이 시작된 뒤 진행한 고정 간격 수.
+    public private(set) var ticks = 0
+    /// 틱마다 진행하기 직전에 부른다 (고스트가 그 틱의 입력을 넣는다).
+    public var beforeTick: ((Int) -> Void)?
     public private(set) var distance: Double = 0
     public private(set) var speed: Double
     /// 판이 시작된 뒤 흐른 시간. 부딪히면 멈춘다.
@@ -193,6 +218,7 @@ public final class RunnerGame {
         self.best = best
         bestAtStart = best
         speed = tuning.startSpeed
+        self.seed = seed
         random = SplitMix64(seed: seed)
         nextSpawnX = Self.firstSpawn(tuning)
     }
@@ -203,24 +229,53 @@ public final class RunnerGame {
     // MARK: 입력
 
     /// 점프 키를 눌렀다. 대기 중이면 시작하며 뛰고, 끝났으면 잠깐 뒤부터 새 판을 연다.
+    /// 다시 시작할 때도 처음 시작처럼 뛰어서, 고스트는 어느 판이든 같은 입력 하나로 시작한다.
     public func press() {
         switch phase {
         case .ready:
             start()
-            jumpHeld = true
-            buffered = tuning.jumpBuffer
         case .playing:
-            jumpHeld = true
-            buffered = tuning.jumpBuffer
+            break
         case .over:
             guard overClock >= tuning.restartDelay else { return }
             reset()
             start()
         }
+        jumpHeld = true
+        buffered = tuning.jumpBuffer
+        record(.press)
+    }
+
+    /// 끝난 판을 치우고 이 씨앗으로 다음 판을 준비한다 (고스트와 같은 코스).
+    public func prepare(seed: UInt64) {
+        guard phase != .playing else { return }
+        if phase == .over {
+            guard overClock >= tuning.restartDelay else { return }
+            reset()
+        }
+        self.seed = seed
+        random = SplitMix64(seed: seed)
+    }
+
+    /// 기록해 둔 입력을 다시 넣는다.
+    public func apply(_ input: Input) {
+        switch input {
+        case .press: press()
+        case .release: release()
+        case .duck(let held): setDuck(held)
+        case .back(let held): setMove(back: held)
+        case .forward(let held): setMove(forward: held)
+        }
+    }
+
+    private func record(_ input: Input) {
+        guard phase == .playing else { return }
+        inputLog.append(InputRecord(tick: ticks, input: input))
     }
 
     /// 점프 키를 뗐다. 오르는 중이면 짧게 끊는다.
     public func release() {
+        record(.release)
         jumpHeld = false
         cutPending = !isOnGround || buffered > 0
         cutJumpIfHighEnough()
@@ -233,14 +288,21 @@ public final class RunnerGame {
     }
 
     public func setDuck(_ held: Bool) {
+        if held || held != duckHeld { record(.duck(held)) }   // 누르고 있는 동안 반복 입력도 점프 예약을 지운다
         duckHeld = held
         if held { buffered = 0 }
     }
 
     /// ←·→를 누르거나 뗐다. 둘 다 누르면 서 있는다.
     public func setMove(back: Bool? = nil, forward: Bool? = nil) {
-        if let back { leftHeld = back }
-        if let forward { rightHeld = forward }
+        if let back, back != leftHeld {
+            record(.back(back))
+            leftHeld = back
+        }
+        if let forward, forward != rightHeld {
+            record(.forward(forward))
+            rightHeld = forward
+        }
     }
 
     /// 쌓인 일을 꺼내 간다 (그린 뒤 소리·파티클로).
@@ -260,18 +322,28 @@ public final class RunnerGame {
         guard phase == .playing else { return }
         accumulator += min(max(0, seconds), 0.25)
         while accumulator >= Self.step, phase == .playing {
+            beforeTick?(ticks)
+            guard phase == .playing else { break }
             tick(Self.step)
             accumulator -= Self.step
         }
     }
 
+    /// 판을 연다. 시작 전부터 누르고 있던 키를 입력 기록 맨 앞에 둔다.
     private func start() {
         phase = .playing
+        inputLog = []
+        if duckHeld { record(.duck(true)) }
+        if leftHeld { record(.back(true)) }
+        if rightHeld { record(.forward(true)) }
         events.append(.started)
     }
 
     private func reset() {
         phase = .ready
+        seed = random.next()
+        random = SplitMix64(seed: seed)
+        ticks = 0
         distance = 0
         speed = tuning.startSpeed
         elapsed = 0
@@ -301,6 +373,7 @@ public final class RunnerGame {
     }
 
     private func tick(_ dt: Double) {
+        ticks += 1
         elapsed += dt
         speed = min(tuning.maxSpeed, speed + tuning.acceleration * dt)
         distance += speed * dt
