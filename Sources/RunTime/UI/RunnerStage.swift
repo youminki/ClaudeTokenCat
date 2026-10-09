@@ -230,9 +230,14 @@ final class StageModel: ObservableObject {
             guard !rehearsal, let run = session?.runID else { return }
             // 판 사이에 미뤄 둔 순위 소식
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self?.deliverNews() }
+            // 다음 판이 game을 다시 쓰므로 고스트는 지금 떠 둔다
+            let ghost = GhostStore.record(of: game, runner: AppSettings.shared.shareableRunnerID)
             Leaderboard.shared.submit(game) { result in
                 // 올린 결과로 1위가 됐는지, 라이벌이 바뀌었는지 바로 다시 본다
-                if case .success = result { LeaderboardFeed.shared.refresh() }
+                if case .success(let rank) = result {
+                    LeaderboardFeed.shared.refresh()
+                    if rank.best == ghost.score { Leaderboard.shared.uploadGhost(ghost) }
+                }
                 guard let session, session.runID == run else { return }
                 switch result {
                 case .success(let rank): session.rankLine = "전체 \(rank.rank)위 · \(rank.total)명"

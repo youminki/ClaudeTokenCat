@@ -87,7 +87,27 @@ const twin = randomUUID();
 const both = await Promise.all([1, 2].map(() => call("POST", "/v1/runs", { player: twin, nickname: `twin${tag}`, ...honest(15, 3) })));
 assert.deepEqual(both.map((x) => x.status).sort(), [200, 429]);
 
+// 고스트: 순위 점수와 같은 판만 받고, 1위 고스트에는 설치 ID 대신 키가 나간다
+const ghost = { seed: "12345678901234567890", inputs: "eJyLjgUAARUAuQ==", layout: "e2e", runner: "cat" };
+r = await call("POST", "/v1/ghosts", { player: a, score: bestA + 1, ...ghost });
+assert.equal(r.status, 409, "최고 기록이 아닌 점수는 거절");
+r = await call("POST", "/v1/ghosts", { player: a, score: bestA, ...ghost, inputs: "<x>" });
+assert.equal(r.status, 400);
+r = await call("POST", "/v1/ghosts", { player: a, score: bestA, ...ghost });
+assert.equal(r.status, 200, JSON.stringify(r.body));
+r = await call("GET", "/v1/ghosts/top");
+assert.equal(r.status, 200);
+assert.equal(r.body.ghost.score, bestA);
+assert.equal(r.body.ghost.rank, 1);
+assert.equal(r.body.ghost.key, keyA);
+assert.equal(r.body.ghost.seed, ghost.seed, "씨앗은 글자 그대로");
+assert.ok(!JSON.stringify(r.body).includes(a), "설치 ID는 나가지 않는다");
+r = await call("POST", "/v1/ghosts", { player: a, score: bestA, ...ghost, inputs: "A".repeat(60 * 1024) });
+assert.equal(r.status, 413, "너무 큰 고스트는 끊는다");
+
 for (const id of [a, b, twin]) assert.equal((await call("DELETE", `/v1/players/${id}`)).status, 200);
+r = await call("GET", "/v1/ghosts/top");
+assert.notEqual(r.body.ghost?.key, keyA, "기록을 지우면 고스트도 지운다");
 r = await call("GET", "/v1/leaderboard?limit=100", undefined, a);
 assert.equal(r.body.you, null, "지운 기록은 순위표에서 빠진다");
 

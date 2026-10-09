@@ -181,6 +181,35 @@ final class Leaderboard: ObservableObject {
         return true
     }
 
+    /// 순위에 오른 최고 판의 고스트를 올린다. 서버는 순위 점수와 같은 판만 받는다.
+    /// 고스트를 받지 않는 옛 서버면 404가 오는데, 순위에는 영향이 없어 무시한다.
+    func uploadGhost(_ record: GhostRecord) {
+        guard canSubmit, let inputs = GhostStore.packInputs(record.inputs) else { return }
+        var body: [String: Any] = ["player": playerID, "score": record.score, "seed": record.seed,
+                                   "inputs": inputs, "layout": record.layout]
+        if let runner = record.runner { body["runner"] = runner }
+        struct Saved: Decodable { let saved: Bool }
+        request("POST", "v1/ghosts", body: body) { (_: Result<Saved, Failure>) in }
+    }
+
+    struct RemoteGhost: Decodable {
+        let nickname: String
+        let score: Int
+        let rank: Int
+        let seed: String
+        let inputs: String
+        let layout: String
+        let runner: String?
+    }
+
+    /// 1위 고스트. 서버에 고스트가 없으면 nil. 공개 정보라 설치 ID를 보내지 않는다.
+    func fetchTopGhost(completion: @escaping (Result<RemoteGhost?, Failure>) -> Void) {
+        struct Response: Decodable { let ghost: RemoteGhost? }
+        request("GET", "v1/ghosts/top", identify: false) { (result: Result<Response, Failure>) in
+            completion(result.map(\.ghost))
+        }
+    }
+
     func fetch(_ period: Period, completion: @escaping (Result<Board, Failure>) -> Void) {
         request("GET", "v1/leaderboard?period=\(period.rawValue)&limit=50", identify: isOn, completion: completion)
     }

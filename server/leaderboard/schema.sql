@@ -37,3 +37,14 @@ CREATE TABLE IF NOT EXISTS public_cache (
 );
 
 CREATE INDEX IF NOT EXISTS runs_player ON runs (player_id, created_at);
+
+-- 사람마다 최고 기록 판의 고스트 하나 (씨앗과 압축한 입력). 1위 고스트로 보여 준다.
+CREATE TABLE IF NOT EXISTS ghosts (
+  player_id TEXT PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
+  score INTEGER NOT NULL,
+  seed TEXT NOT NULL,
+  inputs TEXT NOT NULL,
+  layout TEXT NOT NULL,
+  runner TEXT,
+  created_at INTEGER NOT NULL
+);

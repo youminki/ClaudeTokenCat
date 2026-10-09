@@ -3,10 +3,12 @@
 //   GET    /v1/leaderboard          순위표 (?period=all|week, ?limit). 내 줄은 X-Player 헤더로 찾는다.
 //   GET    /v1/summary              앱이 주기적으로 받는 요약: 전체·이번 주 1위, 내 순위, 라이벌 점수
 // 공개 순위와 요약은 public_cache에 30초 담아 두어, 앱이 많아도 D1 읽기가 사람 수에 비례해 늘지 않게 했다.
+//   POST   /v1/ghosts               내 최고 기록 판의 고스트 올리기 (순위 점수와 같은 점수일 때만)
+//   GET    /v1/ghosts/top           1위 고스트 (고스트를 올린 사람 가운데 가장 높은 점수)
 //   PUT    /v1/players/:id          닉네임 바꾸기
 //   DELETE /v1/players/:id          내 기록 지우기
 // 매일 한 번(예약 작업) 주간 순위에 쓰지 않는 오래된 판과 제출 횟수 기록을 지운다.
-import { checkRun, cleanNickname, isPlayerID, SUBMIT_INTERVAL_MS, SUBMITS_PER_MINUTE } from "./rules.js";
+import { checkRun, cleanGhost, cleanNickname, isPlayerID, MAX_GHOST_INPUTS, SUBMIT_INTERVAL_MS, SUBMITS_PER_MINUTE } from "./rules.js";
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_BODY = 2048;
@@ -18,6 +20,8 @@ export default {
       if (request.method === "POST" && url.pathname === "/v1/runs") return await submitRun(request, env);
       if (request.method === "GET" && url.pathname === "/v1/leaderboard") return await leaderboard(request, url, env);
       if (request.method === "GET" && url.pathname === "/v1/summary") return await summary(request, env);
+      if (request.method === "POST" && url.pathname === "/v1/ghosts") return await submitGhost(request, env);
+      if (request.method === "GET" && url.pathname === "/v1/ghosts/top") return await topGhost(env);
       const player = url.pathname.match(/^\/v1\/players\/([^/]+)$/)?.[1];
       if (player && request.method === "PUT") return await rename(player, request, env);
       if (player && request.method === "DELETE") return await forget(player, env);
@@ -48,8 +52,8 @@ function json(body, status = 200) {
   });
 }
 
-/// 헤더를 믿지 않고 읽은 만큼 세어 MAX_BODY를 넘으면 끊는다.
-async function readJSON(request) {
+/// 헤더를 믿지 않고 읽은 만큼 세어 limit을 넘으면 끊는다.
+async function readJSON(request, limit = MAX_BODY) {
   if (!request.body) return null;
   const reader = request.body.getReader();
   const chunks = [];
@@ -58,7 +62,7 @@ async function readJSON(request) {
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > MAX_BODY) {
+    if (size > limit) {
       await reader.cancel();
       throw new TooLarge();
     }
@@ -256,6 +260,41 @@ async function summary(request, env) {
   });
 }
 
+async function submitGhost(request, env) {
+  const body = await readJSON(request, MAX_GHOST_INPUTS + 8 * 1024);
+  const player = body?.player;
+  if (!isPlayerID(player)) return json({ error: "bad player" }, 400);
+  const ghost = cleanGhost(body);
+  if (!ghost) return json({ error: "bad ghost" }, 400);
+  const now = Date.now();
+  // 순위에 오른 점수와 같은 판만 자기 줄에 받아, 순위표의 점수와 고스트가 어긋나지 않게 한다.
+  // 판 올리기를 통과해야 쓸 수 있어 IP 제한은 따로 걸지 않는다 (걸면 판 하나가 두 번 세어진다).
+  const result = await env.DB.prepare(
+    `INSERT INTO ghosts (player_id, score, seed, inputs, layout, runner, created_at)
+     SELECT id, ?2, ?3, ?4, ?5, ?6, ?7 FROM players WHERE id = ?1 AND best = ?2
+     ON CONFLICT(player_id) DO UPDATE SET score = ?2, seed = ?3, inputs = ?4, layout = ?5, runner = ?6, created_at = ?7`,
+  ).bind(player, ghost.score, ghost.seed, ghost.inputs, ghost.layout, ghost.runner, now).run();
+  if (result.meta.changes === 0) return json({ error: "not your best" }, 409);
+  await invalidate(env);
+  return json({ saved: true });
+}
+
+/// 최고 점수 그대로인 고스트 가운데 가장 높은 것. 1위가 고스트를 올리지 않았으면 그다음 사람 것이고, rank로 알린다.
+async function topGhost(env) {
+  const ghost = await cached(env, "ghost:top", PUBLIC_TTL, async () => {
+    const row = await env.DB.prepare(
+      `SELECT p.id, p.nickname, g.score, g.seed, g.inputs, g.layout, g.runner,
+              (SELECT COUNT(*) FROM players q WHERE q.best > g.score) + 1 AS rank
+       FROM ghosts g JOIN players p ON p.id = g.player_id
+       WHERE g.score = p.best ORDER BY g.score DESC, p.best_at ASC LIMIT 1`,
+    ).first();
+    if (!row) return null;
+    const { id, ...rest } = row;
+    return { ...rest, key: await playerKey(id) };
+  });
+  return json({ ghost });
+}
+
 async function rename(player, request, env) {
   if (!isPlayerID(player)) return json({ error: "bad player" }, 400);
   const nickname = cleanNickname((await readJSON(request))?.nickname);
@@ -269,6 +308,7 @@ async function forget(player, env) {
   if (!isPlayerID(player)) return json({ error: "bad player" }, 400);
   await env.DB.batch([
     env.DB.prepare("DELETE FROM runs WHERE player_id = ?").bind(player),
+    env.DB.prepare("DELETE FROM ghosts WHERE player_id = ?").bind(player),
     env.DB.prepare("DELETE FROM players WHERE id = ?").bind(player),
   ]);
   await invalidate(env);

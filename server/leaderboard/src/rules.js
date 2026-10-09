@@ -67,3 +67,19 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function isPlayerID(raw) {
   return typeof raw === "string" && UUID.test(raw);
 }
+
+/// 고스트 본문 상한. 입력 기록을 압축한 base64라 몇 분짜리 판도 수십 KB 안이다.
+export const MAX_GHOST_INPUTS = 48 * 1024;
+
+/// 1위 고스트로 보여 줄 판. 서버는 판을 다시 돌릴 수 없어 모양만 보고, 앱이 받아서 끝까지 돌려 본 점수가
+/// 순위 점수와 같을 때만 보여 준다. 러너는 기본 러너 이름이나 Petdex 펫("petdex:slug")만 받는다.
+export function cleanGhost(body) {
+  if (!body || typeof body !== "object") return null;
+  const { score, seed, inputs, layout, runner } = body;
+  if (!Number.isInteger(score) || score <= 0 || score > MAX_SCORE) return null;
+  if (typeof seed !== "string" || !/^\d{1,20}$/.test(seed)) return null;
+  if (typeof inputs !== "string" || inputs.length > MAX_GHOST_INPUTS || !/^[A-Za-z0-9+/=]+$/.test(inputs)) return null;
+  if (typeof layout !== "string" || layout.length > 4000) return null;
+  const cleanRunner = typeof runner === "string" && /^[a-z0-9][a-z0-9:_.-]{0,63}$/i.test(runner) ? runner : null;
+  return { score, seed, inputs, layout, runner: cleanRunner };
+}

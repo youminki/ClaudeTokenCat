@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checkRun, cleanNickname, isPlayerID, maxDistance, RULES } from "../src/rules.js";
+import { checkRun, cleanGhost, cleanNickname, isPlayerID, MAX_GHOST_INPUTS, maxDistance, RULES } from "../src/rules.js";
 
 // Sources/GameCore/RunnerGame.swift의 Tuning 기본값과 같아야 한다 (Swift 쪽 LeaderboardRulesTests도 같은 숫자를 본다)
 test("rules v1 match the game tuning", () => {
@@ -55,4 +55,17 @@ test("nicknames are trimmed and limited", () => {
 test("player ids must be UUIDs", () => {
   assert.ok(isPlayerID("0F8FAD5B-D9CB-469F-A165-70867728950E"));
   assert.ok(!isPlayerID("../../etc"));
+});
+
+test("ghost bodies are checked for shape and size", () => {
+  const ok = { score: 640, seed: "18446744073709551615", inputs: "eJyLjgUAARUAuQ==", layout: "1 24.0x40.0 Tuning()", runner: "cat" };
+  assert.deepEqual(cleanGhost(ok), ok);
+  assert.equal(cleanGhost({ ...ok, runner: "petdex:shin-chan" }).runner, "petdex:shin-chan");
+  assert.equal(cleanGhost({ ...ok, runner: "../../etc" }).runner, null, "이상한 러너 이름은 버리고 고스트는 받는다");
+  assert.equal(cleanGhost({ ...ok, seed: "-1" }), null);
+  assert.equal(cleanGhost({ ...ok, seed: 12 }), null);
+  assert.equal(cleanGhost({ ...ok, score: 0 }), null);
+  assert.equal(cleanGhost({ ...ok, inputs: "<script>" }), null);
+  assert.equal(cleanGhost({ ...ok, inputs: "A".repeat(MAX_GHOST_INPUTS + 1) }), null);
+  assert.equal(cleanGhost(null), null);
 });

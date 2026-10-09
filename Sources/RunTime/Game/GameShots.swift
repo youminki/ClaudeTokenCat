@@ -74,19 +74,18 @@ enum GameShots {
         try shot("4-over")
 
         // 방금 판을 고스트로 두고 겨룬다. 같은 자동 플레이에 앞으로 조금 나가 고스트와 겹치지 않게 한다
-        session.savedGhost = GhostRecord(seed: String(game.seed), score: game.score, layout: GhostStore.layout(of: game),
-                                         inputs: game.inputLog)
+        // 고스트는 그 판을 달린 러너 모습이어야 한다 (내 러너와 다르게 용으로)
+        session.savedGhost = GhostStore.record(of: game, runner: Runner.dragon.rawValue)
+        let packed = GhostStore.packInputs(game.inputLog) ?? ""
+        let unpacked = GhostStore.unpackInputs(packed) ?? []
+        let ok = GhostStore.verified(session.savedGhost!, tuning: game.tuning, runnerWidth: game.runnerWidth,
+                                     runnerHeight: game.runnerHeight)
+        var forged = session.savedGhost!
+        forged = GhostRecord(seed: forged.seed, score: forged.score + 500, layout: forged.layout, inputs: forged.inputs)
+        let forgedOK = GhostStore.verified(forged, tuning: game.tuning, runnerWidth: game.runnerWidth,
+                                           runnerHeight: game.runnerHeight)
+        print("ghost inputs \(game.inputLog.count)개 → \(packed.count)자, 되풀기 \(unpacked == game.inputLog), 확인 \(ok), 부풀린 점수 \(forgedOK)")
         try shot("5-over-ghost")
-        // 고스트 코드를 만들어 다시 읽는다. 적힌 점수를 부풀려도 돌려 본 점수로 바뀌어야 한다
-        var inflated = session.savedGhost!
-        inflated = GhostRecord(seed: inflated.seed, score: 99_999, layout: inflated.layout, inputs: inflated.inputs)
-        let code = GhostStore.code(for: inflated, name: "친구") ?? ""
-        let started = Date()
-        let read = GhostStore.readCode(code, for: game)
-        print("ghost code \(code.count)자, 확인 \(Int(Date().timeIntervalSince(started) * 1000))ms, 점수 \((try? read.get())?.score ?? -1) (원래 \(game.score))")
-        print("garbage: \(GhostStore.readCode("RUNTIME-GHOST:abc", for: game))")
-        if case .success(let friend) = read { session.challenge = friend }
-        try shot("5b-over-friend")
         session.startRace(session.savedGhost)
         game.setMove(forward: true)
         step(0.4, autoplay: true)
