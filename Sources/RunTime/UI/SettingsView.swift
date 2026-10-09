@@ -232,7 +232,8 @@ struct SettingsView: View {
     private static var versionText: String {
         let info = Bundle.main.infoDictionary
         guard let version = info?["CFBundleShortVersionString"] as? String else { return "개발 실행" }
-        return (info?["RunTimeCommit"] as? String).map { "\(version) (\($0))" } ?? version
+        let build = (info?["CFBundleVersion"] as? String).map { " · 빌드 \($0)" } ?? ""
+        return (info?["RunTimeCommit"] as? String).map { "\(version)\(build) (\($0))" } ?? version + build
     }
 
     private var officialStatusText: String {
@@ -277,6 +278,14 @@ private struct UpdateRows: View {
             }
         }
         .help(helpText)
+        // 받을 변경을 최근 것부터 몇 줄 보여 준다
+        if case .available = updater.state {
+            ForEach(Array(updater.incoming.enumerated()), id: \.offset) { _, title in
+                GroupedRow("· \(title)") { EmptyView() }
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+        }
         if updater.canCheck {
             ToggleRow(title: "자동으로 업데이트", icon: "arrow.triangle.2.circlepath", tint: Palette.teal, isOn: $updater.autoUpdate)
         }

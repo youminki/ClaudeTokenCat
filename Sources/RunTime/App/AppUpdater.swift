@@ -48,6 +48,8 @@ final class AppUpdater: ObservableObject {
     private var timer: Timer?
     /// 지금 받을 수 있는 커밋.
     private var target: String?
+    /// 받을 변경의 제목들 (최근 것부터 5개, "feat: " 같은 머리말은 뺀다).
+    @Published private(set) var incoming: [String] = []
     /// 팝오버가 열려 있는지. 자동 업데이트는 설치 중에 앱이 꺼지므로 닫혀 있을 때만 한다 (게임도 팝오버 안에서만 한다).
     var isInUse: () -> Bool = { false }
 
@@ -87,7 +89,7 @@ final class AppUpdater: ObservableObject {
         // 업데이터가 설치한 뒤 처음 켜졌을 때만 (직접 다른 커밋을 설치한 경우는 말하지 않는다)
         if defaults.string(forKey: Key.installing) != nil {
             defaults.removeObject(forKey: Key.installing)
-            bubble = build.subject.isEmpty ? "새 버전으로 업데이트했어요" : "업데이트했어요: \(build.subject)"
+            bubble = build.subject.isEmpty ? "새 버전으로 업데이트했어요" : "업데이트했어요: \(Self.title(of: build.subject))"
         }
         guard canCheck else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in self?.check() }
@@ -157,6 +159,7 @@ final class AppUpdater: ObservableObject {
             return
         }
         let latest = comparison.commits.last?.commit.message.components(separatedBy: "\n").first ?? ""
+        incoming = comparison.commits.suffix(5).reversed().map { Self.title(of: $0.commit.message) }
         let newTarget = comparison.commits.last?.sha
         let isNew = newTarget != target
         target = newTarget
@@ -164,8 +167,15 @@ final class AppUpdater: ObservableObject {
         if autoUpdate, newTarget != UserDefaults.standard.string(forKey: Key.failedTarget) {
             applyAutoUpdateIfIdle()
         } else if isNew {
-            bubble = "새 버전이 있어요 (설정 > 정보에서 업데이트)"
+            bubble = "새 버전이 있어요: \(Self.title(of: latest))"
         }
+    }
+
+    /// 커밋 메시지 첫 줄에서 "feat: ", "fix(ui): " 같은 머리말을 뺀다.
+    static func title(of message: String) -> String {
+        let line = message.components(separatedBy: "\n").first ?? ""
+        guard let range = line.range(of: #"^[a-z]+(\([^)]*\))?!?:\s*"#, options: .regularExpression) else { return line }
+        return String(line[range.upperBound...])
     }
 
     /// 팝오버가 닫혔을 때. 미뤄 둔 자동 업데이트를 적용한다.

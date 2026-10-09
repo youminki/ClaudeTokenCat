@@ -46,6 +46,8 @@ if COMMIT=$(git rev-parse --short HEAD 2>/dev/null); then
   [ -z "$(git status --porcelain --untracked-files=no 2>/dev/null)" ] || { COMMIT="$COMMIT+"; DIRTY=true; }
   # 따옴표·백슬래시가 든 경로나 제목도 그대로 들어가게 plutil로 넣는다
   put() { plutil -insert "$1" -string "$2" "$PLIST"; }
+  # 빌드 번호는 커밋 수로 매긴다. 버전(CFBundleShortVersionString)은 큰 변경 때 Info.plist에서 올린다
+  plutil -replace CFBundleVersion -string "$(git rev-list --count HEAD)" "$PLIST"
   put RunTimeCommit "$COMMIT"
   put RunTimeCommitSHA "$(git rev-parse HEAD)"
   put RunTimeCommitSubject "$(git log -1 --format=%s)"
