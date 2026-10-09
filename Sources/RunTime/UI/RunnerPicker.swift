@@ -15,12 +15,30 @@ struct RunnerPicker: View {
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 4)
 
+    /// 이름표 없이 돋보기와 안내 글만 둔 검색칸. Form 안에서 이름표가 왼쪽 절반을 차지하지 않게 한다.
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("이름으로 찾기", text: $filter.query, prompt: Text("이름으로 찾기"))
+                .textFieldStyle(.plain)
+                .labelsHidden()
+            if !filter.query.isEmpty {
+                Button { filter.query = "" } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("검색어 지우기")
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.primary.opacity(0.06)))
+    }
+
     var body: some View {
         let packs = LocalPack.runners.filter { filter.matches($0.name, $0.id) }
         let pets = petdex.pets.filter { filter.matches($0.name, $0.slug) }
         VStack(alignment: .leading, spacing: 8) {
-            TextField("러너 찾기 (이름)", text: $filter.query)
-                .textFieldStyle(.roundedBorder)
+            searchField
             ForEach(Runner.Group.allCases, id: \.self) { group in
                 let runners = Runner.runners(in: group).filter { filter.matches($0.displayName, $0.rawValue) }
                 if !runners.isEmpty {
