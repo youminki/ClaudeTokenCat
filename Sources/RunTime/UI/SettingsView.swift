@@ -44,17 +44,20 @@ struct SettingsView: View {
 
     private var general: some View {
         GroupedList {
-            GroupedSection(footer: "자동 시작을 켜면 Mac에 로그인할 때 러너를 띄웁니다. 단축키를 켜면 어느 앱에서든 \(GlobalHotKey.displayName)로 사용량 창을 엽니다. 메뉴바 사용률은 러너 옆에 사용률을 숫자로 함께 보여 줍니다.") {
+            GroupedSection(footer: "자동 시작을 켜면 Mac에 로그인할 때 러너를 띄웁니다. 단축키를 켜면 어느 앱에서든 \(GlobalHotKey.displayName)로 사용량 창을 엽니다. 기본은 러너만 보이고, 사용률 표시를 켜면 러너 바로 옆에 숫자로 함께 보여 줍니다.") {
                 ToggleRow(title: "로그인 시 자동 시작", icon: "power", tint: Palette.green, isOn: $settings.launchAtLogin)
                     .disabled(!LaunchAtLogin.available)
                 ToggleRow(title: "단축키 \(GlobalHotKey.displayName)로 사용량 열기", icon: "command", tint: Palette.gray,
                           isOn: $settings.globalHotKeyEnabled)
-                if settings.globalHotKeyEnabled && !GlobalHotKey.shared.isRegistered {
+                if settings.globalHotKeyEnabled && GlobalHotKey.shared.failed {
                     GroupedRow("다른 앱이 이 단축키를 쓰고 있어 등록하지 못했습니다.") { EmptyView() }
                         .foregroundStyle(Palette.orange)
                 }
-                GroupedRow("메뉴바 사용률", icon: "percent", tint: Palette.blue) {
-                    menu("메뉴바 사용률", $settings.menuBarLabel, MenuBarLabel.allCases) { $0.displayName }
+                ToggleRow(title: "메뉴바에 사용률 표시", icon: "percent", tint: Palette.blue, isOn: $settings.showsMenuBarLabel)
+                if settings.showsMenuBarLabel {
+                    GroupedRow("표시할 값") {
+                        segmented("표시할 값", $settings.menuBarLabel, MenuBarLabel.allCases.filter { $0 != .off }) { $0.displayName }
+                    }
                 }
             }
             if !LaunchAtLogin.available { devOnlyNote("자동 시작") }
@@ -156,6 +159,14 @@ struct SettingsView: View {
                 ToggleRow(title: "주간 초기화 알림", icon: "calendar", tint: Palette.teal,
                           isOn: $settings.weeklyResetAlertEnabled)
                     .disabled(!settings.officialEnabled)   // 주간 창은 공식 값으로만 안다
+                GroupedRow("알림 보내 보기", icon: "paperplane.fill", tint: Palette.blue) {
+                    Button("보내기") {
+                        Notifier.shared.send(title: "RunTime 알림", body: "알림이 이렇게 와요. 사용률이 80%, 95%에 닿으면 알려 드릴게요.")
+                    }
+                    .controlSize(.small)
+                    .disabled(!Notifier.shared.available)
+                }
+                .help("알림이 오지 않으면 시스템 설정 > 알림 > RunTime에서 허용을 확인하세요.")
             }
             if !Notifier.shared.available { devOnlyNote("알림") }
         }

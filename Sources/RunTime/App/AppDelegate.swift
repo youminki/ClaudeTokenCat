@@ -9,11 +9,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let animator = SpriteAnimator()
     /// 러너 레이어를 담는 뷰. AppKit이 버튼 레이어를 다시 만들어도 러너가 사라지지 않게 따로 둔다.
     private let spriteView = PassthroughLayerView()
+    /// 러너 바로 옆 사용률 글자. 버튼 제목은 양옆 여백이 커서 직접 둔다.
+    private let percentLabel: PassthroughLabel = {
+        let label = PassthroughLabel(labelWithString: "")
+        label.setAccessibilityElement(false)
+        return label
+    }()
+    private var currentLabel: StatusLabel?
     private let engine = UsageEngine()
     private var popover: NSPopover?
     private var settingsWindow: NSWindow?
     private var dailyDetailWindow: NSWindow?
     private var leaderboardWindow: NSWindow?
+    private var welcomeWindow: NSWindow?
     private var cancellables: Set<AnyCancellable> = []
     private let settingsTab = SettingsTabState(.general)
     /// 메뉴바 항목이 « 안에 숨었을 때 팝오버를 붙이는 보이지 않는 창.
@@ -126,6 +134,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         Notifier.shared.requestAuthorization()
         engine.start()
+        // 처음 설치한 사람에게만 한 번. 러너가 메뉴바에 자리 잡은 뒤에 띄운다
+        if LegacyMigration.isFreshInstall && LaunchAtLogin.available {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.openWelcome() }
+        }
     }
 
     @objc private func statusItemClicked() {
@@ -205,7 +217,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         } else {
             return
         }
+        Self.makeOpaque(popover)
         self.popover = popover
+    }
+
+    /// 팝오버는 뒤 창이 비치는 반투명이라 흰 창 위에서 열면 바탕이 밝아져 흰 글자·차트가 묻힌다.
+    /// 내용은 SwiftUI에서 불투명하게 칠하고, 화살표를 그리는 효과 뷰도 뒤를 비추지 않게 바꾼다.
+    private static func makeOpaque(_ popover: NSPopover) {
+        guard let frameView = popover.contentViewController?.view.window?.contentView?.superview else { return }
+        func visit(_ view: NSView) {
+            if let effect = view as? NSVisualEffectView {
+                effect.blendingMode = .withinWindow
+                effect.material = .windowBackground
+                effect.state = .active
+            }
+            view.subviews.forEach(visit)
+        }
+        visit(frameView)
     }
 
     private func hiddenItemAnchor() -> NSView? {
@@ -250,6 +278,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
+    private func openWelcome() {
+        welcomeWindow = showWindow(welcomeWindow, title: "RunTime", style: [.titled, .closable]) {
+            WelcomeView(settings: engine.settings,
+                        openSettings: { [weak self] in self?.openSettings() },
+                        close: { [weak self] in self?.welcomeWindow?.performClose(nil) })
+        }
+        // 한 번만 보는 창이라 닫으면 놓아 준다 (러너 애니메이션이 남아 돌지 않게)
+        if let welcomeWindow {
+            NotificationCenter.default.publisher(for: NSWindow.willCloseNotification, object: welcomeWindow)
+                .first()
+                .sink { [weak self] _ in self?.welcomeWindow = nil }
+                .store(in: &cancellables)
+        }
+    }
+
     private func openLeaderboard() {
         leaderboardWindow = showWindow(leaderboardWindow, title: "토큰 러너 순위", style: [.titled, .closable]) {
             LeaderboardView()
@@ -291,36 +334,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         return StatusLabel(text: "\(gauge.displayPercent)%", level: UsageAlertLevel.level(percent: gauge.percent))
     }
 
-    private static let statusLabelFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+    private static let statusLabelFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+    /// 러너와 숫자 사이 간격. 러너 칸 오른쪽 끝이 이미 코끝이라 1pt만 둔다.
+    private static let labelGap: CGFloat = 1
 
     private func applyStatusLabel(_ label: StatusLabel?) {
+        currentLabel = label
+        if let label {
+            percentLabel.stringValue = label.text
+            percentLabel.font = Self.statusLabelFont
+            // 평소엔 메뉴바 글자색(라이트·다크 자동), 80% 주황, 95% 빨강
+            percentLabel.textColor = switch label.level {
+            case .normal: .labelColor
+            case .tired: .systemOrange
+            case .critical: .systemRed
+            }
+        }
+        percentLabel.isHidden = label == nil
+        // 화면 읽기 프로그램은 글자 뷰 대신 메뉴바 항목의 값으로 사용률을 읽는다
+        statusItem.button?.setAccessibilityValue(label?.text)
+        resizeStatusItem()
+    }
+
+    private var textWidth: CGFloat {
+        guard let currentLabel else { return 0 }
+        return ceil((currentLabel.text as NSString).size(withAttributes: [.font: Self.statusLabelFont]).width)
+    }
+
+    private var labelWidth: CGFloat { currentLabel == nil ? 0 : Self.labelGap + textWidth }
+
+    /// NSTextField 글자 칸은 좌우에 2pt씩 안쪽 여백이 있어, 프레임을 그만큼 넓히고 왼쪽으로 당긴다.
+    private static let cellInset: CGFloat = 2
+
+    /// 항목 폭 = 러너 칸 + (켜져 있으면) 1pt + 숫자 폭. 버튼 제목을 쓰지 않아 여백이 생기지 않는다.
+    private func resizeStatusItem() {
         guard let button = statusItem.button else { return }
-        guard let label else {
-            button.title = ""
-            button.imagePosition = .imageOnly
-            statusItem.length = animator.canvas.size.width + 4
-            DispatchQueue.main.async { self.layoutSprite() }   // 길이가 줄어든 뒤 배치가 끝나면
-            return
-        }
-        button.font = Self.statusLabelFont
-        switch label.level {
-        case .normal:
-            button.title = label.text   // 일반 title이라야 메뉴바 기본 글자색(다크/라이트)을 따른다
-        case .tired, .critical:
-            button.attributedTitle = NSAttributedString(string: label.text, attributes: [
-                .font: Self.statusLabelFont,
-                .foregroundColor: label.level == .critical ? NSColor.systemRed : NSColor.systemOrange,
-            ])
-        }
-        button.imagePosition = .imageLeft
-        button.imageHugsTitle = true   // 러너와 숫자 사이 기본 여백을 없애 메뉴바 폭을 아낀다
-        statusItem.length = NSStatusItem.variableLength
+        button.title = ""
+        button.imagePosition = .imageOnly
+        button.image = placeholder(for: animator.canvas)
+        statusItem.length = animator.canvas.size.width + labelWidth + 4
         DispatchQueue.main.async { self.layoutSprite() }   // 길이가 바뀐 뒤 버튼 배치가 끝나면
     }
 
     /// 버튼 크기·글자 배치를 잡는 투명한 이미지. 높이는 버튼(22pt)에 맞추고 러너 레이어만 위아래로 넘친다.
     private func placeholder(for canvas: MenuBarCanvas) -> NSImage {
-        NSImage(size: NSSize(width: canvas.size.width, height: Stage.size.height))
+        NSImage(size: NSSize(width: canvas.size.width + labelWidth, height: Stage.size.height))
     }
 
     /// 자리 표시 이미지가 놓인 자리에 러너 레이어를 맞춘다. 레이어는 버튼 위아래로 넘쳐 메뉴바 창 높이를 채운다.
@@ -331,9 +389,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                                    backing: button.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2)
         if canvas != animator.canvas {
             animator.canvas = canvas
-            button.image = placeholder(for: canvas)
-            if button.title.isEmpty && button.attributedTitle.length == 0 { statusItem.length = canvas.size.width + 4 }
-            DispatchQueue.main.async { self.layoutSprite() }   // 길이가 바뀐 뒤 버튼 배치가 끝나면
+            resizeStatusItem()
             return
         }
         button.layoutSubtreeIfNeeded()
@@ -346,6 +402,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         if spriteView.superview !== host {
             spriteView.removeFromSuperview()
             host.addSubview(spriteView)
+            percentLabel.removeFromSuperview()
+            host.addSubview(percentLabel)
         }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -356,6 +414,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         animator.layer.frame = spriteView.bounds
         animator.layer.contentsScale = canvas.backing
         CATransaction.commit()
+        let height = percentLabel.fittingSize.height
+        percentLabel.frame = host.backingAlignedRect(
+            NSRect(x: spriteView.frame.maxX + Self.labelGap - Self.cellInset, y: spriteView.frame.midY - height / 2,
+                   width: textWidth + Self.cellInset * 2, height: height),
+            options: .alignAllEdgesNearest)
     }
 
     /// 메뉴바 아이콘에 마우스를 올리면 현재 사용률을 보여준다.
@@ -365,6 +428,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
         return "RunTime · \(line("세션", session)) · \(line("주간", weekly))"
     }
+}
+
+/// 클릭은 아래 상태바 버튼으로 넘기는 글자.
+final class PassthroughLabel: NSTextField {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 /// 클릭은 아래 상태바 버튼으로 넘기는 레이어 전용 뷰.

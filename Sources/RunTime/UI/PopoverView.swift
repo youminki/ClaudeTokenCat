@@ -64,6 +64,7 @@ struct PopoverView: View {
         }
         .padding(14)
         .frame(width: 376)
+        .background(Theme.background)
         .onAppear { if startsOnRunnerPage { page.showsRunners = true } }
     }
 

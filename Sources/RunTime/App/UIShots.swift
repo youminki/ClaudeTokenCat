@@ -13,12 +13,14 @@ enum UIShots {
             exit(1)
         }
         // 찍힌 그림에는 창 배경이 빠지므로 뷰 뒤에 배경을 직접 깐다. 팝오버는 실제 팝오버 바탕과 비슷한 색.
-        let popoverBackground = Color(white: 0.16)
+        let popoverBackground = Theme.background
         let windowBackground = Color(nsColor: .windowBackgroundColor)
         let screens: [(name: String, appearance: NSAppearance.Name, height: CGFloat?, view: AnyView)] = [
-            ("popover", .darkAqua, nil, AnyView(PopoverView(engine: engine, settings: engine.settings).background(popoverBackground))),
+            ("popover", .darkAqua, nil, AnyView(PopoverView(engine: engine, settings: engine.settings))),
             ("popover-runners", .darkAqua, nil,
-             AnyView(PopoverView(engine: engine, settings: engine.settings, startsOnRunnerPage: true).background(popoverBackground))),
+             AnyView(PopoverView(engine: engine, settings: engine.settings, startsOnRunnerPage: true))),
+            ("welcome", .darkAqua, nil, AnyView(WelcomeView(settings: engine.settings))),
+            ("welcome-light", .aqua, nil, AnyView(WelcomeView(settings: engine.settings))),
             ("settings-general", .darkAqua, 720, AnyView(SettingsView(settings: engine.settings, engine: engine, tab: SettingsTabState(.general)).background(windowBackground))),
             ("settings-general-light", .aqua, 720, AnyView(SettingsView(settings: engine.settings, engine: engine, tab: SettingsTabState(.general)).background(windowBackground))),
             ("settings-runner", .darkAqua, 720,

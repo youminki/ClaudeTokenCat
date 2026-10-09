@@ -10,6 +10,8 @@ enum Theme {
     static let hairline = Color.white.opacity(0.09)
     static let track = Color.white.opacity(0.11)
     static let hover = Color.white.opacity(0.08)
+    /// 팝오버 바탕. 반투명이면 흰 창 위에서 흰 글자·차트가 묻혀 불투명하게 칠한다.
+    static let background = Color(white: 0.135)
     /// 카드 바탕. 구획선 대신 옅은 면으로 묶어 숫자가 먼저 읽히게 한다.
     static let surface = Color.white.opacity(0.045)
 

@@ -11,6 +11,8 @@ final class GlobalHotKey {
     private var hotKey: EventHotKeyRef?
     private var handler: EventHandlerRef?
     var isRegistered: Bool { hotKey != nil }
+    /// 등록을 시도했다가 실패했는지 (다른 앱이 같은 조합을 먼저 잡음). 등록 전에는 false.
+    private(set) var failed = false
 
     private init() {}
 
@@ -30,7 +32,8 @@ final class GlobalHotKey {
         let id = EventHotKeyID(signature: OSType(0x5254_494D), id: 1)   // 'RTIM'
         let status = RegisterEventHotKey(UInt32(kVK_ANSI_U), UInt32(controlKey | optionKey), id,
                                          GetApplicationEventTarget(), 0, &hotKey)
-        if status != noErr {
+        failed = status != noErr
+        if failed {
             hotKey = nil   // 다른 앱이 같은 조합을 먼저 잡은 경우 (eventHotKeyExistsErr)
             NSLog("[RunTime] 단축키 등록 실패: %d", status)
         }
@@ -39,5 +42,6 @@ final class GlobalHotKey {
     private func unregister() {
         if let hotKey { UnregisterEventHotKey(hotKey) }
         hotKey = nil
+        failed = false
     }
 }

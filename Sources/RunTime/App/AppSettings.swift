@@ -10,7 +10,7 @@ final class AppSettings: ObservableObject {
 
     private enum Key: String {
         case officialEnabled, sensitivity, pollInterval, limitAlertsEnabled, newSessionAlertEnabled, weeklyResetAlertEnabled, globalHotKeyEnabled, spriteTheme
-        case menuBarLabel, runner, smoothness, tricksEnabled, customRunner, runnerSize
+        case menuBarLabel, menuBarLabelLast, runner, smoothness, tricksEnabled, customRunner, runnerSize
     }
 
     private let defaults = UserDefaults.standard
@@ -70,7 +70,21 @@ final class AppSettings: ObservableObject {
     @Published var runnerSize: RunnerSize { didSet { save(runnerSize.rawValue, .runnerSize) } }
 
     /// 메뉴바 고양이 옆에 띄울 사용률 (기본 끔).
-    @Published var menuBarLabel: MenuBarLabel { didSet { save(menuBarLabel.rawValue, .menuBarLabel) } }
+    @Published var menuBarLabel: MenuBarLabel {
+        didSet {
+            save(menuBarLabel.rawValue, .menuBarLabel)
+            if menuBarLabel != .off { save(menuBarLabel.rawValue, .menuBarLabelLast) }
+        }
+    }
+
+    /// 메뉴바 사용률 켜기/끄기. 켤 때는 마지막에 고른 값(처음엔 높은 쪽)을 다시 쓴다.
+    var showsMenuBarLabel: Bool {
+        get { menuBarLabel != .off }
+        set {
+            let last = MenuBarLabel(rawValue: UserDefaults.standard.string(forKey: Key.menuBarLabelLast.rawValue) ?? "")
+            menuBarLabel = newValue ? (last ?? .higher) : .off
+        }
+    }
 
     /// 로그인 시 자동 시작 (SMAppService, 번들 앱에서만 동작). 시스템 상태가 원본이라 저장하지 않는다.
     @Published var launchAtLogin: Bool {
@@ -103,7 +117,10 @@ final class AppSettings: ObservableObject {
         customRunnerID = known ? savedCustom : nil
         smoothness = SpriteSmoothness(rawValue: string(.smoothness)) ?? .smooth
         tricksEnabled = bool(.tricksEnabled, true)
-        menuBarLabel = MenuBarLabel(rawValue: string(.menuBarLabel)) ?? .off
+        let label = MenuBarLabel(rawValue: string(.menuBarLabel)) ?? .off
+        menuBarLabel = label
+        // 이 키가 생기기 전에 고른 값도 끄고 다시 켰을 때 돌아오게 (init에서는 didSet이 불리지 않는다)
+        if label != .off, string(.menuBarLabelLast).isEmpty { d.set(label.rawValue, forKey: Key.menuBarLabelLast.rawValue) }
         runnerSize = RunnerSize(rawValue: string(.runnerSize)) ?? .large
         LaunchAtLogin.restoreAfterRename()
         LaunchAtLogin.enableOnFirstInstall()
