@@ -112,6 +112,8 @@ enum SpriteTheme: String, CaseIterable {
     case purple
     case yellow
     case rainbow   // 프레임마다 색이 돈다
+    // 상점 색: 미니게임 코인으로 산다
+    case gold, ruby, mint, aurora
 
     var displayName: String {
         switch self {
@@ -124,6 +126,20 @@ enum SpriteTheme: String, CaseIterable {
         case .purple: return "보라"
         case .yellow: return "노랑"
         case .rainbow: return "무지개"
+        case .gold: return "황금"
+        case .ruby: return "루비"
+        case .mint: return "민트"
+        case .aurora: return "오로라"
+        }
+    }
+
+    /// 상점에서 사는 값 (게임 코인). 기본 색은 nil.
+    var price: Int? {
+        switch self {
+        case .ruby, .mint: return 250
+        case .gold: return 400
+        case .aurora: return 800
+        default: return nil
         }
     }
 
@@ -139,6 +155,13 @@ enum SpriteTheme: String, CaseIterable {
         case .yellow: return .systemYellow
         case .rainbow:
             return NSColor(hue: phase - floor(phase), saturation: 0.72, brightness: 0.98, alpha: 1)
+        case .gold: return NSColor(hex: 0xF5B800)
+        case .ruby: return NSColor(hex: 0xE0245E)
+        case .mint: return NSColor(hex: 0x3DDBB4)
+        case .aurora:
+            // 청록과 보라 사이를 천천히 오간다
+            let wave = 0.5 + 0.5 * sin(phase * 2 * .pi)
+            return NSColor(hue: 0.45 + 0.33 * wave, saturation: 0.62, brightness: 0.98, alpha: 1)
         }
     }
 

@@ -4,16 +4,18 @@ import GameCore
 
 /// 미니게임 러너에 다는 꾸미기. 그림만 바뀌고 판정과 점수는 같다.
 enum Cosmetic: String, CaseIterable, Identifiable {
-    case sparkleTrail, cometTrail, rainbowTrail
-    case heartDust, goldDust, starDust
+    case sparkleTrail, cometTrail, rainbowTrail, fireTrail, noteTrail, heartTrail
+    case heartDust, goldDust, starDust, rainbowDust
+    case fireworksCrash, heartCrash, coinCrash
 
     enum Slot: CaseIterable {
-        case trail, dust
+        case trail, dust, crash
 
         var title: String {
             switch self {
             case .trail: "꼬리"
             case .dust: "발먼지"
+            case .crash: "부딪힘"
             }
         }
     }
@@ -22,8 +24,9 @@ enum Cosmetic: String, CaseIterable, Identifiable {
 
     var slot: Slot {
         switch self {
-        case .sparkleTrail, .cometTrail, .rainbowTrail: .trail
-        case .heartDust, .goldDust, .starDust: .dust
+        case .sparkleTrail, .cometTrail, .rainbowTrail, .fireTrail, .noteTrail, .heartTrail: .trail
+        case .heartDust, .goldDust, .starDust, .rainbowDust: .dust
+        case .fireworksCrash, .heartCrash, .coinCrash: .crash
         }
     }
 
@@ -32,9 +35,16 @@ enum Cosmetic: String, CaseIterable, Identifiable {
         case .sparkleTrail: "반짝이"
         case .cometTrail: "혜성"
         case .rainbowTrail: "무지개"
+        case .fireTrail: "불꽃"
+        case .noteTrail: "음표"
+        case .heartTrail: "하트"
         case .heartDust: "분홍"
         case .goldDust: "금빛"
         case .starDust: "하늘빛"
+        case .rainbowDust: "무지개"
+        case .fireworksCrash: "폭죽"
+        case .heartCrash: "하트 펑"
+        case .coinCrash: "코인 비"
         }
     }
 
@@ -43,9 +53,16 @@ enum Cosmetic: String, CaseIterable, Identifiable {
         case .heartDust: 40
         case .starDust: 60
         case .goldDust: 90
+        case .rainbowDust: 150
         case .sparkleTrail: 120
+        case .heartTrail: 140
+        case .noteTrail: 160
         case .cometTrail: 180
+        case .fireTrail: 240
         case .rainbowTrail: 300
+        case .heartCrash: 100
+        case .fireworksCrash: 200
+        case .coinCrash: 350
         }
     }
 
@@ -55,7 +72,12 @@ enum Cosmetic: String, CaseIterable, Identifiable {
         case .sparkleTrail, .goldDust: NSColor(hex: 0xFFD45E)
         case .cometTrail, .starDust: NSColor(hex: 0x8FD3FF)
         case .rainbowTrail: NSColor(hex: 0xFF9E3D)
-        case .heartDust: NSColor(hex: 0xFF8FB8)
+        case .heartDust, .heartTrail, .heartCrash: NSColor(hex: 0xFF8FB8)
+        case .fireTrail: NSColor(hex: 0xFF7A2F)
+        case .noteTrail: NSColor(hex: 0xB79CFF)
+        case .rainbowDust: NSColor(hex: 0x5BD86B)
+        case .fireworksCrash: NSColor(hex: 0xFFE14D)
+        case .coinCrash: NSColor(hex: 0xFFD45E)
         }
     }
 }
@@ -69,6 +91,7 @@ final class GameWallet: ObservableObject {
         static let owned = "gameCosmeticsOwned"
         static let equipped = "gameCosmeticsEquipped"
         static let missions = "gameDailyMissions"
+        static let unlocked = "gameUnlocked"
     }
 
     private let defaults = UserDefaults.standard
@@ -81,6 +104,10 @@ final class GameWallet: ObservableObject {
         didSet { defaults.set(equipped.map(\.rawValue), forKey: Key.equipped) }
     }
     @Published private var stored: DailyMissions
+    /// 산 러너("runner:tiger")와 색("theme:gold").
+    @Published private(set) var unlocked: Set<String> {
+        didSet { defaults.set(Array(unlocked), forKey: Key.unlocked) }
+    }
 
     private init() {
         coins = defaults.integer(forKey: Key.coins)
@@ -88,6 +115,7 @@ final class GameWallet: ObservableObject {
         let owned = names(Key.owned)
         self.owned = owned
         equipped = names(Key.equipped).intersection(owned)
+        unlocked = Set(defaults.stringArray(forKey: Key.unlocked) ?? [])
         stored = defaults.data(forKey: Key.missions).flatMap { try? JSONDecoder().decode(DailyMissions.self, from: $0) }
             ?? DailyMissions(day: Self.today())
     }
@@ -116,6 +144,23 @@ final class GameWallet: ObservableObject {
         if let data = try? JSONEncoder().encode(board) { defaults.set(data, forKey: Key.missions) }
         coins += run.coins + bonusCoins + completed.reduce(0) { $0 + $1.reward }
         return completed
+    }
+
+    func owns(_ runner: Runner) -> Bool { runner.price == nil || unlocked.contains("runner:\(runner.rawValue)") }
+    func owns(_ theme: SpriteTheme) -> Bool { theme.price == nil || unlocked.contains("theme:\(theme.rawValue)") }
+
+    /// 상점 러너를 산다. 코인이 모자라거나 이미 있으면 false.
+    @discardableResult
+    func buy(_ runner: Runner) -> Bool { unlock("runner:\(runner.rawValue)", price: runner.price) }
+
+    @discardableResult
+    func buy(_ theme: SpriteTheme) -> Bool { unlock("theme:\(theme.rawValue)", price: theme.price) }
+
+    private func unlock(_ key: String, price: Int?) -> Bool {
+        guard let price, !unlocked.contains(key), coins >= price else { return false }
+        coins -= price
+        unlocked.insert(key)
+        return true
     }
 
     /// 없으면 사서 달고, 있으면 달거나 뗀다. 코인이 모자라면 false.
@@ -156,5 +201,12 @@ extension DailyMissions.Mission {
         case .jumps: "arrow.up.circle.fill"
         case .ghostWins: "person.2.fill"
         }
+    }
+}
+
+extension SpriteTheme {
+    /// 고를 수 있는 색: 기본 색과 산 색. 지금 고른 색은 늘 넣는다.
+    static func owned(current: SpriteTheme) -> [SpriteTheme] {
+        allCases.filter { GameWallet.shared.owns($0) || $0 == current }
     }
 }

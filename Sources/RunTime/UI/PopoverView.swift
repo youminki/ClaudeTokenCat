@@ -36,7 +36,9 @@ struct PopoverView: View {
 
     /// 기본 러너, 개인 팩, Petdex 펫, 내 러너를 통틀어 지금과 다른 러너 하나.
     private func pickRandomRunner() {
-        let builtIns = Runner.allCases.filter { settings.customRunnerID != nil || $0 != settings.runner }
+        let builtIns = Runner.allCases.filter {
+            GameWallet.shared.owns($0) && (settings.customRunnerID != nil || $0 != settings.runner)
+        }
         let others = (LocalPack.runners.map(LocalPack.storageID) + petdex.pets.map { PetdexStore.storageID($0.slug) }
             + customRunners.runners.map(\.id)).filter { $0 != settings.customRunnerID }
         let index = Int.random(in: 0..<(builtIns.count + others.count))
@@ -161,7 +163,7 @@ struct PopoverView: View {
     private var runnerPage: some View {
         VStack(alignment: .leading, spacing: 10) {
             ScrollView {
-                GameShopView().padding(.horizontal, 2).padding(.bottom, 2)
+                GameShopView(settings: settings).padding(.horizontal, 2).padding(.bottom, 2)
                 RunnerPicker(settings: settings, openFullPicker: openRunnerSettings)
                     .padding(.horizontal, 2)
                     .padding(.bottom, 4)
@@ -174,7 +176,7 @@ struct PopoverView: View {
                 .keyboardShortcut(.cancelAction)
                 Spacer()
                 Picker("색상", selection: $settings.spriteTheme) {
-                    ForEach(SpriteTheme.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                    ForEach(SpriteTheme.owned(current: settings.spriteTheme), id: \.self) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.menu)
                 .fixedSize()

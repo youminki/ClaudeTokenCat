@@ -55,21 +55,22 @@ enum GameShots {
             if game.phase == .over { break }
         }
         // 꾸미기를 단 모습 (꼬리 셋, 발먼지)
-        for item in [Cosmetic.rainbowTrail, .cometTrail, .sparkleTrail] where game.phase == .playing {
-            GameWallet.shared.preview = [item, .heartDust]
+        for item in [Cosmetic.rainbowTrail, .fireTrail, .noteTrail, .heartTrail] where game.phase == .playing {
+            GameWallet.shared.preview = [item, .rainbowDust, .fireworksCrash]
             step(0.5, autoplay: true)
             try shot("2-play-\(item.rawValue)")
         }
-        GameWallet.shared.preview = nil
         // →를 눌러 앞으로 나간 모습. 자동 플레이는 앞뒤 이동을 셈하지 않아 마지막에 찍는다
         if game.phase == .playing {
             game.setMove(forward: true)
             step(0.6, autoplay: true)
             try shot("2-play-forward")
         }
-        // 손을 놓고 부딪히게 둔다
-        while game.phase == .playing { step(0.25, autoplay: false) }
+        // 손을 놓고 부딪히게 둔다 (부딪힘 효과는 폭죽)
+        while game.phase == .playing { step(0.02, autoplay: false) }
+        step(0.12, autoplay: false)
         try shot("3-crash")
+        GameWallet.shared.preview = nil
         step(0.6, autoplay: false)
         try shot("4-over")
 

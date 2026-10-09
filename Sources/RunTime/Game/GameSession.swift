@@ -69,6 +69,16 @@ final class GameSession {
     private(set) var boosted = false
     /// 꼬리를 그릴 지난 자리들 (화면 x, 바닥 위 높이). 땅이 흐르는 만큼 뒤로 민다.
     private var trail: [CGPoint] = []
+    /// 점수판으로 날아가는 코인 (화면 좌표).
+    private struct CoinFlyer {
+        let from: CGPoint
+        var t: CGFloat = 0
+    }
+    private var coinFlyers: [CoinFlyer] = []
+    /// 마지막으로 그린 땅 높이 (코인이 날아오를 자리를 화면 좌표로 바꿀 때).
+    private var groundY: CGFloat = 135
+    /// 착지 반동 (1에서 0으로).
+    private var landBounce: CGFloat = 0
     /// 하늘 구간. 500점마다 다음 하늘로 넘어가고, 1.5초 동안 섞어 바꾼다.
     private var skyFrom = 0
     private var skyTo: Int?
@@ -231,6 +241,9 @@ final class GameSession {
         if let current = zoneBanner { zoneBanner = current.life > k ? (current.text, current.life - k) : nil }
         skyBlend = min(1, skyBlend + k / 1.5)
         updateTrail(k)
+        landBounce = max(0, landBounce - k * 7)
+        for i in coinFlyers.indices { coinFlyers[i].t += k / 0.45 }
+        coinFlyers.removeAll { $0.t >= 1 }
         if live, game.phase == .playing, !boosted, UsageEngine.isClaudeWorking { boosted = true }
         for i in particles.indices {
             particles[i].velocity.y += particles[i].gravity * k
@@ -254,14 +267,16 @@ final class GameSession {
         case .jumped:
             play(.jump)
             jumps += 1
-            burst(at: feet, count: 5, color: dustColor, speed: 40, life: 0.35, drift: 1)
+            burst(at: feet, count: 5, colors: dustColors, speed: 40, life: 0.35, drift: 1)
         case .landed:
-            burst(at: feet, count: 4, color: dustColor, speed: 30, life: 0.3, drift: 1)
+            burst(at: feet, count: 4, colors: dustColors, speed: 30, life: 0.3, drift: 1)
+            landBounce = 1
         case .coin(let id):
             play(.coin)
             if let coin = game.coins.first(where: { $0.id == id }) {
                 let point = CGPoint(screenX(coin.x), CGFloat(coin.y))
                 burst(at: point, count: 8, color: NSColor(hex: 0xFFD45E), speed: 70, life: 0.45, drift: 0.6)
+                coinFlyers.append(CoinFlyer(from: CGPoint(screenX(coin.x), groundY - CGFloat(coin.y))))
                 popups.append(Popup(text: "+\(game.tuning.coinValue)", position: point, life: 0.8))
             }
         case .milestone:
@@ -282,7 +297,7 @@ final class GameSession {
             shake = 1
             flash = 1
             let center = CGPoint(runnerLeft + Self.runnerWidth / 2, CGFloat(game.runnerY + Self.runnerHeight / 2))
-            burst(at: center, count: 12, color: .white, speed: 120, life: 0.55, drift: 0)
+            crashBurst(at: center)
             creditRun()
             if !finished, !isRace {
                 finished = true
@@ -376,10 +391,50 @@ final class GameSession {
         return t >= 1 ? to : from.mixed(with: to, t)
     }
 
+    static func fillHeart(_ cg: CGContext, at c: CGPoint, size s: CGFloat, color: NSColor) {
+        let path = CGMutablePath()
+        path.move(to: CGPoint(c.x, c.y + s * 0.35))
+        path.addCurve(to: CGPoint(c.x - s * 0.5, c.y - s * 0.1), control1: CGPoint(c.x - s * 0.1, c.y + s * 0.1),
+                      control2: CGPoint(c.x - s * 0.5, c.y + s * 0.15))
+        path.addArc(center: CGPoint(c.x - s * 0.25, c.y - s * 0.12), radius: s * 0.25, startAngle: .pi, endAngle: 0,
+                    clockwise: false)
+        path.addArc(center: CGPoint(c.x + s * 0.25, c.y - s * 0.12), radius: s * 0.25, startAngle: .pi, endAngle: 0,
+                    clockwise: false)
+        path.addCurve(to: CGPoint(c.x, c.y + s * 0.35), control1: CGPoint(c.x + s * 0.5, c.y + s * 0.15),
+                      control2: CGPoint(c.x + s * 0.1, c.y + s * 0.1))
+        cg.setFillColor(color.cgColor)
+        cg.addPath(path)
+        cg.fillPath()
+    }
+
     // MARK: 꾸미기
 
-    private var dustColor: NSColor {
-        GameWallet.shared.equipped(.dust)?.color ?? NSColor(white: 0.85, alpha: 1)
+    private var dustColors: [NSColor] {
+        switch GameWallet.shared.equipped(.dust) {
+        case .rainbowDust: SpriteEffects.rainbow
+        case let dust?: [dust.color]
+        case nil: [NSColor(white: 0.85, alpha: 1)]
+        }
+    }
+
+    /// 부딪힌 순간. 기본은 흰 별, 상점 효과를 달면 그 모양으로 터진다.
+    private func crashBurst(at center: CGPoint) {
+        switch GameWallet.shared.equipped(.crash) {
+        case .fireworksCrash:
+            for (k, dx) in [-18.0, 0, 20].enumerated() {
+                let point = CGPoint(center.x + CGFloat(dx), center.y + 18 + CGFloat(k % 2) * 10)
+                burst(at: point, count: 14, colors: SpriteEffects.rainbow.shuffled(), shape: .spark, speed: 110,
+                      life: 0.9, drift: 0, spread: 2)
+            }
+        case .heartCrash:
+            burst(at: center, count: 12, colors: [NSColor(hex: 0xFF8FB8), NSColor(hex: 0xFF5C8A)], shape: .heart,
+                  speed: 120, life: 0.9, drift: 0, spread: 2, size: 2.2...3.4)
+        case .coinCrash:
+            burst(at: center, count: 16, colors: [.white], shape: .coin, speed: 170, life: 1.1, drift: 0.3,
+                  size: 1.6...2.4)
+        default:
+            burst(at: center, count: 12, color: .white, speed: 120, life: 0.55, drift: 0)
+        }
     }
 
     private func updateTrail(_ k: CGFloat) {
@@ -421,6 +476,37 @@ final class GameSession {
                 cg.addLine(to: points[i])
                 cg.strokePath()
             }
+        case .fireTrail:
+            // 꼬리 쪽으로 갈수록 노랗고 작아지며 흔들린다
+            for (i, point) in points.enumerated() {
+                let t = CGFloat(i) / CGFloat(points.count)
+                let flicker = CGFloat(sin(time * 23 + Double(i) * 1.7)) * 1.2
+                let r = 1 + 4 * t
+                let color = NSColor(hex: 0xFFE14D).blended(withFraction: t, of: NSColor(hex: 0xFF5A1F)) ?? item.color
+                cg.setFillColor(color.withAlphaComponent(0.25 + 0.6 * t).cgColor)
+                cg.fillEllipse(in: CGRect(x: point.x - r, y: point.y - r + flicker, width: r * 2, height: r * 2))
+            }
+        case .noteTrail, .heartTrail:
+            for (i, point) in points.enumerated() where i % 5 == 1 {
+                let t = CGFloat(i) / CGFloat(points.count)
+                let bob = CGFloat(sin(time * 6 + Double(i))) * 3
+                let p = CGPoint(point.x, point.y - 6 + bob)
+                let color = item.color.withAlphaComponent(0.3 + 0.7 * t)
+                if item == .heartTrail {
+                    Self.fillHeart(cg, at: p, size: 4 + 3 * t, color: color)
+                } else {
+                    // 음표: 기운 머리와 기둥
+                    let s = 0.8 + 0.5 * t
+                    cg.setFillColor(color.cgColor)
+                    cg.fillEllipse(in: CGRect(x: p.x - 2.4 * s, y: p.y + 1.5 * s, width: 3.6 * s, height: 2.6 * s))
+                    cg.setStrokeColor(color.cgColor)
+                    cg.setLineWidth(1.1 * s)
+                    cg.move(to: CGPoint(p.x + 1.1 * s, p.y + 2.6 * s))
+                    cg.addLine(to: CGPoint(p.x + 1.1 * s, p.y - 4 * s))
+                    cg.addLine(to: CGPoint(p.x + 3.2 * s, p.y - 2.6 * s))
+                    cg.strokePath()
+                }
+            }
         default:
             for (i, point) in points.enumerated() where i % 3 == 0 {
                 let t = CGFloat(i) / CGFloat(points.count)
@@ -435,12 +521,19 @@ final class GameSession {
 
     /// 바닥 위 높이(y 위로)로 잰 점 주변에 작은 점을 흩뿌린다.
     private func burst(at point: CGPoint, count: Int, color: NSColor, speed: CGFloat, life: CGFloat, drift: CGFloat) {
+        burst(at: point, count: count, colors: [color], speed: speed, life: life, drift: drift)
+    }
+
+    /// `spread`가 1이면 위쪽 반원, 2면 사방으로 흩어진다.
+    private func burst(at point: CGPoint, count: Int, colors: [NSColor], shape: Particle.Shape = .dot, speed: CGFloat,
+                       life: CGFloat, drift: CGFloat, spread: CGFloat = 1, size: ClosedRange<CGFloat> = 1.4...2.6) {
         for i in 0..<count {
-            let angle = CGFloat(i) / CGFloat(count) * .pi + .pi * 0.05 + CGFloat.random(in: -0.2...0.2)
+            let angle = CGFloat(i) / CGFloat(count) * .pi * spread + .pi * 0.05 + CGFloat.random(in: -0.2...0.2)
             let v = speed * CGFloat.random(in: 0.6...1.1)
             particles.append(Particle(position: point, velocity: CGPoint(-cos(angle) * v, sin(angle) * v),
                                       gravity: -220, life: life * CGFloat.random(in: 0.7...1), total: life,
-                                      color: color, size: CGFloat.random(in: 1.4...2.6), drift: drift))
+                                      color: colors[i % colors.count], size: CGFloat.random(in: size), drift: drift,
+                                      shape: shape))
         }
     }
 
@@ -454,6 +547,9 @@ final class GameSession {
         let size: CGFloat
         /// 땅을 따라 뒤로 흘러가는 정도 (먼지 1, 터지는 별 0).
         let drift: CGFloat
+        var shape: Shape = .dot
+
+        enum Shape { case dot, heart, coin, spark }
     }
 
     private struct Popup {
@@ -486,6 +582,7 @@ final class GameSession {
     func drawWorld(_ cg: CGContext, size: CGSize, groundY: CGFloat, stageAnchorX: CGFloat, stageScale: CGFloat,
                    theme: SpriteTheme, time: Double) {
         let ground = { (height: Double) in groundY - CGFloat(height) }
+        self.groundY = groundY
 
         // 코인
         for coin in game.coins where !coin.taken {
@@ -559,9 +656,37 @@ final class GameSession {
         // 파티클
         for p in particles {
             let alpha = max(0, min(1, p.life / p.total))
-            cg.setFillColor(p.color.withAlphaComponent(alpha).cgColor)
             let r = p.size
-            cg.fillEllipse(in: CGRect(x: p.position.x - r, y: ground(Double(p.position.y)) - r, width: r * 2, height: r * 2))
+            let center = CGPoint(p.position.x, ground(Double(p.position.y)))
+            switch p.shape {
+            case .dot:
+                cg.setFillColor(p.color.withAlphaComponent(alpha).cgColor)
+                cg.fillEllipse(in: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
+            case .heart:
+                Self.fillHeart(cg, at: center, size: r * 2.2, color: p.color.withAlphaComponent(alpha))
+            case .spark:
+                SpriteEffects.sparkle(cg, at: center, radius: r * 1.6, color: p.color.withAlphaComponent(alpha))
+            case .coin:
+                if let image = GameSprite.coin.frame(at: time + Double(r)) {
+                    cg.saveGState()
+                    cg.setAlpha(alpha)
+                    GameAssets.draw(image, in: CGRect(x: center.x - r * 2, y: center.y - r * 2, width: r * 4, height: r * 4), cg)
+                    cg.restoreGState()
+                }
+            }
+        }
+
+        // 먹은 코인이 왼쪽 위 코인 수로 날아간다
+        let target = CGPoint(30, 49)
+        for flyer in coinFlyers {
+            let t = min(1, flyer.t)
+            let e = t * t
+            let x = flyer.from.x + (target.x - flyer.from.x) * e
+            let y = flyer.from.y + (target.y - flyer.from.y) * e - sin(t * .pi) * 18
+            let size = 12 - 5 * t
+            if let image = GameSprite.coin.frame(at: time) {
+                GameAssets.draw(image, in: CGRect(x: x - size / 2, y: y - size / 2, width: size, height: size), cg)
+            }
         }
 
         // 빠를수록 바람이 보인다
@@ -604,6 +729,7 @@ final class GameSession {
             frame = MotionFrame(pose: CharacterPose(activity: .run, phase: CGFloat((game.distance + game.runnerOffset) / 70),
                                                     speed: 1.25))
             if game.isDucking { frame.transform.squash = 0.6 }
+            if game === self.game, landBounce > 0 { frame.transform.squash = min(frame.transform.squash, 1 - 0.22 * landBounce) }
             frame.transform.rotation = CGFloat(game.moveDirection) * 0.08
         case .over:
             frame = MotionFrame(pose: CharacterPose(activity: .sit, phase: CGFloat(time / 1.1), mouthOpen: true))
@@ -670,7 +796,9 @@ final class GameSession {
     func overlay(size: CGSize) -> (panels: [Panel], labels: [Label]) {
         var labels: [Label] = []
         var panels: [Panel] = []
-        let digits = Font.system(size: 15, weight: .bold, design: .rounded).monospacedDigit()
+        // 100점마다 점수가 잠깐 커진다
+        let digits = Font.system(size: 15 * (1 + 0.3 * milestoneGlow * milestoneGlow), weight: .bold, design: .rounded)
+            .monospacedDigit()
         let small = Font.system(size: 10.5, weight: .medium).monospacedDigit()
         let gold = Color(nsColor: NSColor(hex: 0xFFD45E))
 

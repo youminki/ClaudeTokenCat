@@ -5,15 +5,32 @@ enum Runner: String, CaseIterable {
     case cat, dog, rabbit, fox, penguin, duck, dino, hedgehog
     case chick, frog, panda, turtle, snail, octopus, whale
     case ghost, slime, robot, ufo, ninja, unicorn, dragon
+    // 상점 러너: 미니게임 코인으로 산다
+    case tiger, raccoon, bear, sheep, blackCat, goldenCat
 
     enum Group: String, CaseIterable {
         case animal = "동물"
         case fantasy = "판타지"
+        case shop = "상점 러너"
+    }
+
+    /// 상점에서 사는 값 (게임 코인). 기본 러너는 nil.
+    var price: Int? {
+        switch self {
+        case .sheep: return 300
+        case .raccoon: return 400
+        case .bear: return 450
+        case .blackCat: return 500
+        case .tiger: return 700
+        case .goldenCat: return 1500
+        default: return nil
+        }
     }
 
     var group: Group {
         switch self {
         case .ghost, .slime, .robot, .ufo, .ninja, .unicorn, .dragon: return .fantasy
+        case .tiger, .raccoon, .bear, .sheep, .blackCat, .goldenCat: return .shop
         default: return .animal
         }
     }
@@ -46,6 +63,12 @@ enum Runner: String, CaseIterable {
         case .ninja: return "닌자"
         case .unicorn: return "유니콘"
         case .dragon: return "드래곤"
+        case .tiger: return "호랑이"
+        case .raccoon: return "너구리"
+        case .bear: return "곰"
+        case .sheep: return "양"
+        case .blackCat: return "검은 고양이"
+        case .goldenCat: return "황금 고양이"
         }
     }
 
@@ -74,6 +97,12 @@ enum Runner: String, CaseIterable {
         case .ninja: return "닌닌"
         case .unicorn: return "히힝"
         case .dragon: return "크르릉"
+        case .tiger: return "어흥"
+        case .raccoon: return "킁킁"
+        case .bear: return "꿀꺽"
+        case .sheep: return "메에"
+        case .blackCat: return "야옹"
+        case .goldenCat: return "반짝냥"
         }
     }
 
@@ -111,6 +140,12 @@ enum Runner: String, CaseIterable {
         case .robot: return Robot()
         case .ufo: return UFO()
         case .ninja: return Ninja()
+        case .tiger: return Quadruped.tiger
+        case .raccoon: return Quadruped.raccoon
+        case .bear: return Quadruped.bear
+        case .sheep: return Quadruped.sheep
+        case .blackCat: return Quadruped.blackCat
+        case .goldenCat: return Quadruped.goldenCat
         }
     }
 }

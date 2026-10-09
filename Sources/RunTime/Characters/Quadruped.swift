@@ -396,6 +396,108 @@ extension Quadruped {
         }
     )
 
+    // MARK: 상점 러너 (게임 코인으로 산다)
+
+    static let tiger = Quadruped(
+        palette: CharacterPalette(body: NSColor(hex: 0xF08A24), belly: NSColor(hex: 0xFFF1DC),
+                                  dark: NSColor(hex: 0x2B1D14)),
+        bodyRx: 6.5, bodyRy: 3.7,
+        legLength: 5.2, legWidth: 2.4,
+        headRx: 4.6, headRy: 4.0,
+        snout: (CGPoint(2.6, 1.3), 1.9, 1.35),
+        ears: .round, tail: .curl, tailLength: 9.5,
+        decorate: { s, a in
+            guard a.pose.activity != .sleep else { return }
+            for k in 0..<5 {
+                let x = -a.bodyRx * 0.75 + CGFloat(k) * 1.75
+                s.detailCurve(a.body.point(x, -a.bodyRy * 0.98), control: a.body.point(x + 0.7, -a.bodyRy * 0.4),
+                              a.body.point(x + 0.1, a.bodyRy * 0.15), width: 0.85, .dark)
+            }
+            s.detailLine([a.headPoint(-a.headRx * 0.15, -a.headRy * 0.9), a.headPoint(0, -a.headRy * 0.5)], width: 0.6, .dark)
+            s.detailLine([a.headPoint(-a.headRx * 0.45, -a.headRy * 0.75), a.headPoint(-a.headRx * 0.3, -a.headRy * 0.45)],
+                         width: 0.5, .dark)
+        }
+    )
+
+    static let raccoon = Quadruped(
+        palette: CharacterPalette(body: NSColor(hex: 0x9A9AA6), belly: NSColor(hex: 0xE9E9EE),
+                                  dark: NSColor(hex: 0x34313D)),
+        bodyRx: 6.0, bodyRy: 3.5,
+        legLength: 4.6, legWidth: 2.2,
+        headRx: 4.4, headRy: 3.8,
+        snout: (CGPoint(2.8, 1.2), 1.9, 1.2),
+        ears: .round, tail: .bushy, tailLength: 8,
+        legRole: .dark, earRole: .dark,
+        decorate: { s, a in
+            // 눈가 검은 띠
+            s.detailEllipse(a.headPoint(a.headRx * 0.32, -a.headRy * 0.08), 1.9, 1.05, rotation: a.headTilt + 0.15, .dark)
+            s.detailEllipse(a.headPoint(a.headRx * 0.1, -a.headRy * 0.5), 1.6, 0.5, rotation: a.headTilt, .belly)
+        }
+    )
+
+    static let bear = Quadruped(
+        palette: CharacterPalette(body: NSColor(hex: 0x8D5B3A), belly: NSColor(hex: 0xD9B48F),
+                                  dark: NSColor(hex: 0x4A2E1E)),
+        bodyRx: 7.0, bodyRy: 4.2,
+        legLength: 4.6, legWidth: 2.8,
+        headRx: 4.6, headRy: 4.2,
+        snout: (CGPoint(2.7, 1.3), 2.0, 1.5),
+        ears: .round, tail: .puff,
+        decorate: { s, a in
+            guard a.pose.activity != .sleep else { return }
+            s.detailEllipse(a.body.point(a.bodyRx * 0.5, a.bodyRy * 0.25), 2.2, 1.9, .belly)
+        }
+    )
+
+    static let sheep = Quadruped(
+        palette: CharacterPalette(body: NSColor(hex: 0xFBF8F1), belly: NSColor(hex: 0xFFFFFF),
+                                  dark: NSColor(hex: 0x3C3842)),
+        bodyRx: 6.2, bodyRy: 4.0,
+        legLength: 4.8, legWidth: 1.8,
+        headRx: 3.6, headRy: 3.4,
+        snout: (CGPoint(2.4, 1.0), 1.6, 1.2),
+        ears: .floppy, tail: .puff, legRole: .dark, earRole: .dark,
+        overlay: { s, a in
+            // 뭉게뭉게 털
+            for k in 0..<5 {
+                let x = -a.bodyRx * 0.75 + CGFloat(k) * a.bodyRx * 0.38
+                s.circle(a.body.point(x, -a.bodyRy * 0.75), 1.7, .body)
+            }
+        },
+        decorate: { s, a in
+            s.detailEllipse(a.headPoint(a.headRx * 0.2, a.headRy * 0.1), 2.6, 2.2, rotation: a.headTilt, .dark)
+            s.circle(a.headPoint(-a.headRx * 0.2, -a.headRy * 0.85), 1.3, .body)
+        }
+    )
+
+    static let blackCat = Quadruped(
+        palette: CharacterPalette(body: NSColor(hex: 0x2C2833), belly: NSColor(hex: 0x4A4553),
+                                  dark: NSColor(hex: 0x17151C), extra: NSColor(hex: 0xF2C14E)),
+        snout: (CGPoint(2.6, 1.2), 1.7, 1.25),
+        decorate: { s, a in
+            guard a.pose.activity != .sleep else { return }
+            let neck = a.headPoint(-a.headRx * 0.55, a.headRy * 0.75)
+            s.detailEllipse(neck + CGPoint(0.3, 1.2), 0.65, 0.65, .extra)   // 방울
+        }
+    )
+
+    static let goldenCat = Quadruped(
+        palette: CharacterPalette(body: NSColor(hex: 0xF7C948), belly: NSColor(hex: 0xFFF4C2),
+                                  dark: NSColor(hex: 0xC48A12), extra: NSColor(hex: 0xFFFFFF)),
+        snout: (CGPoint(2.6, 1.2), 1.7, 1.25),
+        decorate: { s, a in
+            guard a.pose.activity != .sleep else { return }
+            for k in 0..<3 {
+                let x = -a.bodyRx * 0.45 + CGFloat(k) * 1.9
+                s.detailCurve(a.body.point(x, -a.bodyRy * 0.98), control: a.body.point(x + 0.7, -a.bodyRy * 0.55),
+                              a.body.point(x + 0.2, -a.bodyRy * 0.2), width: 0.7, .dark)
+            }
+            // 반짝임
+            s.detailEllipse(a.body.point(-a.bodyRx * 0.2, -a.bodyRy * 0.55), 0.9, 0.35, rotation: -0.4, .extra)
+            s.detailEllipse(a.headPoint(-a.headRx * 0.3, -a.headRy * 0.55), 0.7, 0.3, rotation: -0.4, .extra)
+        }
+    )
+
     static let dog = Quadruped(
         palette: CharacterPalette(body: NSColor(hex: 0xE0B07A), belly: NSColor(hex: 0xFFF3E2),
                                   dark: NSColor(hex: 0x8C5A3C), extra: NSColor(hex: 0xE5484D)),
