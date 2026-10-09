@@ -66,6 +66,10 @@ final class GameSession {
     var onExit: () -> Void = {}
     /// 이 Mac의 최고 판. 고스트와 겨룰 때 같은 코스와 그때 움직임을 다시 돌린다.
     var savedGhost: GhostRecord?
+    /// 고스트 코드로 받은 친구 고스트.
+    var challenge: GhostRecord?
+    /// 지금 겨루는 고스트.
+    private(set) var raceTarget: GhostRecord?
     private var ghost: GhostRunner?
     /// 고스트와 겨루는 판. 코스를 미리 알고 하는 판이라 기록과 순위에 넣지 않는다.
     private(set) var isRace = false
@@ -79,6 +83,7 @@ final class GameSession {
                           best: live ? GameRecords.best : 0)
         if live {
             savedGhost = GhostStore.load(for: game)
+            challenge = GhostStore.loadChallenge(for: game)
             installKeys()
         }
     }
@@ -101,22 +106,47 @@ final class GameSession {
         if wasOver, game.phase == .playing { restarted() }
     }
 
-    /// 최고 판과 같은 코스에서 그 판의 고스트와 함께 달린다.
-    func startRace() {
-        guard let record = savedGhost, let seed = record.seedValue, game.phase != .playing else { return }
+    /// 고스트 판과 같은 코스에서 그 고스트와 함께 달린다.
+    func startRace(_ record: GhostRecord?) {
+        guard let record, let seed = record.seedValue, game.phase != .playing else { return }
         game.prepare(seed: seed)
         guard game.phase == .ready else { return }   // 부딪힌 직전이라 아직 다시 시작할 수 없음
         ghost = GhostRunner(tuning: game.tuning, runnerWidth: Self.runnerWidth, runnerHeight: Self.runnerHeight,
                             seed: seed, inputs: record.inputs)
         isRace = true
+        raceTarget = record
         game.press()
         game.release()
     }
 
     /// 지금 점수에서 고스트 판의 최종 점수를 뺀 값 (겨루는 중에만). 넘으면 이긴다.
     var raceLead: Int? {
-        guard isRace, let savedGhost else { return nil }
-        return game.score - savedGhost.score
+        guard isRace, let raceTarget else { return nil }
+        return game.score - raceTarget.score
+    }
+
+    /// 내 고스트를 친구에게 보낼 코드로 복사한다.
+    func copyGhostCode() {
+        guard let savedGhost, let code = GhostStore.code(for: savedGhost, name: Leaderboard.shared.nickname) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(code, forType: .string)
+        announce("고스트 코드를 복사했어요 (\(savedGhost.score)점 판)", sound: false)
+    }
+
+    /// 클립보드의 고스트 코드를 친구 고스트로 불러온다.
+    func pasteGhostCode() {
+        guard let text = NSPasteboard.general.string(forType: .string) else {
+            announce("클립보드에 고스트 코드가 없어요", sound: false)
+            return
+        }
+        switch GhostStore.readCode(text, for: game) {
+        case .success(let record):
+            challenge = record
+            GhostStore.saveChallenge(record)
+            announce("\(record.name ?? "친구") 고스트 \(record.score)점 · F로 겨루기", sound: false)
+        case .failure(let error):
+            announce(error.localizedDescription, sound: false)
+        }
     }
 
     func release() { game.release() }
@@ -143,8 +173,14 @@ final class GameSession {
             case 124, 2:        // →, D
                 self.game.setMove(forward: down)
                 return nil
-            case 5 where self.game.phase != .playing && self.savedGhost != nil:   // G
-                if down, !event.isARepeat { self.startRace() }
+            case 5, 3, 8, 9 where self.game.phase != .playing:   // G 내 고스트, F 친구 고스트, C 복사, V 붙여넣기
+                guard down, !event.isARepeat else { return nil }
+                switch event.keyCode {
+                case 5: self.startRace(self.savedGhost)
+                case 3: self.startRace(self.challenge)
+                case 8: self.copyGhostCode()
+                default: self.pasteGhostCode()
+                }
                 return nil
             case 53:            // esc
                 if down { self.onExit() }
@@ -243,9 +279,9 @@ final class GameSession {
         }
     }
 
-    func announce(_ text: String) {
+    func announce(_ text: String, sound: Bool = true) {
         notice = (text, 3.5)
-        play(.record)
+        if sound { play(.record) }
     }
 
     private func play(_ effect: GameSound.Effect) {
@@ -533,8 +569,9 @@ final class GameSession {
                                     position: CGPoint(x + 8, size.height - 15 - 56)))
             }
         }
-        if game.phase == .playing, let lead = raceLead, let savedGhost {
-            let text = lead > 0 ? "고스트 추월! +\(lead)" : "고스트 \(savedGhost.score) (-\(1 - lead))"
+        if game.phase == .playing, let lead = raceLead, let raceTarget {
+            let who = raceTarget.name ?? "고스트"
+            let text = lead > 0 ? "\(who) 추월! +\(lead)" : "\(who) \(raceTarget.score) (-\(1 - lead))"
             labels.append(Label(text: Text(text).font(small).foregroundColor(lead > 0 ? gold : .white.opacity(0.85)),
                                 position: CGPoint(size.width / 2, 12)))
         }
@@ -546,7 +583,7 @@ final class GameSession {
         if let notice {
             labels.append(Label(text: Text(notice.text).font(.system(size: 11, weight: .bold))
                                     .foregroundColor(Color(nsColor: NSColor(hex: 0x8FD3FF)).opacity(Double(min(1, notice.life * 2)))),
-                                position: CGPoint(size.width / 2, 70)))
+                                position: CGPoint(size.width / 2, game.phase == .playing ? 70 : 14)))
         }
         if recordBanner > 0, game.phase == .playing {
             labels.append(Label(text: Text("신기록!").font(.system(size: 13, weight: .heavy, design: .rounded))
@@ -555,14 +592,23 @@ final class GameSession {
         }
 
         let center = CGPoint(size.width / 2, size.height / 2 - 12)
-        let ghostLine: Label? = savedGhost.map {
-            Label(text: Text("G  고스트와 겨루기 (\($0.score)점 판)").font(small).foregroundColor(gold.opacity(0.9)),
-                  position: .zero)
+        // 고스트 단축키. 겨룰 고스트 한 줄, 코드 복사·붙여넣기 한 줄
+        var races: [String] = []
+        if let savedGhost { races.append("G 내 고스트 \(savedGhost.score)") }
+        if let challenge { races.append("F \(challenge.name ?? "친구") \(challenge.score)") }
+        let codeKeys = savedGhost == nil ? "V 고스트 코드 붙여넣기" : "C 코드 복사 · V 붙여넣기"
+        let ghostLines = (races.isEmpty ? [] : [races.joined(separator: " · ")]) + [codeKeys]
+        let ghostColors = (races.isEmpty ? [] : [gold.opacity(0.9)]) + [Color.white.opacity(0.55)]
+        let ghostExtra = CGFloat(ghostLines.count) * 14
+        func addGhostLines(from y: CGFloat) {
+            for (i, line) in ghostLines.enumerated() {
+                labels.append(Label(text: Text(line).font(small).foregroundColor(ghostColors[i]),
+                                    position: CGPoint(center.x, y + CGFloat(i) * 14)))
+            }
         }
         switch game.phase {
         case .ready where entrance >= 1:
-            let extra: CGFloat = ghostLine == nil ? 0 : 14
-            panels.append(Panel(rect: CGRect(x: center.x - 112, y: center.y - 34, width: 224, height: 62 + extra)))
+            panels.append(Panel(rect: CGRect(x: center.x - 112, y: center.y - 34, width: 224, height: 62 + ghostExtra)))
             labels.append(Label(text: Text("토큰 러너").font(.system(size: 14, weight: .heavy, design: .rounded))
                                     .foregroundColor(.white), position: CGPoint(center.x, center.y - 18)))
             labels.append(Label(text: Text("스페이스·클릭으로 시작").font(.system(size: 11, weight: .semibold))
@@ -570,17 +616,18 @@ final class GameSession {
             let best = game.best > 0 ? "최고 \(game.best)  ·  " : ""
             labels.append(Label(text: Text("\(best)↑ 길게 높이 · ↓ 숙이기 · ←→ 이동").font(small)
                                     .foregroundColor(.white.opacity(0.65)), position: CGPoint(center.x, center.y + 16)))
-            if let ghostLine { labels.append(Label(text: ghostLine.text, position: CGPoint(center.x, center.y + 30))) }
+            addGhostLines(from: center.y + 30)
         case .over:
             // 겨루는 판은 순위 대신 고스트와의 차이를 보여 준다
             let raceLine = raceLead.map { lead in
-                lead > 0 ? "고스트보다 \(lead)점 앞섬 · 기록에는 남지 않음" : "고스트까지 \(-lead + 1)점 모자람"
+                lead > 0 ? "\(lead)점 앞섬 · 기록에는 남지 않음" : "\(-lead + 1)점 모자람"
             }
             let middle = raceLine ?? rankLine
-            let extra: CGFloat = (middle == nil ? 0 : 14) + (ghostLine == nil ? 0 : 14)
+            let extra: CGFloat = (middle == nil ? 0 : 14) + ghostExtra
             panels.append(Panel(rect: CGRect(x: center.x - 112, y: center.y - 34, width: 224, height: 66 + extra)))
             let won = (raceLead ?? 0) > 0
-            let title = isRace ? (won ? "고스트를 이겼다!" : "고스트에게 졌다")
+            let who = raceTarget?.name.map { "\($0) 고스트" } ?? "고스트"
+            let title = isRace ? (won ? "\(who)를 이겼다!" : "\(who)에게 졌다")
                 : game.isNewRecord ? "신기록!" : "앗, 부딪혔다"
             labels.append(Label(text: Text(title).font(.system(size: 13, weight: .heavy, design: .rounded))
                                     .foregroundColor(won || (!isRace && game.isNewRecord) ? gold : .white),
@@ -594,7 +641,7 @@ final class GameSession {
             let bottom = center.y + 21 + (middle == nil ? 0 : 14)
             labels.append(Label(text: Text("최고 \(game.best)  ·  스페이스·클릭으로 새 판").font(small)
                                     .foregroundColor(.white.opacity(0.7)), position: CGPoint(center.x, bottom)))
-            if let ghostLine { labels.append(Label(text: ghostLine.text, position: CGPoint(center.x, bottom + 14))) }
+            addGhostLines(from: bottom + 14)
         default:
             break
         }

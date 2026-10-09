@@ -70,7 +70,17 @@ enum GameShots {
         session.savedGhost = GhostRecord(seed: String(game.seed), score: game.score, layout: GhostStore.layout(of: game),
                                          inputs: game.inputLog)
         try shot("5-over-ghost")
-        session.startRace()
+        // 고스트 코드를 만들어 다시 읽는다. 적힌 점수를 부풀려도 돌려 본 점수로 바뀌어야 한다
+        var inflated = session.savedGhost!
+        inflated = GhostRecord(seed: inflated.seed, score: 99_999, layout: inflated.layout, inputs: inflated.inputs)
+        let code = GhostStore.code(for: inflated, name: "친구") ?? ""
+        let started = Date()
+        let read = GhostStore.readCode(code, for: game)
+        print("ghost code \(code.count)자, 확인 \(Int(Date().timeIntervalSince(started) * 1000))ms, 점수 \((try? read.get())?.score ?? -1) (원래 \(game.score))")
+        print("garbage: \(GhostStore.readCode("RUNTIME-GHOST:abc", for: game))")
+        if case .success(let friend) = read { session.challenge = friend }
+        try shot("5b-over-friend")
+        session.startRace(session.savedGhost)
         game.setMove(forward: true)
         step(0.4, autoplay: true)
         game.setMove(forward: false)

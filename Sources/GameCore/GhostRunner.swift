@@ -23,3 +23,12 @@ public final class GhostRunner {
         }
     }
 }
+
+extension GhostRunner {
+    /// 끝날 때까지 돌려 본다. 남이 준 고스트의 점수를 믿지 않고 직접 낸 점수를 쓴다.
+    /// 상한 안에 끝나지 않으면 nil (일부러 만든 끝없는 기록).
+    public func finalScore(maxTicks: Int) -> Int? {
+        while game.phase == .playing, game.ticks < maxTicks { advance(by: RunnerGame.step) }
+        return game.phase == .over ? game.score : nil
+    }
+}
