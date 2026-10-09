@@ -1,4 +1,5 @@
 import SwiftUI
+import UsageCore
 
 /// 팝오버 디자인 토큰. 색은 상태를 알릴 때만 쓰고, 나머지는 흰색의 농도와 글자 크기로 위계를 만든다.
 enum Theme {
@@ -8,6 +9,8 @@ enum Theme {
     static let hairline = Color.white.opacity(0.09)
     static let track = Color.white.opacity(0.11)
     static let hover = Color.white.opacity(0.08)
+    /// 카드 바탕. 구획선 대신 옅은 면으로 묶어 숫자가 먼저 읽히게 한다.
+    static let surface = Color.white.opacity(0.045)
 
     static let normal = Color(white: 0.88)
     static let warning = Color(red: 0.94, green: 0.66, blue: 0.27)
@@ -33,6 +36,57 @@ enum Theme {
 struct Hairline: View {
     var body: some View {
         Rectangle().fill(Theme.hairline).frame(height: 1)
+    }
+}
+
+/// 정보 묶음 카드.
+struct Card<Content: View>: View {
+    private let padding: CGFloat
+    private let content: Content
+
+    init(padding: CGFloat = 12, @ViewBuilder content: () -> Content) {
+        self.padding = padding
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.surface))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.hairline))
+    }
+}
+
+/// 시간 대비 사용 속도 배지 (여유·적정·빠름·한도 임박).
+struct PaceBadge: View {
+    let pace: GaugeMath.Pace
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(color.opacity(0.16)))
+    }
+
+    private var title: String {
+        switch pace {
+        case .relaxed: return "여유"
+        case .steady: return "적정"
+        case .fast: return "빠름"
+        case .critical: return "한도 임박"
+        }
+    }
+
+    private var color: Color {
+        switch pace {
+        case .relaxed: return Theme.positive
+        case .steady: return Theme.secondary
+        case .fast: return Theme.warning
+        case .critical: return Theme.critical
+        }
     }
 }
 

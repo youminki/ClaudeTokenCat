@@ -493,7 +493,7 @@ final class StageModel: ObservableObject {
         }
 
         // 해·달
-        let orb = CGPoint(size.width * 0.78, sky.orbLow ? groundY - 24 : 26)
+        let orb = CGPoint(size.width * 0.6, sky.orbLow ? groundY - 24 : 26)   // 오른쪽 위는 단추 자리
         cg.setFillColor(sky.orb.withAlphaComponent(0.16).cgColor)
         cg.fillEllipse(in: CGRect(x: orb.x - 14, y: orb.y - 14, width: 28, height: 28))
         cg.setFillColor(sky.orb.cgColor)

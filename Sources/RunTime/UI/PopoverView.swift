@@ -56,20 +56,24 @@ struct PopoverView: View {
         VStack(alignment: .leading, spacing: 0) {
             RunnerStage(display: display, character: settings.character, theme: settings.spriteTheme,
                         onPet: performTrick, openLeaderboard: openLeaderboard)
-            stageCaption.padding(.top, 9)
-            Hairline().padding(.vertical, 14)
-            HStack(alignment: .top, spacing: 20) {
+            stageCaption.padding(.top, 10).padding(.horizontal, 2)
+            HStack(alignment: .top, spacing: 8) {
                 sessionColumn
                 weeklyColumn
             }
-            Hairline().padding(.vertical, 14)
-            speedSection
-            Hairline().padding(.vertical, 14)
-            todayRow
-            Hairline().padding(.top, 14)
-            footer.padding(.top, 8)
+            .fixedSize(horizontal: false, vertical: true)   // 두 카드 높이를 맞춘다
+            .padding(.top, 12)
+            Card {
+                VStack(alignment: .leading, spacing: 10) {
+                    speedSection
+                    Hairline()
+                    todayRow
+                }
+            }
+            .padding(.top, 8)
+            footer.padding(.top, 10)
         }
-        .padding(16)
+        .padding(14)
         .frame(width: 376)
     }
 
@@ -79,9 +83,10 @@ struct PopoverView: View {
         HStack(spacing: 0) {
             runnerMenu
             Spacer(minLength: 8)
-            Text(engine.burnRate >= 1 ? "\(Int(engine.burnRate).formatted()) 토큰/분" : "멈춤")
+            Text(engine.burnRate >= 1 ? "\(Format.tokens(Int(engine.burnRate))) 토큰/분" : "멈춤")
                 .font(Theme.caption.monospacedDigit())
                 .foregroundStyle(Theme.secondary)
+                .help("최근 1분 동안 쓴 토큰 (이 Mac의 Claude Code)")
         }
     }
 
@@ -154,11 +159,11 @@ struct PopoverView: View {
 
     private var sessionColumn: some View {
         let gauge = engine.sessionGauge
-        return VStack(alignment: .leading, spacing: 0) {
-            columnTitle("세션", detail: "5시간")
-            figure(gauge).padding(.top, 2)
-            GaugeBar(percent: gauge?.percent,
-                     elapsed: elapsed(until: engine.sessionResetsAt, duration: BlockCalculator.blockDuration))
+        let elapsed = elapsed(until: engine.sessionResetsAt, duration: BlockCalculator.blockDuration)
+        return Card { VStack(alignment: .leading, spacing: 0) {
+            columnTitle("세션", detail: "5시간", gauge: gauge, elapsed: elapsed, reachesLimit: sessionReachesLimit)
+            figure(gauge).padding(.top, 4)
+            GaugeBar(percent: gauge?.percent, elapsed: elapsed)
                 .padding(.top, 6)
             VStack(alignment: .leading, spacing: 2) {
                 if gauge == nil {
@@ -173,8 +178,8 @@ struct PopoverView: View {
                 sessionOutlook
             }
             .padding(.top, 6)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: 0)
+        } }
         .help("이번 세션에 이 기기의 Claude Code가 쓴 토큰: \(Format.tokens(engine.snapshot?.currentBlock?.totalTokens ?? 0))")
     }
 
@@ -194,11 +199,11 @@ struct PopoverView: View {
 
     private var weeklyColumn: some View {
         let gauge = engine.weeklyGauge
-        return VStack(alignment: .leading, spacing: 0) {
-            columnTitle("주간", detail: nil)
-            figure(gauge).padding(.top, 2)
-            GaugeBar(percent: gauge?.percent,
-                     elapsed: gauge == nil ? nil : elapsed(until: engine.nextWeeklyReset, duration: WeeklyWindow.duration))
+        let elapsed = gauge == nil ? nil : elapsed(until: engine.nextWeeklyReset, duration: WeeklyWindow.duration)
+        return Card { VStack(alignment: .leading, spacing: 0) {
+            columnTitle("주간", detail: "7일", gauge: gauge, elapsed: elapsed, reachesLimit: false)
+            figure(gauge).padding(.top, 4)
+            GaugeBar(percent: gauge?.percent, elapsed: elapsed)
                 .padding(.top, 6)
             VStack(alignment: .leading, spacing: 2) {
                 if gauge == nil {
@@ -213,16 +218,33 @@ struct PopoverView: View {
                 }
             }
             .padding(.top, 6)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: 0)
+        } }
     }
 
-    private func columnTitle(_ title: String, detail: String?) -> some View {
+    /// 최근 속도로는 초기화 전에 한도에 닿는지. 평균 페이스가 여유여도 배지를 빠름으로 올려 아래 문구와 맞춘다.
+    private var sessionReachesLimit: Bool {
+        guard case .reachesLimit = GaugeMath.limitOutlook(minutesLeft: engine.sessionMinutesLeft,
+                                                         resetsAt: engine.sessionResetsAt, now: Date()) else { return false }
+        return true
+    }
+
+    /// 제목 오른쪽에 시간 대비 속도 배지. 눈금을 읽지 않아도 지금 페이스가 보이게 한다.
+    private func columnTitle(_ title: String, detail: String, gauge: GaugeReading?, elapsed: Double?,
+                             reachesLimit: Bool) -> some View {
         HStack(spacing: 4) {
             Text(title).foregroundStyle(Theme.secondary)
-            if let detail { Text(detail).foregroundStyle(Theme.tertiary) }
+            Text(detail).foregroundStyle(Theme.tertiary)
+            Spacer(minLength: 4)
+            if let gauge, gauge.source != .rolledOver, let elapsed {
+                let pace = GaugeMath.pace(percent: gauge.percent, elapsed: elapsed)
+                PaceBadge(pace: reachesLimit && (pace == .relaxed || pace == .steady) ? .fast : pace)
+                    .help("사용 \(gauge.displayPercent)% · 시간 \(Int((elapsed * 100).rounded()))% 지남"
+                          + (reachesLimit ? "\n최근 속도로는 초기화 전에 한도에 닿습니다" : ""))
+            }
         }
         .font(Theme.label)
+        .frame(height: 16)
     }
 
     /// 공식 값이 없으면 "--". 로컬 기록으로 추정하면 `/usage`와 어긋나서 숫자를 지어내지 않는다.
@@ -253,9 +275,12 @@ struct PopoverView: View {
         guard let modelTokens = engine.snapshot?.weeklyModelTokens, !modelTokens.isEmpty else { return nil }
         let total = modelTokens.values.reduce(0, +)
         guard total > 0 else { return nil }
-        return modelTokens.sorted { $0.value > $1.value }
+        // 반올림해 0%가 되는 모델은 뺀다 ("Sonnet 0%"는 정보가 없다)
+        return modelTokens.map { (Format.modelName($0.key), Int((Double($0.value) / Double(total) * 100).rounded())) }
+            .filter { $0.1 >= 1 }
+            .sorted { $0.1 > $1.1 }
             .prefix(2)
-            .map { "\(Format.modelName($0.key)) \(Int((Double($0.value) / Double(total) * 100).rounded()))%" }
+            .map { "\($0.0) \($0.1)%" }
             .joined(separator: " · ")
     }
 

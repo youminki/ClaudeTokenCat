@@ -22,18 +22,19 @@ struct GaugeBar: View {
                     .fill(color)
                     .frame(width: width(percent, in: total))
             }
-            .frame(height: 4)
+            .frame(height: 6)
             .frame(maxHeight: .infinity)
             .overlay(alignment: .leading) {
                 if let elapsed {
-                    Rectangle()
-                        .fill(Theme.secondary)
-                        .frame(width: 1, height: 9)
+                    // 막대 색과 겹쳐도 보이게 밝은 눈금
+                    Capsule()
+                        .fill(Theme.primary.opacity(0.75))
+                        .frame(width: 2, height: 12)
                         .offset(x: min(max(width(elapsed * 100, in: total), 0), total - 1))
                 }
             }
         }
-        .frame(height: 10)
+        .frame(height: 12)
         .animation(.easeOut(duration: 0.25), value: percent)
         .help(helpText)
         .accessibilityElement()
