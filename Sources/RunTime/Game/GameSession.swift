@@ -328,7 +328,15 @@ final class GameSession {
             flash = 1
             let center = CGPoint(runnerLeft + Self.runnerWidth / 2, CGFloat(game.runnerY + Self.runnerHeight / 2))
             crashBurst(at: center)
-            creditRun()
+            let missionDone = creditRun()
+            // 부딪힌 소리 뒤에 짧은 음악 하나: 이겼으면 팡파르, 미션을 채웠으면 미션 음악, 아니면 게임 오버
+            let won = isRace ? (raceLead ?? 0) > 0 : game.isNewRecord
+            let jingle: GameSound.Effect = won ? .fanfare : missionDone ? .mission : .gameover
+            let run = runID
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                guard let self, self.runID == run, self.game.phase == .over else { return }
+                self.play(jingle)
+            }
             if !finished, !isRace {
                 finished = true
                 if live {
@@ -344,16 +352,18 @@ final class GameSession {
     }
 
     /// 판이 끝나면 코인과 미션을 지갑에 넣는다. 고스트와 겨룬 판도 넣는다 (꾸미기에만 쓰는 코인이라).
-    private func creditRun() {
-        guard live, !credited else { return }
+    /// 미션을 새로 채웠으면 true.
+    private func creditRun() -> Bool {
+        guard live, !credited else { return false }
         credited = true
         let run = DailyMissions.Run(coins: game.coinsTaken, nearMisses: nearMisses, score: game.score, jumps: jumps,
                                     wonRace: (raceLead ?? 0) > 0)
         let completed = GameWallet.shared.finishRun(run, bonusCoins: boosted ? game.coinsTaken : 0)
         if !completed.isEmpty {
             let reward = completed.reduce(0) { $0 + $1.reward }
-            announce("미션 완료: \(completed.map(\.title).joined(separator: ", ")) +\(reward)")
+            announce("미션 완료: \(completed.map(\.title).joined(separator: ", ")) +\(reward)", sound: false)
         }
+        return !completed.isEmpty
     }
 
     func announce(_ text: String, sound: Bool = true) {
@@ -873,9 +883,8 @@ final class GameSession {
         var labels: [Label] = []
         var panels: [Panel] = []
         // 100점마다 점수가 잠깐 커진다
-        let digits = Font.system(size: 15 * (1 + 0.3 * milestoneGlow * milestoneGlow), weight: .bold, design: .rounded)
-            .monospacedDigit()
-        let small = Font.system(size: 10.5, weight: .medium).monospacedDigit()
+        let digits = GameFont.pixel(18 * (1 + 0.3 * milestoneGlow * milestoneGlow))
+        let small = GameFont.pixel(12)
         let gold = Color(nsColor: NSColor(hex: 0xFFD45E))
 
         if game.phase != .ready {
@@ -883,9 +892,12 @@ final class GameSession {
             labels.append(Label(text: Text(String(format: "%05d", game.score)).font(digits)
                                     .foregroundColor(glow ? gold : .white),
                                 position: CGPoint(12, 10), anchor: .topLeading))
-            labels.append(Label(text: Text("최고 \(max(game.best, game.score))").font(small)
-                                    .foregroundColor(.white.opacity(0.75)),
-                                position: CGPoint(12, 29), anchor: .topLeading))
+            // 끝난 화면은 패널이 최고 점수를 보여 주고, 왼쪽 위 글자는 패널 가장자리와 겹친다
+            if game.phase == .playing {
+                labels.append(Label(text: Text("최고 \(max(game.best, game.score))").font(small)
+                                        .foregroundColor(.white.opacity(0.75)),
+                                    position: CGPoint(12, 29), anchor: .topLeading))
+            }
             if game.phase == .playing, !game.abilities.isEmpty {
                 var parts: [String] = []
                 if game.abilities.shields > 0 { parts.append("보호막 \(game.shieldsLeft)") }
@@ -896,14 +908,14 @@ final class GameSession {
                                         .foregroundColor(Color(nsColor: NSColor(hex: 0x8FD3FF)).opacity(0.9)),
                                     position: CGPoint(12, 57), anchor: .topLeading))
             }
-            if game.coinsTaken > 0 || boosted {
+            if game.phase == .playing, game.coinsTaken > 0 || boosted {
                 let double = boosted ? "  ×2 Claude 작업 중" : ""
                 labels.append(Label(text: Text("코인 \(game.coinsTaken)\(double)").font(small).foregroundColor(gold.opacity(0.9)),
                                     position: CGPoint(12, 43), anchor: .topLeading))
             }
         }
         for popup in popups {
-            labels.append(Label(text: Text(popup.text).font(.system(size: 11, weight: .heavy, design: .rounded))
+            labels.append(Label(text: Text(popup.text).font(GameFont.pixel(12))
                                     .foregroundColor(gold.opacity(Double(min(1, popup.life * 2)))),
                                 position: CGPoint(popup.position.x, (size.height - 15) - popup.position.y - 14)))
         }
@@ -926,22 +938,22 @@ final class GameSession {
                                 position: CGPoint(size.width / 2, 12)))
         }
         if let overtaken, game.phase == .playing {
-            labels.append(Label(text: Text("\(overtaken.name) 추월!").font(.system(size: 14, weight: .heavy, design: .rounded))
+            labels.append(Label(text: Text("\(overtaken.name) 추월!").font(GameFont.pixel(18))
                                     .foregroundColor(gold.opacity(Double(min(1, overtaken.life * 2)))),
                                 position: CGPoint(size.width / 2, 34)))
         }
         if let zoneBanner, game.phase == .playing {
-            labels.append(Label(text: Text(zoneBanner.text).font(.system(size: 13, weight: .heavy, design: .rounded))
+            labels.append(Label(text: Text(zoneBanner.text).font(GameFont.pixel(18))
                                     .foregroundColor(.white.opacity(Double(min(1, zoneBanner.life * 2)))),
                                 position: CGPoint(size.width / 2, 52)))
         }
         if let notice {
-            labels.append(Label(text: Text(notice.text).font(.system(size: 11, weight: .bold))
+            labels.append(Label(text: Text(notice.text).font(GameFont.pixel(12))
                                     .foregroundColor(Color(nsColor: NSColor(hex: 0x8FD3FF)).opacity(Double(min(1, notice.life * 2)))),
                                 position: CGPoint(size.width / 2, game.phase == .playing ? 70 : 14)))
         }
         if recordBanner > 0, game.phase == .playing {
-            labels.append(Label(text: Text("신기록!").font(.system(size: 13, weight: .heavy, design: .rounded))
+            labels.append(Label(text: Text("신기록!").font(GameFont.pixel(18))
                                     .foregroundColor(gold.opacity(Double(min(1, recordBanner * 3)))),
                                 position: CGPoint(size.width / 2, overtaken == nil ? 34 : 52)))
         }
@@ -967,10 +979,10 @@ final class GameSession {
         }
         switch game.phase {
         case .ready where entrance >= 1:
-            panels.append(Panel(rect: CGRect(x: center.x - 112, y: center.y - 34, width: 224, height: 62 + ghostExtra)))
-            labels.append(Label(text: Text("토큰 러너").font(.system(size: 14, weight: .heavy, design: .rounded))
+            panels.append(Panel(rect: CGRect(x: center.x - 125, y: center.y - 34, width: 250, height: 62 + ghostExtra)))
+            labels.append(Label(text: Text("토큰 러너").font(GameFont.pixel(18))
                                     .foregroundColor(.white), position: CGPoint(center.x, center.y - 18)))
-            labels.append(Label(text: Text("스페이스·클릭으로 시작").font(.system(size: 11, weight: .semibold))
+            labels.append(Label(text: Text("스페이스·클릭으로 시작").font(GameFont.pixel(12))
                                     .foregroundColor(.white.opacity(0.9)), position: CGPoint(center.x, center.y)))
             let best = game.best > 0 ? "최고 \(game.best)  ·  " : ""
             labels.append(Label(text: Text("\(best)↑ 길게 높이 · ↓ 숙이기 · ←→ 이동").font(small)
@@ -982,25 +994,26 @@ final class GameSession {
                 lead > 0 ? "\(lead)점 앞섬 · 기록에는 남지 않음" : "\(-lead + 1)점 모자람"
             }
             let middle = raceLine ?? rankLine
-            let extra: CGFloat = (middle == nil ? 0 : 14) + ghostExtra
-            panels.append(Panel(rect: CGRect(x: center.x - 112, y: center.y - 34, width: 224, height: 66 + extra)))
             let won = (raceLead ?? 0) > 0
             let who = raceTarget?.name.map { "\(Self.shortName($0)) 고스트" } ?? "고스트"
             let title = isRace ? (won ? "\(who)를 이겼다!" : "\(who)에게 졌다")
                 : game.isNewRecord ? "신기록!" : "앗, 부딪혔다"
-            labels.append(Label(text: Text(title).font(.system(size: 13, weight: .heavy, design: .rounded))
+            // 픽셀 글꼴은 줄 높이가 커서 줄 사이를 넉넉히 둔다
+            labels.append(Label(text: Text(title).font(GameFont.pixel(18))
                                     .foregroundColor(won || (!isRace && game.isNewRecord) ? gold : .white),
-                                position: CGPoint(center.x, center.y - 19)))
-            labels.append(Label(text: Text("\(game.score)점").font(.system(size: 20, weight: .heavy, design: .rounded).monospacedDigit())
-                                    .foregroundColor(.white), position: CGPoint(center.x, center.y + 1)))
+                                position: CGPoint(center.x, center.y - 22)))
+            labels.append(Label(text: Text("\(game.score)점").font(GameFont.pixel(24))
+                                    .foregroundColor(.white), position: CGPoint(center.x, center.y + 3)))
+            var y = center.y + 25
             if let middle {
-                labels.append(Label(text: Text(middle).font(small.weight(.semibold)).foregroundColor(gold),
-                                    position: CGPoint(center.x, center.y + 20)))
+                labels.append(Label(text: Text(middle).font(small).foregroundColor(gold), position: CGPoint(center.x, y)))
+                y += 14
             }
-            let bottom = center.y + 21 + (middle == nil ? 0 : 14)
-            labels.append(Label(text: Text("최고 \(game.best)  ·  스페이스·클릭으로 새 판").font(small)
-                                    .foregroundColor(.white.opacity(0.7)), position: CGPoint(center.x, bottom)))
-            addGhostLines(from: bottom + 14)
+            labels.append(Label(text: Text("최고 \(game.best) · 스페이스로 새 판").font(small)
+                                    .foregroundColor(.white.opacity(0.7)), position: CGPoint(center.x, y)))
+            addGhostLines(from: y + 14)
+            let bottom = y + ghostExtra + 10
+            panels.append(Panel(rect: CGRect(x: center.x - 125, y: center.y - 36, width: 250, height: bottom - (center.y - 36))))
         default:
             break
         }

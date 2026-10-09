@@ -89,6 +89,13 @@ struct GameShopView: View {
 
     // MARK: 물건
 
+    /// 코인이 줄었으면(실제로 샀으면) 사는 소리를 낸다. 달기·떼기만 했으면 조용하다.
+    private func buying(_ action: () -> Void) {
+        let before = wallet.coins
+        action()
+        if wallet.coins < before { GameSound.shared.play(.purchase) }
+    }
+
     /// 능력 한 줄: 단계, 켜고 끄기, 다음 단계 사기 (두 번 눌러 산다).
     private func abilityRow(_ ability: Ability) -> some View {
         let level = wallet.level(ability)
@@ -122,7 +129,7 @@ struct GameShopView: View {
                 Button {
                     if asking {
                         state.confirming = nil
-                        wallet.upgrade(ability)
+                        buying { wallet.upgrade(ability) }
                     } else if affordable {
                         state.confirming = key
                     }
@@ -188,7 +195,7 @@ struct GameShopView: View {
         return Button {
             if owned || asking {
                 state.confirming = nil
-                action()
+                buying(action)
             } else if affordable {
                 state.confirming = key
             }
