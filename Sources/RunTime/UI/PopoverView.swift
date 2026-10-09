@@ -57,13 +57,14 @@ struct PopoverView: View {
             RunnerStage(display: display, character: settings.character, theme: settings.spriteTheme,
                         onPet: performTrick, openLeaderboard: openLeaderboard)
             stageCaption.padding(.top, 10).padding(.horizontal, 2)
-            // 배터리 위젯처럼 한도 두 줄을 한 카드에: 작은 링, 이름과 초기화, 오른쪽 큰 %
+            // 세션과 주간을 나란히 두어 두 값을 한눈에 견준다
             Card(padding: 0) {
-                VStack(spacing: 0) {
+                HStack(alignment: .top, spacing: 0) {
                     sessionRow
-                    Hairline().padding(.leading, 64)
+                    Rectangle().fill(Theme.hairline).frame(width: 1)
                     weeklyRow
                 }
+                .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.top, 12)
             Card(padding: 0) {
@@ -158,7 +159,7 @@ struct PopoverView: View {
 
     private var sessionRow: some View {
         let gauge = engine.sessionGauge
-        let elapsed = elapsed(until: engine.sessionResetsAt, duration: BlockCalculator.blockDuration)
+        let elapsed = gauge == nil ? nil : elapsed(until: engine.sessionResetsAt, duration: BlockCalculator.blockDuration)
         let detail: String
         if gauge == nil {
             detail = unavailableNote
@@ -192,35 +193,38 @@ struct PopoverView: View {
         .help(elapsedNote(elapsed).trimmingCharacters(in: .newlines))
     }
 
-    /// 한도 한 줄. 왼쪽 링은 모양으로, 오른쪽 숫자는 정확한 값으로 같은 사용률을 보여 준다.
+    /// 한도 한 칸: 이름과 속도 배지, 큰 %, 시간 눈금이 있는 막대, 초기화 시각.
     private func limitRow<Extra: View>(title: String, window: String, gauge: GaugeReading?, elapsed: Double?,
                                        detail: String, reachesLimit: Bool,
                                        @ViewBuilder extra: () -> Extra) -> some View {
-        HStack(spacing: 12) {
-            RingGauge(percent: gauge?.percent, label: nil, elapsed: elapsed, lineWidth: 6, showsLabel: false)
-                .frame(width: 40, height: 40)
-                .accessibilityHidden(true)   // 같은 값을 오른쪽 숫자가 읽힌다
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 5) {
-                    Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.primary)
-                    Text(window).font(Theme.caption).foregroundStyle(Theme.tertiary)
-                    paceBadge(gauge: gauge, elapsed: elapsed, reachesLimit: reachesLimit)
-                }
-                caption(detail)
-                extra()
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 4) {
+                Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.primary)
+                Text(window).font(Theme.caption).foregroundStyle(Theme.tertiary)
+                Spacer(minLength: 2)
+                paceBadge(gauge: gauge, elapsed: elapsed, reachesLimit: reachesLimit)
             }
-            Spacer(minLength: 8)
+            .frame(height: 18)
             HStack(alignment: .firstTextBaseline, spacing: 1) {
                 Text(gauge.map { "\($0.displayPercent)" } ?? "--")
-                    .font(.system(size: 26, weight: .semibold, design: .rounded).monospacedDigit())
+                    .font(.system(size: 28, weight: .semibold, design: .rounded).monospacedDigit())
                     .contentTransition(.numericText())
-                Text("%").font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundStyle(Theme.secondary)
+                Text("%").font(.system(size: 14, weight: .semibold, design: .rounded)).foregroundStyle(Theme.secondary)
             }
             .foregroundStyle(gauge == nil ? Theme.tertiary : gauge!.percent >= 80 ? Theme.ring(gauge!.percent) : Theme.primary)
             .animation(.easeOut(duration: 0.25), value: gauge?.displayPercent)
+            .padding(.top, 4)
+            GaugeBar(percent: gauge?.percent, elapsed: elapsed)
+                .padding(.top, 6)
+            VStack(alignment: .leading, spacing: 2) {
+                caption(detail)
+                extra()
+            }
+            .padding(.top, 7)
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -245,7 +249,7 @@ struct PopoverView: View {
     }
 
     private func elapsedNote(_ elapsed: Double?) -> String {
-        elapsed.map { "\n링 위 흰 눈금: 이번 창 시간의 \(Int(($0 * 100).rounded()))% 지남" } ?? ""
+        elapsed.map { "\n막대 위 눈금: 이번 창 시간의 \(Int(($0 * 100).rounded()))% 지남" } ?? ""
     }
 
     /// 시간 대비 속도 배지. 눈금을 읽지 않아도 지금 페이스가 보이게 한다.
@@ -305,7 +309,7 @@ struct PopoverView: View {
                     caption("쓴 기록 없음", color: Theme.tertiary)
                 }
             }
-            ActivityBars(values: values, hoverIndex: $sparklineHover.index)
+            Sparkline(values: values, hoverIndex: $sparklineHover.index)
             HStack {
                 Text("30분 전")
                 Spacer()
