@@ -186,3 +186,17 @@ struct UsageStoreTests {
         #expect(store.snapshot(now: now).latestClientVersion == "2.1.285")
     }
 }
+
+struct PricingTableTests {
+    @Test func generatedRatesWinOverFamilyFallback() throws {
+        // LiteLLM 데이터 기준: haiku-5-5는 haiku 계열 기본값보다 10배 싸다
+        let haiku = try #require(PricingTable.rates(forModel: "claude-haiku-5-5"))
+        #expect(haiku.input == 0.1)
+        let dated = try #require(PricingTable.rates(forModel: "claude-sonnet-5-5-20260901"))
+        #expect(dated.cacheRead == 0.1)
+        // 표에 없는 새 모델과 옛 모델은 계열 값으로
+        #expect(PricingTable.rates(forModel: "claude-opus-6")?.input == 5)
+        #expect(PricingTable.rates(forModel: "claude-opus-4-1-20250805")?.input == 15)
+        #expect(PricingTable.rates(forModel: "gpt-5") == nil)
+    }
+}

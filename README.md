@@ -244,8 +244,9 @@ install.sh는 처음 설치할 때 러너를 오른쪽 끝에 두어 가장 늦�
 
 ```bash
 swift run RunTime             # 빌드하지 않은 채 개발 실행 (알림과 자동 시작은 동작하지 않음)
-./scripts/test.sh             # 테스트 137개
+./scripts/test.sh             # 테스트 138개
 scripts/build-app.sh          # dist/RunTime.app과 dmg 만들기
+python3 -I scripts/update-prices.py   # Claude 모델 단가를 LiteLLM 가격 데이터에서 다시 받아 PricingData.swift 만들기
 ```
 
 설계 결정, 측정값, 트러블슈팅 기록은 [개발 기록](docs/development.md)에 모았습니다.
@@ -287,5 +288,6 @@ npx wrangler@4 login && ./deploy.sh
 - 미니게임의 장애물 간격과 속도 규칙은 [Chromium T-Rex Runner](https://chromium.googlesource.com/chromium/src/+/main/components/neterror/resources/)(BSD 3-Clause)를 따랐습니다.
 - 미니게임 그림과 효과음은 Kenney의 [Pixel Platformer](https://kenney.nl/assets/pixel-platformer)와 [Digital Audio](https://kenney.nl/assets/digital-audio)(CC0)입니다.
 - 집계 규칙은 [ccusage](https://ccusage.com/guide/blocks-reports)를 참고했습니다.
+- 비용 계산 단가는 ccusage와 같은 [LiteLLM 가격 데이터](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json)(MIT)에서 가져옵니다.
 
 MIT 라이선스입니다. Anthropic, Claude와 관계없는 비공식 도구입니다.

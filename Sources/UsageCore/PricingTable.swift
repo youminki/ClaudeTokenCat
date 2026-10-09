@@ -11,19 +11,15 @@ public enum PricingTable {
         public let cacheRead: Double
     }
 
-    /// 프리픽스가 긴 것부터 매칭. 단가 갱신 시 이 표만 수정.
-    /// cacheWrite는 5분 TTL 단가(입력 × 1.25).
-    static let table: [(prefix: String, rates: Rates)] = [
-        ("claude-fable-5-1", Rates(input: 10,  output: 50, cacheWrite: 12.5,  cacheRead: 0.25)),
+    /// 모델 이름 접두어별 단가. 가장 긴 접두어가 이긴다.
+    /// 지금 모델은 LiteLLM 데이터로 만든 `generated`(scripts/update-prices.py)를 쓰고,
+    /// 그 데이터에 없는 옛 모델과 아직 표에 없는 새 모델을 위해 계열별 값을 손으로 둔다.
+    static let table: [(prefix: String, rates: Rates)] = generated + fallback
+
+    static let fallback: [(prefix: String, rates: Rates)] = [
         ("claude-fable",     Rates(input: 10,  output: 50, cacheWrite: 12.5,  cacheRead: 1)),
-        ("claude-opus-5-5",  Rates(input: 4,   output: 20, cacheWrite: 5,     cacheRead: 0.2)),
-        ("claude-opus-5",    Rates(input: 5,   output: 25, cacheWrite: 6.25,  cacheRead: 0.5)),
-        ("claude-opus-4-8",  Rates(input: 5,   output: 25, cacheWrite: 6.25,  cacheRead: 0.5)),
-        ("claude-opus-4-7",  Rates(input: 5,   output: 25, cacheWrite: 6.25,  cacheRead: 0.5)),
-        ("claude-opus-4-6",  Rates(input: 5,   output: 25, cacheWrite: 6.25,  cacheRead: 0.5)),
-        ("claude-opus-4-5",  Rates(input: 5,   output: 25, cacheWrite: 6.25,  cacheRead: 0.5)),
         ("claude-opus-4",    Rates(input: 15,  output: 75, cacheWrite: 18.75, cacheRead: 1.5)),
-        ("claude-sonnet-5",  Rates(input: 2,   output: 10, cacheWrite: 2.5,   cacheRead: 0.2)),
+        ("claude-opus",      Rates(input: 5,   output: 25, cacheWrite: 6.25,  cacheRead: 0.5)),
         ("claude-sonnet",    Rates(input: 3,   output: 15, cacheWrite: 3.75,  cacheRead: 0.3)),
         ("claude-haiku",     Rates(input: 1,   output: 5,  cacheWrite: 1.25,  cacheRead: 0.1)),
         ("claude-3-5-haiku", Rates(input: 0.8, output: 4,  cacheWrite: 1,     cacheRead: 0.08)),
