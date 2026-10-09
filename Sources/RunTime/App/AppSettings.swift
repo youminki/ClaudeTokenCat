@@ -70,7 +70,6 @@ final class AppSettings: ObservableObject {
     }
 
     func select(_ runner: Runner) {
-        guard GameWallet.shared.owns(runner) else { return }
         customRunnerID = nil
         self.runner = runner
     }
@@ -127,8 +126,8 @@ final class AppSettings: ObservableObject {
         newSessionAlertEnabled = bool(.newSessionAlertEnabled, false)
         weeklyResetAlertEnabled = bool(.weeklyResetAlertEnabled, false)
         globalHotKeyEnabled = bool(.globalHotKeyEnabled, true)
-        // 산 적 없는 상점 러너·색은 기본으로 (설정 파일을 직접 고친 경우)
-        runner = Runner(rawValue: string(.runner)).flatMap { GameWallet.shared.owns($0) ? $0 : nil } ?? .cat
+        runner = Runner(rawValue: string(.runner)) ?? .cat
+        // 산 적 없는 상점 색은 기본으로 (설정 파일을 직접 고친 경우)
         spriteTheme = SpriteTheme(rawValue: string(.spriteTheme)).flatMap { GameWallet.shared.owns($0) ? $0 : nil } ?? .auto
         // 내 러너 목록에서 사라진 id는 버린다 (그대로 두면 메뉴·고르기에서 아무 것도 선택되지 않아 보인다)
         let savedCustom = string(.customRunner)

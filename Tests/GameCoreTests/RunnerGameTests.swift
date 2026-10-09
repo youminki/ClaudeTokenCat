@@ -460,3 +460,104 @@ private func meetings(seed: UInt64, seconds: Double) -> [(time: Double, obstacle
         #expect(nearMisses(seed: 2, gap: -1000).ids.isEmpty)
     }
 }
+
+@Suite struct RunnerGameAbilityTests {
+    private func game(_ abilities: RunnerGame.Abilities, catalog: [RunnerGame.ObstacleKind] = [], seed: UInt64 = 7) -> RunnerGame {
+        var tuning = RunnerGame.Tuning()
+        tuning.catalog = catalog
+        return RunnerGame(tuning: tuning, runnerWidth: runnerSize.width, runnerHeight: runnerSize.height, seed: seed,
+                          abilities: abilities)
+    }
+
+    private func apex(_ game: RunnerGame, pressAgainAfter: Double?) -> Double {
+        game.press()
+        var top = 0.0, t = 0.0, pressed = false
+        for _ in 0..<240 {
+            game.advance(by: 1.0 / 120)
+            t += 1.0 / 120
+            if let after = pressAgainAfter, t >= after, !pressed {
+                game.release()
+                game.press()
+                pressed = true
+            }
+            top = max(top, game.runnerY)
+        }
+        return top
+    }
+
+    @Test func airJumpGoesHigherOnlyWhenOwned() {
+        let plain = apex(game(.init()), pressAgainAfter: 0.2)
+        let double = apex(game(.init(airJumps: 1)), pressAgainAfter: 0.2)
+        #expect(double > plain + 20)
+    }
+
+    @Test func airJumpsRefillOnLanding() {
+        let g = game(.init(airJumps: 1))
+        g.press(); g.release()
+        g.advance(by: 0.15)
+        g.press(); g.release()
+        g.advance(by: 1.0 / 60)
+        #expect(g.drainEvents().contains(.airJumped))
+        #expect(g.airJumpsLeft == 0)
+        for _ in 0..<90 { g.advance(by: 1.0 / 60) }
+        #expect(g.isOnGround)
+        #expect(g.airJumpsLeft == 1)
+    }
+
+    @Test func glideFallsSlower() {
+        func timeToLand(_ glide: Bool) -> Double {
+            let g = game(.init(glide: glide))
+            g.press()   // 누른 채로 둔다
+            var t = 0.0
+            g.advance(by: 0.05)
+            while !g.isOnGround, t < 5 { g.advance(by: 1.0 / 120); t += 1.0 / 120 }
+            return t
+        }
+        #expect(timeToLand(true) > timeToLand(false) + 0.3)
+    }
+
+    @Test func shieldAbsorbsOneHitThenCrashes() {
+        let wall = [RunnerGame.ObstacleKind(id: "mushroom", width: 24, height: 24)]
+        let g = game(.init(shields: 1), catalog: wall)
+        g.press(); g.release()
+        var broke = 0
+        for _ in 0..<(60 * 60) where g.phase == .playing {
+            g.advance(by: 1.0 / 60)
+            broke += g.drainEvents().filter { if case .shieldBroke = $0 { return true } else { return false } }.count
+        }
+        #expect(broke == 1)
+        #expect(g.phase == .over)
+        #expect(g.shieldsLeft == 0)
+    }
+
+    @Test func magnetCollectsCoinsOtherwiseMissed() {
+        func coins(_ magnet: Int) -> Int {
+            let g = game(.init(magnet: magnet), catalog: catalog(), seed: 4)
+            let pilot = Autopilot(game: g)
+            g.press()
+            for _ in 0..<(60 * 40) where g.phase == .playing {
+                pilot.step()
+                g.advance(by: 1.0 / 60)
+            }
+            return g.coinsTaken
+        }
+        #expect(coins(3) > coins(0))
+    }
+
+    @Test func ghostReplaysWithAbilities() {
+        let abilities = RunnerGame.Abilities(airJumps: 1, shields: 2, magnet: 2, glide: true)
+        let g = game(abilities, catalog: catalog(), seed: 9)
+        var rng = SplitMix64(seed: 9)
+        g.press()
+        for frame in 0..<(60 * 90) where g.phase == .playing {
+            if frame % 23 == 0 { rng.unit() < 0.5 ? g.press() : g.release() }
+            g.advance(by: 1.0 / 60)
+        }
+        let ghost = GhostRunner(tuning: g.tuning, runnerWidth: g.runnerWidth, runnerHeight: g.runnerHeight,
+                                seed: g.seed, inputs: g.inputLog, abilities: abilities)
+        #expect(ghost.finalScore(maxTicks: 120 * 600) == g.score)
+        let without = GhostRunner(tuning: g.tuning, runnerWidth: g.runnerWidth, runnerHeight: g.runnerHeight,
+                                  seed: g.seed, inputs: g.inputLog)
+        #expect(without.finalScore(maxTicks: 120 * 600) != g.score)
+    }
+}

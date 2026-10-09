@@ -10,7 +10,6 @@ struct RunnerPicker: View {
     var openFullPicker: (() -> Void)?
     @ObservedObject private var store = CustomRunnerStore.shared
     @ObservedObject private var petdex = PetdexStore.shared
-    @ObservedObject private var wallet = GameWallet.shared
     @StateObject private var petdexSheet = SheetFlag()
     @StateObject private var hover = HoveredRunner()
     @StateObject private var importState = ImportState()
@@ -43,9 +42,7 @@ struct RunnerPicker: View {
         VStack(alignment: .leading, spacing: 8) {
             searchField
             ForEach(Runner.Group.allCases, id: \.self) { group in
-                // 상점 러너는 산 것만 (사는 곳은 러너 화면 위 게임 꾸미기)
-                let runners = Runner.runners(in: group)
-                    .filter { GameWallet.shared.owns($0) && filter.matches($0.displayName, $0.rawValue) }
+                let runners = Runner.runners(in: group).filter { filter.matches($0.displayName, $0.rawValue) }
                 if !runners.isEmpty {
                     groupTitle(group.rawValue)
                     LazyVGrid(columns: columns, spacing: 8) {

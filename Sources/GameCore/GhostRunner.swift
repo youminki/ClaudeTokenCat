@@ -5,8 +5,9 @@ public final class GhostRunner {
     private var next = 0
 
     public init(tuning: RunnerGame.Tuning, runnerWidth: Double, runnerHeight: Double, seed: UInt64,
-                inputs: [RunnerGame.InputRecord]) {
-        game = RunnerGame(tuning: tuning, runnerWidth: runnerWidth, runnerHeight: runnerHeight, seed: seed)
+                inputs: [RunnerGame.InputRecord], abilities: RunnerGame.Abilities = RunnerGame.Abilities()) {
+        game = RunnerGame(tuning: tuning, runnerWidth: runnerWidth, runnerHeight: runnerHeight, seed: seed,
+                          abilities: abilities)
         self.inputs = inputs
         apply(upTo: 0)   // 시작 전에 누르고 있던 키와 시작 입력
         game.beforeTick = { [unowned self] tick in self.apply(upTo: tick) }

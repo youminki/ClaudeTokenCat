@@ -14,6 +14,8 @@ struct GhostRecord: Codable {
     /// 순위 고스트의 닉네임과 등수. 내 고스트는 nil.
     var name: String?
     var rank: Int?
+    /// 그 판에 쓴 능력. 같은 능력으로 돌려야 같은 판이 나온다.
+    var abilities: RunnerGame.Abilities?
 
     var seedValue: UInt64? { UInt64(seed) }
 }
@@ -43,7 +45,7 @@ enum GhostStore {
 
     static func record(of game: RunnerGame, runner: String?) -> GhostRecord {
         GhostRecord(seed: String(game.seed), score: game.score, layout: layout(of: game), inputs: game.inputLog,
-                    runner: runner)
+                    runner: runner, abilities: game.abilities.isEmpty ? nil : game.abilities)
     }
 
     /// 방금 끝난 판을 내 고스트로 남긴다.
@@ -77,8 +79,24 @@ enum GhostStore {
     static func verified(_ record: GhostRecord, tuning: RunnerGame.Tuning, runnerWidth: Double, runnerHeight: Double) -> Bool {
         guard let seed = record.seedValue else { return false }
         let ghost = GhostRunner(tuning: tuning, runnerWidth: runnerWidth, runnerHeight: runnerHeight,
-                                seed: seed, inputs: record.inputs)
+                                seed: seed, inputs: record.inputs, abilities: record.abilities ?? RunnerGame.Abilities())
         return ghost.finalScore(maxTicks: maxReplayTicks) == record.score
+    }
+
+    /// 순위 서버에는 능력을 따로 둘 칸이 없어 layout 뒤에 붙여 보낸다 ("<layout>;abilities=<JSON>").
+    /// 능력이 없으면 layout 그대로라 옛 앱이 올린 고스트와 같다.
+    private static let abilitiesMark = ";abilities="
+
+    static func remoteLayout(_ record: GhostRecord) -> String {
+        guard let abilities = record.abilities, let json = try? JSONEncoder().encode(abilities),
+              let text = String(data: json, encoding: .utf8) else { return record.layout }
+        return record.layout + abilitiesMark + text
+    }
+
+    static func splitRemoteLayout(_ text: String) -> (layout: String, abilities: RunnerGame.Abilities?) {
+        guard let range = text.range(of: abilitiesMark) else { return (text, nil) }
+        let json = Data(text[range.upperBound...].utf8)
+        return (String(text[..<range.lowerBound]), try? JSONDecoder().decode(RunnerGame.Abilities.self, from: json))
     }
 }
 
@@ -106,15 +124,17 @@ final class TopGhost {
         Leaderboard.shared.fetchTopGhost(period) { [weak self] result in
             guard let self else { return }
             self.fetchedAt = Date()
-            guard case .success(let remote) = result, let remote, remote.layout == layout,
+            let split = (try? result.get()).flatMap { $0 }.map { GhostStore.splitRemoteLayout($0.layout) }
+            guard case .success(let remote) = result, let remote, let split, split.layout == layout,
                   let inputs = GhostStore.unpackInputs(remote.inputs)
             else {
                 if case .success = result { self.record = nil }   // 서버에 없으면 지운다 (실패면 둔다)
                 self.loading = false
                 return
             }
-            let record = GhostRecord(seed: remote.seed, score: remote.score, layout: remote.layout, inputs: inputs,
-                                     runner: remote.runner, name: remote.nickname, rank: remote.rank)
+            let record = GhostRecord(seed: remote.seed, score: remote.score, layout: split.layout, inputs: inputs,
+                                     runner: remote.runner, name: remote.nickname, rank: remote.rank,
+                                     abilities: split.abilities)
             DispatchQueue.global(qos: .utility).async {
                 let ok = GhostStore.verified(record, tuning: tuning, runnerWidth: width, runnerHeight: height)
                 DispatchQueue.main.async {

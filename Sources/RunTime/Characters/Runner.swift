@@ -5,32 +5,16 @@ enum Runner: String, CaseIterable {
     case cat, dog, rabbit, fox, penguin, duck, dino, hedgehog
     case chick, frog, panda, turtle, snail, octopus, whale
     case ghost, slime, robot, ufo, ninja, unicorn, dragon
-    // 상점 러너: 미니게임 코인으로 산다
     case tiger, raccoon, bear, sheep, blackCat, goldenCat
 
     enum Group: String, CaseIterable {
         case animal = "동물"
         case fantasy = "판타지"
-        case shop = "상점 러너"
-    }
-
-    /// 상점에서 사는 값 (게임 코인). 기본 러너는 nil.
-    var price: Int? {
-        switch self {
-        case .sheep: return 300
-        case .raccoon: return 400
-        case .bear: return 450
-        case .blackCat: return 500
-        case .tiger: return 700
-        case .goldenCat: return 1500
-        default: return nil
-        }
     }
 
     var group: Group {
         switch self {
         case .ghost, .slime, .robot, .ufo, .ninja, .unicorn, .dragon: return .fantasy
-        case .tiger, .raccoon, .bear, .sheep, .blackCat, .goldenCat: return .shop
         default: return .animal
         }
     }

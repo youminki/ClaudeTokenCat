@@ -82,6 +82,52 @@ enum Cosmetic: String, CaseIterable, Identifiable {
     }
 }
 
+/// 상점에서 단계별로 사는 능력. 단계마다 값이 오른다.
+enum Ability: String, CaseIterable, Identifiable {
+    case airJump, shield, magnet, glide
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .airJump: "이단 점프"
+        case .shield: "보호막"
+        case .magnet: "자석"
+        case .glide: "글라이드"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .airJump: "arrow.up.to.line"
+        case .shield: "shield.lefthalf.filled"
+        case .magnet: "dot.circle.and.hand.point.up.left.fill"
+        case .glide: "wind"
+        }
+    }
+
+    /// 단계별 값. 개수가 최대 단계다.
+    var prices: [Int] {
+        switch self {
+        case .airJump: [600, 1800]
+        case .shield: [300, 800, 1500]
+        case .magnet: [250, 600, 1100]
+        case .glide: [500]
+        }
+    }
+
+    var maxLevel: Int { prices.count }
+
+    func detail(level: Int) -> String {
+        switch self {
+        case .airJump: level >= 2 ? "공중에서 두 번 더 뛰기" : "공중에서 한 번 더 뛰기"
+        case .shield: "한 판에 \(max(level, 1))번 부딪혀도 버팀"
+        case .magnet: "가까운 코인을 끌어옴 (범위 \(max(level, 1))단계)"
+        case .glide: "뛴 채 누르고 있으면 천천히 내려옴"
+        }
+    }
+}
+
 /// 게임 코인 지갑, 산 꾸미기, 오늘의 미션. 이 Mac에만 저장한다.
 final class GameWallet: ObservableObject {
     static let shared = GameWallet()
@@ -92,6 +138,8 @@ final class GameWallet: ObservableObject {
         static let equipped = "gameCosmeticsEquipped"
         static let missions = "gameDailyMissions"
         static let unlocked = "gameUnlocked"
+        static let abilityLevels = "gameAbilityLevels"
+        static let abilitiesOff = "gameAbilitiesOff"
     }
 
     private let defaults = UserDefaults.standard
@@ -104,7 +152,14 @@ final class GameWallet: ObservableObject {
         didSet { defaults.set(equipped.map(\.rawValue), forKey: Key.equipped) }
     }
     @Published private var stored: DailyMissions
-    /// 산 러너("runner:tiger")와 색("theme:gold").
+    /// 능력별 산 단계와, 사 두고 끈 능력.
+    @Published private(set) var abilityLevels: [String: Int] {
+        didSet { defaults.set(abilityLevels, forKey: Key.abilityLevels) }
+    }
+    @Published private(set) var abilitiesOff: Set<String> {
+        didSet { defaults.set(Array(abilitiesOff), forKey: Key.abilitiesOff) }
+    }
+    /// 산 색("theme:gold").
     @Published private(set) var unlocked: Set<String> {
         didSet { defaults.set(Array(unlocked), forKey: Key.unlocked) }
     }
@@ -116,6 +171,8 @@ final class GameWallet: ObservableObject {
         self.owned = owned
         equipped = names(Key.equipped).intersection(owned)
         unlocked = Set(defaults.stringArray(forKey: Key.unlocked) ?? [])
+        abilityLevels = defaults.dictionary(forKey: Key.abilityLevels) as? [String: Int] ?? [:]
+        abilitiesOff = Set(defaults.stringArray(forKey: Key.abilitiesOff) ?? [])
         stored = defaults.data(forKey: Key.missions).flatMap { try? JSONDecoder().decode(DailyMissions.self, from: $0) }
             ?? DailyMissions(day: Self.today())
     }
@@ -146,12 +203,39 @@ final class GameWallet: ObservableObject {
         return completed
     }
 
-    func owns(_ runner: Runner) -> Bool { runner.price == nil || unlocked.contains("runner:\(runner.rawValue)") }
-    func owns(_ theme: SpriteTheme) -> Bool { theme.price == nil || unlocked.contains("theme:\(theme.rawValue)") }
+    func level(_ ability: Ability) -> Int { min(abilityLevels[ability.rawValue] ?? 0, ability.maxLevel) }
+    func isOn(_ ability: Ability) -> Bool { level(ability) > 0 && !abilitiesOff.contains(ability.rawValue) }
 
-    /// 상점 러너를 산다. 코인이 모자라거나 이미 있으면 false.
+    /// 다음 단계 값. 최대면 nil.
+    func nextPrice(_ ability: Ability) -> Int? {
+        let current = level(ability)
+        return current < ability.maxLevel ? ability.prices[current] : nil
+    }
+
+    /// 다음 단계를 산다. 산 능력은 바로 켠다.
     @discardableResult
-    func buy(_ runner: Runner) -> Bool { unlock("runner:\(runner.rawValue)", price: runner.price) }
+    func upgrade(_ ability: Ability) -> Bool {
+        guard let price = nextPrice(ability), coins >= price else { return false }
+        coins -= price
+        abilityLevels[ability.rawValue] = level(ability) + 1
+        abilitiesOff.remove(ability.rawValue)
+        return true
+    }
+
+    func toggle(_ ability: Ability) {
+        guard level(ability) > 0 else { return }
+        if abilitiesOff.contains(ability.rawValue) { abilitiesOff.remove(ability.rawValue) } else { abilitiesOff.insert(ability.rawValue) }
+    }
+
+    /// 다음 판에 쓸 능력 (켜 둔 것만).
+    var abilities: RunnerGame.Abilities {
+        RunnerGame.Abilities(airJumps: isOn(.airJump) ? level(.airJump) : 0,
+                             shields: isOn(.shield) ? level(.shield) : 0,
+                             magnet: isOn(.magnet) ? level(.magnet) : 0,
+                             glide: isOn(.glide))
+    }
+
+    func owns(_ theme: SpriteTheme) -> Bool { theme.price == nil || unlocked.contains("theme:\(theme.rawValue)") }
 
     @discardableResult
     func buy(_ theme: SpriteTheme) -> Bool { unlock("theme:\(theme.rawValue)", price: theme.price) }

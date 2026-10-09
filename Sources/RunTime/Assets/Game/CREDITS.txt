@@ -7,4 +7,5 @@ http://creativecommons.org/publicdomain/zero/1.0/
   crab_0~1.png Characters/tile_0018~0019, drill_0~2.png Characters/tile_0015~0017, bat_0~2.png Characters/tile_0024~0026
 
 효과음: Digital Audio (https://kenney.nl/assets/digital-audio), ogg를 m4a로 바꿨다.
-  jump.m4a phaseJump2, coin.m4a phaserUp6, hit.m4a lowDown, milestone.m4a twoTone1, record.m4a powerUp12
+  jump.m4a phaseJump2, coin.m4a phaserUp6, hit.m4a lowDown, milestone.m4a twoTone1, record.m4a powerUp12,
+  airjump.m4a phaseJump4, shield.m4a zapTwoTone, nearmiss.m4a pepSound1

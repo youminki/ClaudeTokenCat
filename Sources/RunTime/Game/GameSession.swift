@@ -124,6 +124,7 @@ final class GameSession {
         if game.phase != .playing {
             isRace = false
             ghost = nil
+            if live { game.setAbilities(GameWallet.shared.abilities) }
         }
         game.press()
         if wasOver, game.phase == .playing { restarted() }
@@ -135,7 +136,8 @@ final class GameSession {
         game.prepare(seed: seed)
         guard game.phase == .ready else { return }   // 부딪힌 직전이라 아직 다시 시작할 수 없음
         ghost = GhostRunner(tuning: game.tuning, runnerWidth: Self.runnerWidth, runnerHeight: Self.runnerHeight,
-                            seed: seed, inputs: record.inputs)
+                            seed: seed, inputs: record.inputs, abilities: record.abilities ?? RunnerGame.Abilities())
+        if live { game.setAbilities(GameWallet.shared.abilities) }
         isRace = true
         raceTarget = record
         ghostCharacter = AppSettings.character(forRunnerID: record.runner) ?? Runner.ghost.character
@@ -282,7 +284,21 @@ final class GameSession {
         case .milestone:
             play(.milestone)
             milestoneGlow = 1
+        case .airJumped:
+            play(.airjump)
+            jumps += 1
+            let feet = CGPoint(runnerLeft + Self.runnerWidth / 2, CGFloat(game.runnerY))
+            burst(at: feet, count: 10, colors: [.white, NSColor(hex: 0x8FD3FF)], shape: .spark, speed: 70, life: 0.4,
+                  drift: 0.4, spread: 2)
+        case .shieldBroke:
+            play(.shield)
+            shake = 0.5
+            let center = CGPoint(runnerLeft + Self.runnerWidth / 2, CGFloat(game.runnerY + Self.runnerHeight / 2))
+            burst(at: center, count: 14, colors: [NSColor(hex: 0x8FD3FF), .white], shape: .spark, speed: 140, life: 0.6,
+                  drift: 0, spread: 2)
+            popups.append(Popup(text: "보호막!", position: center, life: 0.8))
         case .nearMiss:
+            play(.nearmiss)
             nearMisses += 1
             let point = CGPoint(runnerLeft + Self.runnerWidth / 2, CGFloat(game.runnerY + Self.runnerHeight * 0.6))
             burst(at: point, count: 6, color: NSColor(hex: 0x8FD3FF), speed: 60, life: 0.4, drift: 0.5)
@@ -405,6 +421,46 @@ final class GameSession {
         cg.setFillColor(color.cgColor)
         cg.addPath(path)
         cg.fillPath()
+    }
+
+    // MARK: 능력
+
+    /// 보호막 방울과 글라이드 날개. 내 러너에만.
+    private func drawAbilities(_ cg: CGContext, groundY: CGFloat, time: Double) {
+        guard game.phase == .playing, entrance >= 1 else { return }
+        let center = CGPoint(runnerLeft + CGFloat(Self.runnerWidth) / 2, groundY - CGFloat(game.runnerY + Self.runnerHeight / 2))
+        cg.saveGState()
+        if game.shieldsLeft > 0 {
+            let pulse = 1 + 0.04 * CGFloat(sin(time * 5))
+            for k in 0..<game.shieldsLeft {
+                let r = (27 + CGFloat(k) * 4) * pulse
+                let rect = CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)
+                cg.setFillColor(NSColor(hex: 0x8FD3FF).withAlphaComponent(k == 0 ? 0.08 : 0).cgColor)
+                cg.fillEllipse(in: rect)
+                cg.setStrokeColor(NSColor(hex: 0x8FD3FF).withAlphaComponent(0.55 - CGFloat(k) * 0.15).cgColor)
+                cg.setLineWidth(1.2)
+                cg.strokeEllipse(in: rect)
+            }
+        }
+        if game.isGliding {
+            // 머리 위 낙하산
+            let top = CGPoint(center.x - 2, center.y - 40)
+            let canopy = CGMutablePath()
+            canopy.addArc(center: CGPoint(top.x, top.y + 6), radius: 17, startAngle: .pi * 1.08, endAngle: .pi * 1.92,
+                          clockwise: false)
+            canopy.closeSubpath()
+            cg.setFillColor(NSColor(hex: 0xFF8FB8).withAlphaComponent(0.9).cgColor)
+            cg.addPath(canopy)
+            cg.fillPath()
+            cg.setStrokeColor(NSColor.white.withAlphaComponent(0.7).cgColor)
+            cg.setLineWidth(0.8)
+            for dx in [-14.0, 0, 14] {
+                cg.move(to: CGPoint(top.x + CGFloat(dx), top.y + 1))
+                cg.addLine(to: CGPoint(center.x - 2, center.y - 14))
+            }
+            cg.strokePath()
+        }
+        cg.restoreGState()
     }
 
     // MARK: 꾸미기
@@ -650,8 +706,14 @@ final class GameSession {
             }
         }
         drawTrail(cg, groundY: groundY, time: time)
+        // 보호막이 깨진 뒤 지나가는 동안은 깜빡인다
+        let blink = game.invulnerable > 0 && Int(time * 18) % 2 == 0
+        cg.saveGState()
+        if blink { cg.setAlpha(0.35) }
         drawRunner(cg, game, character: character, left: runnerLeft, groundY: groundY, stageAnchorX: stageAnchorX, stageScale: stageScale,
                    theme: theme, time: time)
+        cg.restoreGState()
+        drawAbilities(cg, groundY: groundY, time: time)
 
         // 파티클
         for p in particles {
@@ -810,6 +872,16 @@ final class GameSession {
             labels.append(Label(text: Text("최고 \(max(game.best, game.score))").font(small)
                                     .foregroundColor(.white.opacity(0.75)),
                                 position: CGPoint(12, 29), anchor: .topLeading))
+            if game.phase == .playing, !game.abilities.isEmpty {
+                var parts: [String] = []
+                if game.abilities.shields > 0 { parts.append("보호막 \(game.shieldsLeft)") }
+                if game.abilities.airJumps > 0 { parts.append("이단 점프") }
+                if game.abilities.magnet > 0 { parts.append("자석") }
+                if game.abilities.glide { parts.append("글라이드") }
+                labels.append(Label(text: Text(parts.joined(separator: " · ")).font(small)
+                                        .foregroundColor(Color(nsColor: NSColor(hex: 0x8FD3FF)).opacity(0.9)),
+                                    position: CGPoint(12, 57), anchor: .topLeading))
+            }
             if game.coinsTaken > 0 || boosted {
                 let double = boosted ? "  ×2 Claude 작업 중" : ""
                 labels.append(Label(text: Text("코인 \(game.coinsTaken)\(double)").font(small).foregroundColor(gold.opacity(0.9)),

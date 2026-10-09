@@ -3,7 +3,7 @@ import AppKit
 /// 게임 효과음 (Kenney Digital Audio, CC0). 메뉴바 앱이라 작게 낸다.
 final class GameSound {
     enum Effect: String, CaseIterable {
-        case jump, coin, hit, milestone, record
+        case jump, coin, hit, milestone, record, airjump, shield, nearmiss
     }
 
     static let shared = GameSound()
@@ -21,7 +21,7 @@ final class GameSound {
         for effect in Effect.allCases {
             guard let url = folder?.appendingPathComponent("\(effect.rawValue).m4a"),
                   let sound = NSSound(contentsOf: url, byReference: false) else { continue }
-            sound.volume = effect == .jump ? 0.25 : 0.35
+            sound.volume = effect == .jump || effect == .nearmiss ? 0.25 : 0.35
             sounds[effect] = sound
         }
     }

@@ -186,7 +186,7 @@ final class Leaderboard: ObservableObject {
     func uploadGhost(_ record: GhostRecord) {
         guard canSubmit, let inputs = GhostStore.packInputs(record.inputs) else { return }
         var body: [String: Any] = ["player": playerID, "score": record.score, "seed": record.seed,
-                                   "inputs": inputs, "layout": record.layout]
+                                   "inputs": inputs, "layout": GhostStore.remoteLayout(record)]
         if let runner = record.runner { body["runner"] = runner }
         struct Saved: Decodable { let saved: Bool }
         request("POST", "v1/ghosts", body: body) { (_: Result<Saved, Failure>) in }

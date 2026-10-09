@@ -10,7 +10,7 @@ struct GameShopView: View {
     private let gold = Color(nsColor: NSColor(hex: 0xFFD45E))
 
     enum Tab: String, CaseIterable {
-        case runner = "러너", theme = "색", trail = "꼬리", dust = "발먼지", crash = "부딪힘"
+        case ability = "능력", theme = "색", trail = "꼬리", dust = "발먼지", crash = "부딪힘"
 
         var slot: Cosmetic.Slot? {
             switch self {
@@ -46,15 +46,17 @@ struct GameShopView: View {
                 .labelsHidden()
                 .controlSize(.small)
                 .padding(.top, 2)
+                if state.tab == .ability {
+                    VStack(spacing: 6) { ForEach(Ability.allCases) { abilityRow($0) } }
+                } else {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
                     switch state.tab {
-                    case .runner:
-                        ForEach(Runner.allCases.filter { $0.price != nil }, id: \.self) { runnerItem($0) }
                     case .theme:
                         ForEach(SpriteTheme.allCases.filter { $0.price != nil }, id: \.self) { themeItem($0) }
                     default:
                         ForEach(Cosmetic.allCases.filter { $0.slot == state.tab.slot }) { cosmeticItem($0) }
                     }
+                }
                 }
                 Text(footnote).font(.system(size: 10)).foregroundStyle(.tertiary)
             }
@@ -64,7 +66,7 @@ struct GameShopView: View {
 
     private var footnote: String {
         switch state.tab {
-        case .runner: "산 러너는 아래 '상점 러너'에 생기고 메뉴바에서도 달립니다."
+        case .ability: "능력은 미니게임에서만 쓰고 다음 판부터 적용됩니다. 순위 점수 계산은 같습니다."
         case .theme: "산 색은 색상 메뉴에 생기고 메뉴바 러너에도 칠해집니다."
         default: "게임 화면에만 보이고 점수와 판정은 같습니다. 다시 누르면 뗍니다."
         }
@@ -87,18 +89,58 @@ struct GameShopView: View {
 
     // MARK: 물건
 
-    private func runnerItem(_ runner: Runner) -> some View {
-        let owned = wallet.owns(runner)
-        let using = owned && settings.customRunnerID == nil && settings.runner == runner
-        return item(key: "runner:\(runner.rawValue)", name: runner.displayName, price: runner.price ?? 0,
-                    owned: owned, on: using, ownedLabel: "고르기") {
-            TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
-                CharacterCanvas(character: runner.character, theme: .natural, date: context.date)
+    /// 능력 한 줄: 단계, 켜고 끄기, 다음 단계 사기 (두 번 눌러 산다).
+    private func abilityRow(_ ability: Ability) -> some View {
+        let level = wallet.level(ability)
+        let next = wallet.nextPrice(ability)
+        let key = "ability:\(ability.rawValue)"
+        let asking = state.confirming == key
+        return HStack(spacing: 8) {
+            Image(systemName: ability.icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(level > 0 ? Theme.accent : Theme.tertiary)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 4) {
+                    Text(ability.name).font(.system(size: 11.5, weight: .semibold))
+                    HStack(spacing: 2) {
+                        ForEach(0..<ability.maxLevel, id: \.self) { i in
+                            Circle().fill(i < level ? gold : Color.white.opacity(0.15)).frame(width: 5, height: 5)
+                        }
+                    }
+                }
+                Text(ability.detail(level: max(level, 1))).font(.system(size: 10)).foregroundStyle(.secondary)
             }
-            .frame(height: 30)
-        } action: {
-            if owned || wallet.buy(runner) { settings.select(runner) }
+            Spacer(minLength: 4)
+            if level > 0 {
+                Toggle("", isOn: Binding(get: { wallet.isOn(ability) }, set: { _ in wallet.toggle(ability) }))
+                    .toggleStyle(.switch).controlSize(.mini).labelsHidden()
+                    .help("이번 판에 쓸지")
+            }
+            if let next {
+                let affordable = wallet.coins >= next
+                Button {
+                    if asking {
+                        state.confirming = nil
+                        wallet.upgrade(ability)
+                    } else if affordable {
+                        state.confirming = key
+                    }
+                } label: {
+                    Text(asking ? "\(next)에 사기?" : level == 0 ? "\(next)" : "+1단계 \(next)")
+                        .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Capsule().fill(asking ? Theme.warning.opacity(0.25) : Color.white.opacity(0.08)))
+                        .foregroundStyle(asking ? Theme.warning : affordable ? gold : Theme.tertiary)
+                }
+                .buttonStyle(.plain)
+                .help(affordable ? "두 번 누르면 삽니다" : "코인 \(next - wallet.coins)개가 더 필요해요")
+            } else {
+                Text("최대").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.positive)
+            }
         }
+        .padding(.horizontal, 8).padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.05)))
     }
 
     private func themeItem(_ theme: SpriteTheme) -> some View {
@@ -198,6 +240,6 @@ extension Cosmetic {
 /// 상점 탭과 사기 직전인 물건. 처음 누르면 confirming에 두고, 한 번 더 누르면 산다
 /// (팝오버에서는 확인 창을 띄우면 팝오버가 닫혀서).
 final class ShopState: ObservableObject {
-    @Published var tab: GameShopView.Tab = .runner
+    @Published var tab: GameShopView.Tab = .ability
     @Published var confirming: String?
 }

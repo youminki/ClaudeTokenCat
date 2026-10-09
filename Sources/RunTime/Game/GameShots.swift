@@ -47,6 +47,8 @@ enum GameShots {
         try shot("0-entrance")
         step(0.6, autoplay: false)
         try shot("1-ready")
+        // 능력을 단 모습 (보호막 방울, 능력 표시)
+        game.setAbilities(.init(airJumps: 1, shields: 2, magnet: 3, glide: true))
         session.press()
         session.release()
         for k in 1...12 {

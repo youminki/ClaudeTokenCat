@@ -396,7 +396,7 @@ extension Quadruped {
         }
     )
 
-    // MARK: 상점 러너 (게임 코인으로 산다)
+    // MARK: 호랑이, 너구리, 곰, 양, 검은 고양이, 황금 고양이
 
     static let tiger = Quadruped(
         palette: CharacterPalette(body: NSColor(hex: 0xF08A24), belly: NSColor(hex: 0xFFF1DC),

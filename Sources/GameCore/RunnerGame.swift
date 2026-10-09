@@ -26,6 +26,10 @@ public final class RunnerGame {
         case newRecord
         /// 장애물을 아주 가깝게 넘기거나 지나쳤다. 점수는 주지 않고 화면 연출만 한다.
         case nearMiss(id: Int)
+        /// 공중에서 한 번 더 뛰었다 (이단 점프).
+        case airJumped
+        /// 보호막이 부딪힘을 막고 깨졌다.
+        case shieldBroke(id: Int)
         case crashed
     }
 
@@ -76,8 +80,8 @@ public final class RunnerGame {
     public struct Coin: Equatable, Identifiable {
         public let id: Int
         /// 가운데 (세계 x, 바닥 위 높이).
-        public let x: Double
-        public let y: Double
+        public internal(set) var x: Double
+        public internal(set) var y: Double
         public internal(set) var taken = false
     }
 
@@ -96,6 +100,31 @@ public final class RunnerGame {
             self.tick = tick
             self.input = input
         }
+    }
+
+    /// 상점에서 산 능력. 속도와 점수 계산은 그대로라 순위 서버 규칙(시간당 거리, 장애물당 코인)을 넘지 않는다.
+    /// 고스트도 같은 능력으로 돌려야 같은 판이 나와서 고스트 기록에 함께 남긴다.
+    public struct Abilities: Equatable, Codable {
+        /// 공중에서 더 뛸 수 있는 횟수.
+        public var airJumps = 0
+        /// 판마다 막아 주는 부딪힘 수.
+        public var shields = 0
+        /// 코인을 끌어오는 거리 단계 (0이면 없음).
+        public var magnet = 0
+        /// 뛴 채 누르고 있으면 천천히 내려온다.
+        public var glide = false
+
+        public init(airJumps: Int = 0, shields: Int = 0, magnet: Int = 0, glide: Bool = false) {
+            self.airJumps = airJumps
+            self.shields = shields
+            self.magnet = magnet
+            self.glide = glide
+        }
+
+        public var isEmpty: Bool { self == Abilities() }
+
+        /// 자석이 코인을 끌어오는 거리 (pt).
+        public var magnetRange: Double { [0, 60, 95, 130][min(max(magnet, 0), 3)] }
     }
 
     public struct Tuning {
@@ -132,6 +161,13 @@ public final class RunnerGame {
         public var hitInset: Double = 2.5
         /// 장애물과 위아래로 이보다 가깝게 지나가면 아슬아슬하게 피한 것으로 친다.
         public var nearMissGap: Double = 7
+        /// 이단 점프는 처음 점프보다 조금 낮게 뛴다.
+        public var airJumpVelocity: Double = 500
+        /// 글라이드 중 떨어지는 속도 상한과 그동안의 중력.
+        public var glideFallSpeed: Double = 110
+        public var glideGravity: Double = 600
+        /// 보호막이 깨진 뒤 장애물을 지나쳐 갈 시간.
+        public var shieldGrace: Double = 0.7
         /// 1pt당 점수와 코인 하나의 점수.
         public var scorePerPoint: Double = 0.04
         public var coinValue = 10
@@ -180,6 +216,13 @@ public final class RunnerGame {
     /// 판이 시작할 때의 최고 점수. 신기록인지 가른다.
     public private(set) var bestAtStart: Int
     public private(set) var crashedInto: Int?
+    /// 이번 판에 쓰는 능력. 판 사이에만 바꾼다.
+    public private(set) var abilities: Abilities
+    public private(set) var shieldsLeft = 0
+    public private(set) var airJumpsLeft = 0
+    /// 보호막이 깨진 뒤 남은 무적 시간.
+    public private(set) var invulnerable: Double = 0
+    public private(set) var isGliding = false
     public var isNewRecord: Bool { score > bestAtStart && bestAtStart > 0 }
 
     /// 숙이기를 누르고 있고 땅에 있으면 숙인다.
@@ -217,8 +260,9 @@ public final class RunnerGame {
     public static let rulesVersion = 1
 
     public init(tuning: Tuning, runnerWidth: Double, runnerHeight: Double, best: Int = 0,
-                seed: UInt64 = UInt64.random(in: 0...UInt64.max)) {
+                seed: UInt64 = UInt64.random(in: 0...UInt64.max), abilities: Abilities = Abilities()) {
         self.tuning = tuning
+        self.abilities = abilities
         self.runnerWidth = runnerWidth
         self.runnerHeight = runnerHeight
         self.best = best
@@ -261,6 +305,12 @@ public final class RunnerGame {
         }
         self.seed = seed
         random = SplitMix64(seed: seed)
+    }
+
+    /// 다음 판부터 쓸 능력. 판 중에는 바꾸지 않는다.
+    public func setAbilities(_ abilities: Abilities) {
+        guard phase != .playing else { return }
+        self.abilities = abilities
     }
 
     /// 기록해 둔 입력을 다시 넣는다.
@@ -342,6 +392,10 @@ public final class RunnerGame {
         if duckHeld { record(.duck(true)) }
         if leftHeld { record(.back(true)) }
         if rightHeld { record(.forward(true)) }
+        shieldsLeft = abilities.shields
+        airJumpsLeft = abilities.airJumps
+        invulnerable = 0
+        isGliding = false
         events.append(.started)
     }
 
@@ -400,11 +454,20 @@ public final class RunnerGame {
             coyote = 0
             buffered = 0
             events.append(.jumped)
+        } else if buffered > 0, !isOnGround, coyote <= 0, airJumpsLeft > 0 {
+            // 이단 점프. 남은 횟수가 없으면 누른 것은 착지 때까지 기다린다
+            velocityY = tuning.airJumpVelocity
+            cutPending = !jumpHeld
+            airJumpsLeft -= 1
+            buffered = 0
+            events.append(.airJumped)
         }
         // 숙인 채 뛰어도 최소 높이까지는 오른 뒤에 빨리 내려온다
         let fastFall = duckHeld && !isOnGround && (velocityY <= 0 || runnerY >= tuning.minJumpHeight)
-        let gravity = fastFall ? tuning.fastFallGravity : tuning.gravity
+        isGliding = abilities.glide && jumpHeld && !duckHeld && !isOnGround && velocityY <= 0
+        let gravity = fastFall ? tuning.fastFallGravity : isGliding ? tuning.glideGravity : tuning.gravity
         velocityY -= gravity * dt
+        if isGliding { velocityY = max(velocityY, -tuning.glideFallSpeed) }
         runnerY += velocityY * dt
         if runnerY <= 0 {
             runnerY = 0
@@ -412,6 +475,7 @@ public final class RunnerGame {
             if !isOnGround { events.append(.landed) }
             isOnGround = true
             cutPending = false
+            airJumpsLeft = abilities.airJumps
         } else {
             isOnGround = false
             cutJumpIfHighEnough()
@@ -421,10 +485,19 @@ public final class RunnerGame {
         obstacles.removeAll { $0.x + $0.width < distance - 120 }
         coins.removeAll { $0.x < distance - 120 }
 
+        pullCoins(dt)
         collectCoins()
-        if !ignoresCollisions, let hit = obstacles.first(where: hits) {
-            crash(into: hit)
-            return
+        invulnerable = max(0, invulnerable - dt)
+        if !ignoresCollisions, invulnerable <= 0, let hit = obstacles.first(where: hits) {
+            if shieldsLeft > 0 {
+                shieldsLeft -= 1
+                invulnerable = tuning.shieldGrace
+                closestGap[hit.id] = nil
+                events.append(.shieldBroke(id: hit.id))
+            } else {
+                crash(into: hit)
+                return
+            }
         }
         trackNearMisses()
         updateScore()
@@ -497,8 +570,26 @@ public final class RunnerGame {
                 let gap = max(runner.minY - b.maxY, b.minY - runner.maxY)
                 closestGap[obstacle.id] = min(closestGap[obstacle.id] ?? .infinity, gap)
             } else if b.maxX <= runner.minX, let gap = closestGap.removeValue(forKey: obstacle.id) {
-                if gap < tuning.nearMissGap { events.append(.nearMiss(id: obstacle.id)) }
+                // 겹친 채 지나간 것(보호막으로 뚫고 간 것)은 아슬아슬이 아니다
+                if gap >= 0, gap < tuning.nearMissGap { events.append(.nearMiss(id: obstacle.id)) }
             }
+        }
+    }
+
+    /// 자석: 범위 안 코인을 러너 가운데로 끌어온다.
+    private func pullCoins(_ dt: Double) {
+        let range = abilities.magnetRange
+        guard range > 0 else { return }
+        let runner = runnerBox
+        let cx = (runner.minX + runner.maxX) / 2, cy = (runner.minY + runner.maxY) / 2
+        let step = 420 * dt
+        for i in coins.indices where !coins[i].taken {
+            let dx = cx - coins[i].x, dy = cy - coins[i].y
+            let d = (dx * dx + dy * dy).squareRoot()
+            guard d < range, d > 0 else { continue }
+            let k = min(1, step / d)
+            coins[i].x += dx * k
+            coins[i].y += dy * k
         }
     }
 
