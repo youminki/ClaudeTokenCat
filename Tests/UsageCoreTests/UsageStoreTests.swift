@@ -146,7 +146,8 @@ struct UsageStoreTests {
 
     @Test func dailyTotalsSplitByModel() {
         let store = UsageStore()
-        let now = Date()
+        // 자정 직후에 돌면 2분 전이 어제가 되므로 한낮으로 고정한다
+        let now = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: Date())!
         store.add([
             event(minutesAgo: 1, tokens: 300, id: "s", now: now),
             UsageEvent(timestamp: now.addingTimeInterval(-120), model: "claude-opus-5-5",
