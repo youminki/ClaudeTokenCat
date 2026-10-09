@@ -9,7 +9,7 @@ final class AppSettings: ObservableObject {
     static let pollIntervalOptions: [Double] = [1, 3, 5, 10]
 
     private enum Key: String {
-        case officialEnabled, sensitivity, pollInterval, limitAlertsEnabled, newSessionAlertEnabled, spriteTheme
+        case officialEnabled, sensitivity, pollInterval, limitAlertsEnabled, newSessionAlertEnabled, weeklyResetAlertEnabled, globalHotKeyEnabled, spriteTheme
         case menuBarLabel, runner, smoothness, tricksEnabled, customRunner, runnerSize
     }
 
@@ -27,6 +27,10 @@ final class AppSettings: ObservableObject {
 
     /// 5시간 블록 리셋 알림 (§F4 — 기본 off).
     @Published var newSessionAlertEnabled: Bool { didSet { save(newSessionAlertEnabled, .newSessionAlertEnabled) } }
+    /// ⌃⌥U로 어디서든 사용량 창 열기 (기본 켬).
+    @Published var globalHotKeyEnabled: Bool { didSet { save(globalHotKeyEnabled, .globalHotKeyEnabled) } }
+    /// 주간 사용량이 초기화되면 알림 (기본 끔).
+    @Published var weeklyResetAlertEnabled: Bool { didSet { save(weeklyResetAlertEnabled, .weeklyResetAlertEnabled) } }
 
     /// 메뉴바 러너 종류와 색상 (색은 코드로 그린 러너에만 적용).
     @Published var runner: Runner { didSet { save(runner.rawValue, .runner) } }
@@ -88,6 +92,8 @@ final class AppSettings: ObservableObject {
         pollInterval = poll > 0 ? poll : 3.0
         limitAlertsEnabled = bool(.limitAlertsEnabled, true)
         newSessionAlertEnabled = bool(.newSessionAlertEnabled, false)
+        weeklyResetAlertEnabled = bool(.weeklyResetAlertEnabled, false)
+        globalHotKeyEnabled = bool(.globalHotKeyEnabled, true)
         runner = Runner(rawValue: string(.runner)) ?? .cat
         spriteTheme = SpriteTheme(rawValue: string(.spriteTheme)) ?? .auto
         // 내 러너 목록에서 사라진 id는 버린다 (그대로 두면 메뉴·고르기에서 아무 것도 선택되지 않아 보인다)
@@ -126,10 +132,11 @@ enum MenuBarLabel: String, CaseIterable {
 /// 메뉴바 러너 크기. 메뉴바 높이는 정해져 있어 크게는 효과 자리로 남긴 위아래 여백만 줄여 키운다.
 /// 키운 만큼 칸이 옆으로 넓어지고, 칸 위아래를 벗어나는 장난은 그 순간만 줄여 그린다 (MenuBarCanvas).
 enum RunnerSize: String, CaseIterable {
-    case full, large
+    case compact, full, large
 
     var displayName: String {
         switch self {
+        case .compact: return "작게"
         case .full: return "보통"
         case .large: return "크게"
         }
@@ -137,6 +144,7 @@ enum RunnerSize: String, CaseIterable {
 
     var zoom: CGFloat {
         switch self {
+        case .compact: return 0.8
         case .full: return 1
         case .large: return 1.1
         }

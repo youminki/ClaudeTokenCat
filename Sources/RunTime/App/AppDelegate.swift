@@ -15,6 +15,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var dailyDetailWindow: NSWindow?
     private var leaderboardWindow: NSWindow?
     private var cancellables: Set<AnyCancellable> = []
+    private let settingsTab = SettingsTabState(.general)
+    /// 메뉴바 항목이 « 안에 숨었을 때 팝오버를 붙이는 보이지 않는 창.
+    private var anchorWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         animator.canvas = MenuBarCanvas(barHeight: NSStatusBar.system.thickness, zoom: engine.settings.runnerSize.zoom,
@@ -111,6 +114,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             .sink { [weak self] display in self?.animator.set(display: display) }
             .store(in: &cancellables)
 
+        GlobalHotKey.shared.action = { [weak self] in
+            // 다른 앱이 앞에 있을 때 누르므로, 열 때는 앱을 앞으로 가져와야 키 입력과 바깥 클릭 닫기가 된다
+            if self?.popover?.isShown != true { NSApp.activate(ignoringOtherApps: true) }
+            self?.togglePopover()
+        }
+        engine.settings.$globalHotKeyEnabled
+            .removeDuplicates()
+            .sink { GlobalHotKey.shared.setEnabled($0) }
+            .store(in: &cancellables)
+
         Notifier.shared.requestAuthorization()
         engine.start()
     }
@@ -137,7 +150,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let line = Self.tooltip(session: engine.sessionGauge, weekly: engine.weeklyGauge)
         menu.addItem(withTitle: line, action: nil, keyEquivalent: "").isEnabled = false
         menu.addItem(.separator())
-        add("사용량 보기") { [weak self] in self?.togglePopover() }
+        add(engine.settings.globalHotKeyEnabled && GlobalHotKey.shared.isRegistered
+            ? "사용량 보기 (\(GlobalHotKey.displayName))" : "사용량 보기") { [weak self] in self?.togglePopover() }
         add("일별 사용량") { [weak self] in self?.openDailyDetail() }
         add("토큰 러너 순위") { [weak self] in self?.openLeaderboard() }
         add("새로고침") { [weak self] in self?.engine.refreshNow(forceOfficial: true) }
@@ -177,14 +191,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popover.contentViewController = NSHostingController(
             rootView: PopoverView(engine: engine, settings: engine.settings,
                                   openSettings: { [weak self] in self?.openSettings() },
+                                  openRunnerSettings: { [weak self] in self?.openSettings(tab: .runner) },
                                   openDailyDetail: { [weak self] in self?.openDailyDetail() },
                                   openLeaderboard: { [weak self] in self?.openLeaderboard() },
                                   performTrick: { [weak self] trick in self?.animator.perform(trick) }))
-        if let button = statusItem.button {
-            engine.refreshNow()   // 여는 순간 JSONL 재스캔 + 공식 재조회(30초 스로틀)
+        engine.refreshNow()   // 여는 순간 JSONL 재스캔 + 공식 재조회(30초 스로틀)
+        if let button = statusItem.button, let window = button.window, window.isVisible,
+           NSScreen.screens.contains(where: { $0.frame.intersects(window.frame) }) {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        } else if let anchor = hiddenItemAnchor() {
+            // 단축키로 열었는데 러너가 « 안에 숨어 있으면 화면 오른쪽 위, 메뉴바 바로 아래에 띄운다
+            popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
+        } else {
+            return
         }
         self.popover = popover
+    }
+
+    private func hiddenItemAnchor() -> NSView? {
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) ?? NSScreen.main
+        else { return nil }
+        let window = anchorWindow ?? {
+            let window = NSWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: false)
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.level = .statusBar
+            window.ignoresMouseEvents = true
+            return window
+        }()
+        window.setFrame(NSRect(x: screen.visibleFrame.maxX - 220, y: screen.visibleFrame.maxY - 1, width: 1, height: 1),
+                        display: false)
+        window.orderFrontRegardless()
+        anchorWindow = window
+        return window.contentView
     }
 
     /// 닫힌 팝오버의 화면을 놓아 준다. 무대 애니메이션이 보이지 않는 채로 돌지 않게.
@@ -193,13 +232,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         guard let closed = notification.object as? NSPopover, closed === popover else { return }
         closed.contentViewController = nil
         popover = nil
+        anchorWindow?.orderOut(nil)
         AppUpdater.shared.popoverClosed()
     }
 
-    private func openSettings() {
+    private func openSettings(tab: SettingsView.Tab? = nil) {
+        if let tab { settingsTab.selection = tab }
         settingsWindow = showWindow(settingsWindow, title: "RunTime 설정",
                                     style: [.titled, .closable, .resizable]) {   // 세로 드래그로 크기 조절
-            SettingsView(settings: engine.settings, engine: engine)
+            SettingsView(settings: engine.settings, engine: engine, tab: settingsTab)
         }
     }
 
@@ -272,6 +313,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             ])
         }
         button.imagePosition = .imageLeft
+        button.imageHugsTitle = true   // 러너와 숫자 사이 기본 여백을 없애 메뉴바 폭을 아낀다
         statusItem.length = NSStatusItem.variableLength
         DispatchQueue.main.async { self.layoutSprite() }   // 길이가 바뀐 뒤 버튼 배치가 끝나면
     }

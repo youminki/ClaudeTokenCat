@@ -19,7 +19,8 @@ struct MenuBarCanvas: Equatable {
         let pixelsPerPoint = (Stage.size.height * scale * self.backing).rounded() / Stage.size.height
         let margin = Self.margin(haloRadius: self.backing >= 2 ? 2 : 1, pixelsPerPoint: pixelsPerPoint)
         let fits = (Stage.size.height - margin * 2) / FittedRig.targetHeight
-        zoom = min(max(requested.isFinite ? requested : 1, 1), max(fits, 1))
+        // '작게'는 1보다 작게 줄여 메뉴바 칸을 좁힌다
+        zoom = min(max(requested.isFinite ? requested : 1, 0.7), max(fits, 1))
     }
 
     /// 칸 위아래에 남길 설계 pt. 테두리 두께에, 그림을 줄일 때 가장자리가 번지는 몫을 더한다.

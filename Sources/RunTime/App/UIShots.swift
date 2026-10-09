@@ -17,14 +17,20 @@ enum UIShots {
         let windowBackground = Color(nsColor: .windowBackgroundColor)
         let screens: [(name: String, appearance: NSAppearance.Name, height: CGFloat?, view: AnyView)] = [
             ("popover", .darkAqua, nil, AnyView(PopoverView(engine: engine, settings: engine.settings).background(popoverBackground))),
-            ("settings-general", .darkAqua, 720, AnyView(SettingsView(settings: engine.settings, engine: engine).background(windowBackground))),
-            ("settings-general-light", .aqua, 720, AnyView(SettingsView(settings: engine.settings, engine: engine).background(windowBackground))),
+            ("popover-runners", .darkAqua, nil,
+             AnyView(PopoverView(engine: engine, settings: engine.settings, startsOnRunnerPage: true).background(popoverBackground))),
+            ("settings-general", .darkAqua, 720, AnyView(SettingsView(settings: engine.settings, engine: engine, tab: SettingsTabState(.general)).background(windowBackground))),
+            ("settings-general-light", .aqua, 720, AnyView(SettingsView(settings: engine.settings, engine: engine, tab: SettingsTabState(.general)).background(windowBackground))),
             ("settings-runner", .darkAqua, 720,
-             AnyView(SettingsView(settings: engine.settings, engine: engine, initialTab: .runner).background(windowBackground))),
+             AnyView(SettingsView(settings: engine.settings, engine: engine, tab: SettingsTabState(.runner)).background(windowBackground))),
             ("settings-usage", .darkAqua, 720,
-             AnyView(SettingsView(settings: engine.settings, engine: engine, initialTab: .usage).background(windowBackground))),
+             AnyView(SettingsView(settings: engine.settings, engine: engine, tab: SettingsTabState(.usage)).background(windowBackground))),
+            ("settings-runner-light", .aqua, 720,
+             AnyView(SettingsView(settings: engine.settings, engine: engine, tab: SettingsTabState(.runner)).background(windowBackground))),
             ("daily", .darkAqua, nil, AnyView(DailyDetailView(engine: engine).background(windowBackground))),
+            ("daily-light", .aqua, nil, AnyView(DailyDetailView(engine: engine).background(windowBackground))),
             ("leaderboard", .darkAqua, nil, AnyView(LeaderboardView().background(windowBackground))),
+            ("leaderboard-light", .aqua, nil, AnyView(LeaderboardView().background(windowBackground))),
         ]
         let windows = screens.map { screen -> NSWindow in
             let window = NSWindow(contentViewController: NSHostingController(rootView: screen.view))
@@ -38,21 +44,33 @@ enum UIShots {
             return window
         }
         // 무대 애니메이션과 비동기로 오는 순위·사용량이 자리 잡을 때까지 기다린다
+        func shot(_ name: String, _ window: NSWindow) {
+            guard let view = window.contentView,
+                  let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            let url = directory.appendingPathComponent("\(name).png")
+            do {
+                try rep.representation(using: .png, properties: [:])?.write(to: url)
+                print("saved: \(url.path) \(Int(view.bounds.width))×\(Int(view.bounds.height))")
+            } catch {
+                print("failed: \(url.path) \(error)")
+                exit(1)
+            }
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
-            for (screen, window) in zip(screens, windows) {
-                guard let view = window.contentView,
-                      let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
-                view.cacheDisplay(in: view.bounds, to: rep)
-                let url = directory.appendingPathComponent("\(screen.name).png")
-                do {
-                    try rep.representation(using: .png, properties: [:])?.write(to: url)
-                    print("saved: \(url.path) \(Int(view.bounds.width))×\(Int(view.bounds.height))")
-                } catch {
-                    print("failed: \(url.path) \(error)")
-                    exit(1)
+            for (screen, window) in zip(screens, windows) { shot(screen.name, window) }
+            // 무대 하늘은 시각마다 달라 글자·러너 대비를 시간대별로 본다 (아침·낮·노을)
+            var hours = [7, 12, 18]
+            func next() {
+                guard let hour = hours.first else { exit(0) }
+                hours.removeFirst()
+                Sky.hourOverride = hour
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    shot("popover-\(hour)h", windows[0])
+                    next()
                 }
             }
-            exit(0)
+            next()
         }
     }
 }

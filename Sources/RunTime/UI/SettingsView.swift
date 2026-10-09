@@ -6,14 +6,15 @@ import UsageCore
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var engine: UsageEngine
-    @StateObject private var tab: SettingsTabState
+    /// 앱이 들고 있는 탭 상태. 다른 화면에서 특정 구역을 열 수 있게 바깥에서 받는다.
+    @ObservedObject var tab: SettingsTabState
 
     enum Tab: Hashable { case general, runner, usage }
 
-    init(settings: AppSettings, engine: UsageEngine, initialTab: Tab = .general) {
+    init(settings: AppSettings, engine: UsageEngine, tab: SettingsTabState) {
         self.settings = settings
         self.engine = engine
-        _tab = StateObject(wrappedValue: SettingsTabState(initialTab))
+        self.tab = tab
     }
 
     var body: some View {
@@ -43,9 +44,15 @@ struct SettingsView: View {
 
     private var general: some View {
         GroupedList {
-            GroupedSection(footer: "자동 시작을 켜면 Mac에 로그인할 때 러너를 띄웁니다. 메뉴바 사용률은 러너 옆에 사용률을 숫자로 함께 보여 줍니다.") {
+            GroupedSection(footer: "자동 시작을 켜면 Mac에 로그인할 때 러너를 띄웁니다. 단축키를 켜면 어느 앱에서든 \(GlobalHotKey.displayName)로 사용량 창을 엽니다. 메뉴바 사용률은 러너 옆에 사용률을 숫자로 함께 보여 줍니다.") {
                 ToggleRow(title: "로그인 시 자동 시작", icon: "power", tint: Palette.green, isOn: $settings.launchAtLogin)
                     .disabled(!LaunchAtLogin.available)
+                ToggleRow(title: "단축키 \(GlobalHotKey.displayName)로 사용량 열기", icon: "command", tint: Palette.gray,
+                          isOn: $settings.globalHotKeyEnabled)
+                if settings.globalHotKeyEnabled && !GlobalHotKey.shared.isRegistered {
+                    GroupedRow("다른 앱이 이 단축키를 쓰고 있어 등록하지 못했습니다.") { EmptyView() }
+                        .foregroundStyle(Palette.orange)
+                }
                 GroupedRow("메뉴바 사용률", icon: "percent", tint: Palette.blue) {
                     menu("메뉴바 사용률", $settings.menuBarLabel, MenuBarLabel.allCases) { $0.displayName }
                 }
@@ -109,7 +116,7 @@ struct SettingsView: View {
                 CharacterCanvas(character: settings.character, theme: settings.spriteTheme, date: context.date)
             }
             .frame(width: 92, height: 60)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.groupedBackground))
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.characterBackdrop))
             VStack(alignment: .leading, spacing: 3) {
                 Text(settings.character.name).font(.system(size: 17, weight: .semibold))
                 Text("토큰을 빨리 쓸수록 메뉴바에서 빨리 달립니다.").font(.system(size: 11)).foregroundStyle(.secondary)
@@ -142,10 +149,13 @@ struct SettingsView: View {
                 }
             }
 
-            GroupedSection("알림", footer: "한도 임박 알림은 세션·주간 사용률이 80%, 95%에 닿을 때 한 번씩, 세션 초기화 알림은 5시간 창이 새로 시작될 때 보냅니다.") {
+            GroupedSection("알림", footer: "한도 임박 알림은 세션·주간 사용률이 80%, 95%에 닿을 때 한 번씩, 초기화 알림은 5시간·주간 창이 새로 시작될 때 보냅니다. 주간 초기화는 공식 사용량 연동을 켜야 알 수 있습니다.") {
                 ToggleRow(title: "한도 임박 알림", icon: "bell.badge.fill", tint: Palette.red, isOn: $settings.limitAlertsEnabled)
                 ToggleRow(title: "세션 초기화 알림", icon: "arrow.clockwise", tint: Palette.green,
                           isOn: $settings.newSessionAlertEnabled)
+                ToggleRow(title: "주간 초기화 알림", icon: "calendar", tint: Palette.teal,
+                          isOn: $settings.weeklyResetAlertEnabled)
+                    .disabled(!settings.officialEnabled)   // 주간 창은 공식 값으로만 안다
             }
             if !Notifier.shared.available { devOnlyNote("알림") }
         }

@@ -67,6 +67,7 @@ final class UsageEngine: ObservableObject {
     private var clientVersion: String?
     private var alertTracker = LimitAlertTracker()
     private var lastBlockStart: Date?
+    private var lastWeeklyReset: Date?
     private var lastTickAt: Date?
     private var lastOfficialAttempt: Date?
     private var officialInFlight = false
@@ -137,6 +138,7 @@ final class UsageEngine: ObservableObject {
         let sensitivity: Thresholds.Sensitivity
         let limitAlertsEnabled: Bool
         let newSessionAlertEnabled: Bool
+        let weeklyResetAlertEnabled: Bool
         let pollInterval: TimeInterval
 
         init(_ settings: AppSettings) {
@@ -144,6 +146,7 @@ final class UsageEngine: ObservableObject {
             sensitivity = settings.sensitivity
             limitAlertsEnabled = settings.limitAlertsEnabled
             newSessionAlertEnabled = settings.newSessionAlertEnabled
+            weeklyResetAlertEnabled = settings.weeklyResetAlertEnabled
             pollInterval = settings.pollInterval
         }
     }
@@ -212,6 +215,7 @@ final class UsageEngine: ObservableObject {
 
         if let reset = official?.weeklyResetsAt { knownWeeklyReset = reset }
         let nextWeeklyReset = knownWeeklyReset.map { WeeklyWindow.nextReset(from: $0, now: now) }
+        checkWeeklyReset(nextWeeklyReset, enabled: config.weeklyResetAlertEnabled)
         // 주간 모델 비중도 공식 주간 창으로 집계해 게이지와 같은 기간을 보게 한다.
         let weeklyStart = nextWeeklyReset.map { $0.addingTimeInterval(-WeeklyWindow.duration) }
             ?? WeeklyWindow.rollingStart(now: now)
@@ -292,6 +296,18 @@ final class UsageEngine: ObservableObject {
         guard enabled, let start, let previous = lastBlockStart, start != previous else { return }
         DispatchQueue.main.async {
             Notifier.shared.send(title: "세션 초기화", body: "5시간 사용량이 초기화되었습니다.")
+        }
+    }
+
+    /// 공식 주간 창이 다음 창으로 넘어가면 "주간 초기화" (옵션, 기본 off).
+    /// resets_at은 조회마다 흔들리고 계정을 바꾸면 기준이 옮겨 가서, 거의 정확히 7일 뒤로 넘어갈 때만 새 창으로 본다.
+    private func checkWeeklyReset(_ next: Date?, enabled: Bool) {
+        guard let next else { return }
+        defer { lastWeeklyReset = next }
+        guard enabled, let previous = lastWeeklyReset,
+              abs(next.timeIntervalSince(previous) - WeeklyWindow.duration) < 12 * 3600 else { return }
+        DispatchQueue.main.async {
+            Notifier.shared.send(title: "주간 초기화", body: "주간 사용량이 초기화되었습니다.")
         }
     }
 
