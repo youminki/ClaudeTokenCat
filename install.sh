@@ -75,6 +75,7 @@ fi
 
 rm -rf "$TARGET/RunTime.app"
 cp -R dist/RunTime.app "$TARGET/"
+scripts/place-menubar.sh
 
 # 5) 실행
 open "$TARGET/RunTime.app"
