@@ -102,6 +102,17 @@ if let index = CommandLine.arguments.firstIndex(of: "--hero-gif") {
     exit(0)
 }
 
+// 화면 점검: 주요 창을 실제 데이터로 찍어 PNG로 저장하고 종료.
+if let index = CommandLine.arguments.firstIndex(of: "--ui-shots") {
+    let path = CommandLine.arguments.dropFirst(index + 1).first ?? "ui-shots"
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    let engine = UsageEngine()
+    engine.start()
+    MainActor.assumeIsolated { UIShots.run(to: URL(fileURLWithPath: path), engine: engine) }
+    app.run()
+}
+
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
