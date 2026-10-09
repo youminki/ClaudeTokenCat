@@ -123,11 +123,7 @@ struct RunnerPicker: View {
             if let message = importState.message {
                 Text(message).font(.caption).foregroundStyle(importState.isError ? .orange : .secondary)
             }
-            Text("직접 만들었거나 쓸 권리가 있는 그림만 넣어 주세요. 불러온 그림은 이 Mac에만 저장되고 어디로도 보내지 않습니다.")
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, 4)
         .sheet(isPresented: $petdexSheet.isPresented) {
             PetdexBrowser(settings: settings) { petdexSheet.isPresented = false }
         }
