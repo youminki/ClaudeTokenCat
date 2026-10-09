@@ -8,6 +8,7 @@ struct SettingsView: View {
     @ObservedObject var engine: UsageEngine
     /// 앱이 들고 있는 탭 상태. 다른 화면에서 특정 구역을 열 수 있게 바깥에서 받는다.
     @ObservedObject var tab: SettingsTabState
+    @StateObject private var hotKeyRecorder = HotKeyRecorder()
 
     enum Tab: Hashable { case general, runner, usage }
 
@@ -44,12 +45,30 @@ struct SettingsView: View {
 
     private var general: some View {
         GroupedList {
-            GroupedSection(footer: "자동 시작을 켜면 Mac에 로그인할 때 러너를 띄웁니다. 단축키를 켜면 어느 앱에서든 \(GlobalHotKey.displayName)로 사용량 창을 엽니다. 기본은 러너만 보이고, 사용률 표시를 켜면 러너 바로 옆에 숫자로 함께 보여 줍니다.") {
+            GroupedSection(footer: "자동 시작을 켜면 Mac에 로그인할 때 러너를 띄웁니다. 단축키를 켜면 어느 앱에서든 \(GlobalHotKey.displayName)로 사용량 창을 엽니다. 단축키를 눌러 다른 조합으로 바꿀 수 있습니다. 기본은 러너만 보이고, 사용률 표시를 켜면 러너 바로 옆에 숫자로 함께 보여 줍니다.") {
                 ToggleRow(title: "로그인 시 자동 시작", icon: "power", tint: Palette.green, isOn: $settings.launchAtLogin)
                     .disabled(!LaunchAtLogin.available)
-                ToggleRow(title: "단축키 \(GlobalHotKey.displayName)로 사용량 열기", icon: "command", tint: Palette.gray,
+                ToggleRow(title: "단축키로 사용량 열기", icon: "command", tint: Palette.gray,
                           isOn: $settings.globalHotKeyEnabled)
-                if settings.globalHotKeyEnabled && GlobalHotKey.shared.failed {
+                if settings.globalHotKeyEnabled {
+                    GroupedRow("단축키", icon: "keyboard", tint: Palette.gray) {
+                        HStack(spacing: 6) {
+                            if GlobalHotKey.shared.combo != .standard && !hotKeyRecorder.recording {
+                                Button("기본으로") { hotKeyRecorder.reset() }
+                            }
+                            Button(hotKeyRecorder.recording ? "새 조합을 누르세요 (esc 취소)" : GlobalHotKey.displayName) {
+                                hotKeyRecorder.toggle()
+                            }
+                            .help("누른 뒤 원하는 조합을 누르면 바뀝니다")
+                        }
+                        .controlSize(.small)
+                    }
+                    if let hint = hotKeyRecorder.hint {
+                        GroupedRow(hint) { EmptyView() }
+                            .foregroundStyle(Palette.orange)
+                    }
+                }
+                if settings.globalHotKeyEnabled && GlobalHotKey.shared.failed && hotKeyRecorder.hint == nil {
                     GroupedRow("다른 앱이 이 단축키를 쓰고 있어 등록하지 못했습니다.") { EmptyView() }
                         .foregroundStyle(Palette.orange)
                 }
