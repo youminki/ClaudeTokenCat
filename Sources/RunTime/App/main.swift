@@ -74,6 +74,21 @@ if let index = CommandLine.arguments.firstIndex(of: "--game-shots") {
     dispatchMain()
 }
 
+// README용: 고스트와 겨루는 게임 장면을 이어 찍어 PNG로 저장하고 종료.
+if let index = CommandLine.arguments.firstIndex(of: "--game-frames") {
+    let path = CommandLine.arguments.dropFirst(index + 1).first ?? "game-frames"
+    Task { @MainActor in
+        do {
+            try GameFrames.run(to: URL(fileURLWithPath: path), character: Runner.cat.character)
+            exit(0)
+        } catch {
+            print("failed: \(error)")
+            exit(1)
+        }
+    }
+    dispatchMain()
+}
+
 // 성능 점검: 무대와 게임 한 장면을 그리는 데 드는 시간을 재고 종료.
 if CommandLine.arguments.contains("--game-bench") {
     Task { @MainActor in

@@ -142,3 +142,68 @@ enum GameBench {
         GameWallet.shared.preview = nil
     }
 }
+
+/// README용 게임 장면 (`--game-frames <폴더>`). 용 고스트와 겨루는 판을 1초 20장으로 이어 찍어
+/// 0001.png부터 저장한다. GIF는 scripts/make-game-gif.sh가 만든다.
+enum GameFrames {
+    @MainActor
+    static func run(to directory: URL, character: RunnerCharacter) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let model = StageModel()
+        let size = CGSize(width: 344, height: RunnerStage.height)
+        var date = Date()
+        let frame = 1.0 / 60
+        model.startGame(character: character, rehearsal: true)
+        guard let session = model.game else { return }
+        let game = session.game
+        let pilot = Autopilot(game: game)
+
+        func step(_ seconds: Double, every: Int = 0, capture: (() throws -> Void)? = nil) rethrows {
+            for k in 0..<Int(seconds / frame) {
+                pilot.step()
+                date = date.addingTimeInterval(frame)
+                session.update(date: date)
+                if every > 0, k % every == 0 { try capture?() }
+            }
+        }
+
+        // 먼저 한 판을 해서 용 고스트를 만든다
+        step(0.8)
+        session.press()
+        session.release()
+        step(12)
+        while game.phase == .playing { step(0.25) }
+        step(0.6)
+        session.savedGhost = GhostStore.record(of: game, runner: Runner.dragon.rawValue)
+
+        // 꾸미기와 능력을 달고 고스트와 겨룬다. 앞뒤로 움직여 고스트와 겹치지 않게 한다
+        GameWallet.shared.preview = [.rainbowTrail, .rainbowDust]
+        game.setAbilities(.init(airJumps: 1, shields: 2, magnet: 2))
+        session.startRace(session.savedGhost)
+        step(1.2)
+        var index = 0
+        let capture = {
+            index += 1
+            let view = Canvas { context, size in
+                context.withCGContext { cg in
+                    model.draw(cg, size: size, date: date, display: .normal(.running), character: character,
+                               theme: character.theme(.natural))
+                }
+                if let game = model.game { RunnerStage.drawOverlay(game.overlay(size: size), in: &context) }
+            }
+            .frame(width: size.width, height: size.height)
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 2
+            guard let image = renderer.cgImage else { return }
+            try NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?
+                .write(to: directory.appendingPathComponent(String(format: "%04d.png", index)))
+        }
+        for k in 0..<4 {
+            game.setMove(forward: k % 2 == 0)
+            game.setMove(back: k % 2 == 1)
+            try step(1.1, every: 3, capture: capture)
+        }
+        GameWallet.shared.preview = nil
+        print("frames \(index)")
+    }
+}
