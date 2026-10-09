@@ -6,10 +6,18 @@ enum LegacyMigration {
     static let oldBundleID = "dev.tokencat.TokenCat"
     private static let doneKey = "migratedFromTokenCat"
 
+    /// 이 Mac에서 처음 켠 것인지. 아래에서 설정을 쓰기 전에 정해 둬야 새 설치와 기존 사용자를 가를 수 있다.
+    private(set) static var isFreshInstall = false
+
     /// 설정을 읽는 코드보다 먼저 불러야 한다. 옛 설정은 되돌아갈 수 있게 지우지 않는다.
     static func run() {
         let defaults = UserDefaults.standard
-        guard let id = Bundle.main.bundleIdentifier, id != oldBundleID, !defaults.bool(forKey: doneKey) else { return }
+        guard let id = Bundle.main.bundleIdentifier, id != oldBundleID else { return }
+        // install.sh가 앱을 켜기 전에 쓰는 키는 사용 기록이 아니다
+        let written = (defaults.persistentDomain(forName: id) ?? [:]).keys
+            .filter { $0 != "menuBarPlaced" && $0 != "restoreLaunchAtLogin" }
+        isFreshInstall = written.isEmpty && defaults.persistentDomain(forName: oldBundleID) == nil
+        guard !defaults.bool(forKey: doneKey) else { return }
         if let old = defaults.persistentDomain(forName: oldBundleID) {
             var current = defaults.persistentDomain(forName: id) ?? [:]
             for (key, value) in old {

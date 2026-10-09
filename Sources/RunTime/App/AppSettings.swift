@@ -100,6 +100,7 @@ final class AppSettings: ObservableObject {
         menuBarLabel = MenuBarLabel(rawValue: string(.menuBarLabel)) ?? .off
         runnerSize = RunnerSize(rawValue: string(.runnerSize)) ?? .large
         LaunchAtLogin.restoreAfterRename()
+        LaunchAtLogin.enableOnFirstInstall()
         launchAtLogin = LaunchAtLogin.isEnabled
     }
 
