@@ -243,7 +243,7 @@ install.sh는 처음 설치할 때 러너를 오른쪽 끝에 두어 가장 늦�
 
 ```bash
 swift run RunTime             # 빌드하지 않은 채 개발 실행 (알림과 자동 시작은 동작하지 않음)
-./scripts/test.sh             # 테스트 132개
+./scripts/test.sh             # 테스트 133개
 scripts/build-app.sh          # dist/RunTime.app과 dmg 만들기
 ```
 

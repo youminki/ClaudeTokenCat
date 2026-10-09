@@ -39,6 +39,7 @@ final class GameSession {
     private var clock: Double = 0
     private var lastDate: Date?
     private var keyMonitor: Any?
+    private var resignObserver: Any?
     private var particles: [Particle] = []
     private var popups: [Popup] = []
     private var shake: CGFloat = 0
@@ -113,6 +114,7 @@ final class GameSession {
 
     deinit {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
     }
 
     func use(_ character: RunnerCharacter) { self.character = character }
@@ -162,7 +164,19 @@ final class GameSession {
     func release() { game.release() }
 
     /// 게임 중 팝오버 창으로 오는, 보조키 없는 키만 받는다. 다룬 키는 삼켜 경고음이 나지 않게 한다.
+    /// 누른 키를 모두 놓은 것으로 한다. 키를 누른 채 다른 창을 누르면 뗀 신호가 오지 않아 계속 움직이거나 숙인 채 남는다.
+    func releaseAllKeys() {
+        game.setMove(back: false, forward: false)
+        game.setDuck(false)
+        game.release()
+    }
+
     private func installKeys() {
+        resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: nil,
+                                                                queue: .main) { [weak self] note in
+            guard let self, let window = note.object as? NSWindow, window === self.window() else { return }
+            self.releaseAllKeys()
+        }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
             guard let self, event.window != nil, event.window === self.window(),
                   event.modifierFlags.intersection(.deviceIndependentFlagsMask)

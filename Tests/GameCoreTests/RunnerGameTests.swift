@@ -561,3 +561,24 @@ private func meetings(seed: UInt64, seconds: Double) -> [(time: Double, obstacle
         #expect(without.finalScore(maxTicks: 120 * 600) != g.score)
     }
 }
+
+@Suite struct RunnerGameReleaseTests {
+    /// 앱이 포커스를 잃을 때 부르는 것과 같은 순서로 놓으면 멈추고, 고스트도 같은 판을 돌린다.
+    @Test func releasingEverythingStopsMovementAndReplays() {
+        var tuning = RunnerGame.Tuning()
+        tuning.catalog = []
+        let game = RunnerGame(tuning: tuning, runnerWidth: 24, runnerHeight: 40, seed: 3)
+        game.press()
+        game.setMove(forward: true)
+        game.setDuck(true)
+        for _ in 0..<30 { game.advance(by: 1.0 / 60) }
+        game.setMove(back: false, forward: false)
+        game.setDuck(false)
+        game.release()
+        let offset = game.runnerOffset
+        for _ in 0..<30 { game.advance(by: 1.0 / 60) }
+        #expect(game.moveDirection == 0)
+        #expect(game.runnerOffset == offset)
+        #expect(!game.isDucking)
+    }
+}
