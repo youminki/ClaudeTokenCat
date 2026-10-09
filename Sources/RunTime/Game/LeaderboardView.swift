@@ -6,82 +6,80 @@ struct LeaderboardView: View {
     @StateObject private var state = LeaderboardState()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             header
-            ranking
-            participation
-        }
-        .padding(16)
-        .frame(width: 360, height: 520)
-        .onAppear { state.start() }
-        .onDisappear { state.stop() }
-    }
-
-    private var header: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text("토큰 러너 순위").font(.headline)
-                Text("팝오버 무대의 장애물 피하기 게임").font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
             Picker("기간", selection: $state.period) {
                 ForEach(Leaderboard.Period.allCases, id: \.self) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .fixedSize()
-            Button { state.load() } label: { Image(systemName: "arrow.clockwise") }
-                .buttonStyle(.borderless)
-                .help("새로고침 (열려 있는 동안 30초마다 새로 받습니다)")
+            ranking
+            participation
+        }
+        .padding(20)
+        .frame(width: 380, height: 600)
+        .background(Palette.groupedBackground)
+        .onAppear { state.start() }
+        .onDisappear { state.stop() }
+    }
+
+    private var header: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("토큰 러너 순위").font(.system(size: 22, weight: .bold))
+                Text("팝오버 무대의 장애물 피하기 게임").font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button { state.load() } label: {
+                Image(systemName: "arrow.clockwise").font(.system(size: 12, weight: .semibold))
+                    .frame(width: 26, height: 26)
+                    .background(Circle().fill(Palette.groupedRow))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("새로고침")
+            .help("새로고침 (열려 있는 동안 30초마다 새로 받습니다)")
         }
     }
 
     @ViewBuilder
     private var ranking: some View {
-        VStack(spacing: 0) {
-            if let message = state.message {
-                placeholder("exclamationmark.triangle", message)
-            } else if let result = state.board {
-                if result.entries.isEmpty {
-                    placeholder("flag.checkered", state.period == .week ? "이번 주 기록이 아직 없습니다." : "아직 기록이 없습니다.")
-                } else {
-                    ScrollView {
-                        VStack(spacing: 2) {
-                            ForEach(result.entries) { row($0) }
-                        }
-                        .padding(6)
-                    }
-                }
-                Divider()
-                HStack {
-                    if let you = result.you {
-                        Text("내 순위 \(you.rank)위 · \(result.total)명 중 · 최고 \(you.score)점")
-                    } else {
-                        Text("\(result.total)명 참여")
-                    }
-                    Spacer()
-                    if let updated = state.updated {
-                        Text("\(updated.formatted(date: .omitted, time: .shortened)) 갱신")
-                    }
-                }
-                .font(.caption).foregroundStyle(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+        if let message = state.message {
+            placeholder("exclamationmark.triangle", message)
+        } else if let result = state.board {
+            if result.entries.isEmpty {
+                placeholder("flag.checkered", state.period == .week ? "이번 주 기록이 아직 없습니다." : "아직 기록이 없습니다.")
             } else {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                ScrollView {
+                    GroupedSection(footer: footerText(result)) {
+                        ForEach(result.entries) { row($0) }
+                    }
+                }
+                .frame(maxHeight: .infinity, alignment: .top)
             }
+        } else {
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxHeight: .infinity)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.04)))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.08)))
+    }
+
+    private func footerText(_ result: Leaderboard.Board) -> String {
+        var parts: [String] = []
+        if let you = result.you {
+            parts.append("내 순위 \(you.rank)위 · 최고 \(you.score)점")
+        }
+        parts.append("\(result.total)명 참여")
+        if let updated = state.updated {
+            parts.append("\(updated.formatted(date: .omitted, time: .shortened)) 갱신")
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func placeholder(_ systemImage: String, _ text: String) -> some View {
         VStack(spacing: 8) {
-            Image(systemName: systemImage).font(.system(size: 22)).foregroundStyle(.tertiary)
+            Image(systemName: systemImage).font(.system(size: 24)).foregroundStyle(.tertiary)
             Text(text).multilineTextAlignment(.center).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Palette.groupedRow))
     }
 
     /// 1~3위는 메달 색. 같은 점수 1위가 여럿이어도 먼저 세운 맨 위 한 명에게만 왕관 (요약의 1위와 같은 기준)
@@ -93,21 +91,24 @@ struct LeaderboardView: View {
                 .foregroundStyle(medal == nil ? Color.secondary : Color.black.opacity(0.75))
                 .frame(width: 24, height: 24)
                 .background(Circle().fill(medal ?? Color.primary.opacity(0.06)))
-            Text(entry.nickname).font(.system(size: 12.5, weight: entry.you ? .semibold : .regular)).lineLimit(1)
+            Text(entry.nickname).font(.system(size: 13, weight: entry.you ? .semibold : .regular)).lineLimit(1)
             if entry.id == state.board?.entries.first?.id {
                 Image(systemName: "crown.fill").font(.system(size: 10)).foregroundStyle(Self.gold)
             }
             if entry.you {
-                Text("나").font(.caption2.weight(.semibold)).foregroundStyle(Color.accentColor)
-                    .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                Text("나").font(.system(size: 10, weight: .semibold)).foregroundStyle(Palette.blue)
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(Capsule().fill(Palette.blue.opacity(0.15)))
             }
             Spacer()
-            Text("\(entry.score)").font(.system(size: 13, weight: .semibold, design: .rounded).monospacedDigit())
+            Text("\(entry.score)").font(.system(size: 14, weight: .semibold, design: .rounded).monospacedDigit())
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 7).fill(Color.accentColor.opacity(entry.you ? 0.12 : 0)))
+        .padding(.horizontal, 12)
+        .frame(minHeight: 42)
+        .background(entry.you ? Palette.blue.opacity(0.08) : Color.clear)
+        .overlay(alignment: .top) {
+            Rectangle().fill(Palette.separator).frame(height: 0.5).padding(.leading, 46)
+        }
     }
 
     private static let gold = Color(nsColor: NSColor(hex: 0xE0A82E))
@@ -122,38 +123,37 @@ struct LeaderboardView: View {
     }
 
     private var participation: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Toggle(isOn: $board.isOn) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("순위에 참여")
-                    Text("무작위 ID, 닉네임, 점수와 플레이 기록을 순위 서버로 보냅니다. 사용량과 Claude 계정 정보는 보내지 않습니다.")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 6) {
+            GroupedSection(footer: "무작위 ID, 닉네임, 점수와 플레이 기록을 순위 서버로 보냅니다. 사용량과 Claude 계정 정보는 보내지 않습니다.") {
+                ToggleRow(title: "순위에 참여", icon: "person.crop.circle.fill", tint: Palette.blue, isOn: $board.isOn)
+                    .help("참여하면 최근 7일 동안 보낸 점수보다 높을 때 무작위 ID, 닉네임, 점수, 코인 수, 플레이 시간, 앱 버전을 보내고, 순위 소식을 받으려고 10분마다 ID와 함께 순위 요약을 받습니다. 참여하지 않으면 ID 없이 공개 순위만 받습니다.")
+                if board.isOn {
+                    GroupedRow("닉네임", icon: "character.cursor.ibeam", tint: Palette.indigo) {
+                        TextField("닉네임", text: $board.nickname, prompt: Text("2~12자"))
+                            .textFieldStyle(.plain)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 120)
+                            .onSubmit { if Leaderboard.isValid(nickname: board.nickname) { state.rename() } }
+                        Button("바꾸기") { state.rename() }
+                            .controlSize(.small)
+                            .disabled(!Leaderboard.isValid(nickname: board.nickname))
+                            .help("이미 올린 기록의 닉네임도 바꿉니다")
+                    }
                 }
+                Button { state.forget() } label: {
+                    GroupedRow("내 기록 지우기") { EmptyView() }
+                        .foregroundStyle(Palette.red)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("서버에서 내 점수와 닉네임을 지우고 참여를 끕니다")
             }
-            .toggleStyle(.switch)
-            .help("참여하면 최근 7일 동안 보낸 점수보다 높을 때 무작위 ID, 닉네임, 점수, 코인 수, 플레이 시간, 앱 버전을 보내고, 순위 소식을 받으려고 10분마다 ID와 함께 순위 요약을 받습니다. 참여하지 않으면 ID 없이 공개 순위만 받습니다.")
-            if board.isOn {
-                HStack {
-                    TextField("", text: $board.nickname, prompt: Text("닉네임 (2~12자)"))
-                        .textFieldStyle(.roundedBorder)
-                        .labelsHidden()
-                    Button("이름 바꾸기") { state.rename() }
-                        .disabled(!Leaderboard.isValid(nickname: board.nickname))
-                        .help("이미 올린 기록의 닉네임도 바꿉니다")
-                }
-                if !Leaderboard.isValid(nickname: board.nickname) {
-                    Text("한글·영문·숫자로 2~12자를 넣어야 점수를 보냅니다.").font(.caption).foregroundStyle(.orange)
-                }
+            if board.isOn, !Leaderboard.isValid(nickname: board.nickname) {
+                Text("한글·영문·숫자로 2~12자를 넣어야 점수를 보냅니다.")
+                    .font(.system(size: 11)).foregroundStyle(Palette.orange).padding(.horizontal, 14)
             }
-            HStack {
-                if let notice = state.notice { Text(notice).font(.caption).foregroundStyle(.secondary) }
-                Spacer()
-                Button("내 기록 지우기", role: .destructive) { state.forget() }
-                    .buttonStyle(.borderless)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .help("서버에서 내 점수와 닉네임을 지우고 참여를 끕니다")
+            if let notice = state.notice {
+                Text(notice).font(.system(size: 11)).foregroundStyle(.secondary).padding(.horizontal, 14)
             }
         }
     }
