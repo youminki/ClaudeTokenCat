@@ -25,7 +25,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         statusItem.autosaveName = "RunTime"
         if let button = statusItem.button {
             button.target = self
-            button.action = #selector(togglePopover)
+            button.action = #selector(statusItemClicked)
+            // 오른쪽 클릭(또는 control 클릭)은 빠른 메뉴, 왼쪽 클릭은 사용량 창
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
         if let button = statusItem.button {
@@ -111,6 +113,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         Notifier.shared.requestAuthorization()
         engine.start()
+    }
+
+    @objc private func statusItemClicked() {
+        let event = NSApp.currentEvent
+        if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
+            showQuickMenu()
+        } else {
+            togglePopover()
+        }
+    }
+
+    /// 메뉴바 앱에서 흔히 기대하는 오른쪽 클릭 메뉴. 사용량 창을 열지 않고 자주 쓰는 곳으로 바로 간다.
+    private func showQuickMenu() {
+        popover?.performClose(nil)
+        let menu = NSMenu()
+        func add(_ title: String, action: @escaping () -> Void) {
+            let item = NSMenuItem(title: title, action: #selector(runMenuAction(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = MenuAction(action)
+            menu.addItem(item)
+        }
+        let line = Self.tooltip(session: engine.sessionGauge, weekly: engine.weeklyGauge)
+        menu.addItem(withTitle: line, action: nil, keyEquivalent: "").isEnabled = false
+        menu.addItem(.separator())
+        add("사용량 보기") { [weak self] in self?.togglePopover() }
+        add("일별 사용량") { [weak self] in self?.openDailyDetail() }
+        add("토큰 러너 순위") { [weak self] in self?.openLeaderboard() }
+        add("새로고침") { [weak self] in self?.engine.refreshNow(forceOfficial: true) }
+        menu.addItem(.separator())
+        add("설정…") { [weak self] in self?.openSettings() }
+        add("업데이트 확인") { [weak self] in
+            AppUpdater.shared.check()
+            self?.openSettings()
+        }
+        menu.addItem(.separator())
+        add("RunTime 종료") { NSApp.terminate(nil) }
+        // 메뉴를 잠깐 붙여 눌린 자리에 띄우고 바로 떼어, 왼쪽 클릭은 계속 사용량 창을 연다
+        statusItem.menu = menu
+        statusItem.button?.performClick(nil)
+        statusItem.menu = nil
+    }
+
+    @objc private func runMenuAction(_ sender: NSMenuItem) {
+        (sender.representedObject as? MenuAction)?.run()
+    }
+
+    private final class MenuAction {
+        let run: () -> Void
+        init(_ run: @escaping () -> Void) { self.run = run }
     }
 
     @objc private func togglePopover() {
