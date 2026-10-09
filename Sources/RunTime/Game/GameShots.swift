@@ -54,6 +54,13 @@ enum GameShots {
             try shot("2-play-\(k)")
             if game.phase == .over { break }
         }
+        // 꾸미기를 단 모습 (꼬리 셋, 발먼지)
+        for item in [Cosmetic.rainbowTrail, .cometTrail, .sparkleTrail] where game.phase == .playing {
+            GameWallet.shared.preview = [item, .heartDust]
+            step(0.5, autoplay: true)
+            try shot("2-play-\(item.rawValue)")
+        }
+        GameWallet.shared.preview = nil
         // →를 눌러 앞으로 나간 모습. 자동 플레이는 앞뒤 이동을 셈하지 않아 마지막에 찍는다
         if game.phase == .playing {
             game.setMove(forward: true)

@@ -161,6 +161,7 @@ struct PopoverView: View {
     private var runnerPage: some View {
         VStack(alignment: .leading, spacing: 10) {
             ScrollView {
+                GameShopView().padding(.horizontal, 2).padding(.bottom, 2)
                 RunnerPicker(settings: settings, openFullPicker: openRunnerSettings)
                     .padding(.horizontal, 2)
                     .padding(.bottom, 4)

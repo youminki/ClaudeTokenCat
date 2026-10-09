@@ -61,6 +61,12 @@ final class GameSession {
     private var tracker = RivalTracker(rivals: [])
     /// 방금 앞지른 사람 (배너).
     private var overtaken: (name: String, life: CGFloat)?
+    /// 이번 판 기록 (미션). 판이 끝나면 지갑에 한 번 넣는다.
+    private var jumps = 0
+    private var nearMisses = 0
+    private var credited = false
+    /// 꼬리를 그릴 지난 자리들 (화면 x, 바닥 위 높이). 땅이 흐르는 만큼 뒤로 민다.
+    private var trail: [CGPoint] = []
     /// 하늘 구간. 500점마다 다음 하늘로 넘어가고, 1.5초 동안 섞어 바꾼다.
     private var skyFrom = 0
     private var skyTo: Int?
@@ -205,6 +211,10 @@ final class GameSession {
         particles.removeAll()
         popups.removeAll()
         recordBanner = 0
+        jumps = 0
+        nearMisses = 0
+        credited = false
+        trail.removeAll()
         skyTo = nil
         zoneBanner = nil
     }
@@ -232,6 +242,7 @@ final class GameSession {
         if let current = notice { notice = current.life > k ? (current.text, current.life - k) : nil }
         if let current = zoneBanner { zoneBanner = current.life > k ? (current.text, current.life - k) : nil }
         skyBlend = min(1, skyBlend + k / 1.5)
+        updateTrail(k)
         for i in particles.indices {
             particles[i].velocity.y += particles[i].gravity * k
             particles[i].position.x += particles[i].velocity.x * k - CGFloat(game.phase == .playing ? game.speed : 0) * k * particles[i].drift
@@ -253,9 +264,10 @@ final class GameSession {
             restarted()
         case .jumped:
             play(.jump)
-            burst(at: feet, count: 5, color: NSColor(white: 0.85, alpha: 1), speed: 40, life: 0.35, drift: 1)
+            jumps += 1
+            burst(at: feet, count: 5, color: dustColor, speed: 40, life: 0.35, drift: 1)
         case .landed:
-            burst(at: feet, count: 4, color: NSColor(white: 0.85, alpha: 1), speed: 30, life: 0.3, drift: 1)
+            burst(at: feet, count: 4, color: dustColor, speed: 30, life: 0.3, drift: 1)
         case .coin(let id):
             play(.coin)
             if let coin = game.coins.first(where: { $0.id == id }) {
@@ -267,6 +279,7 @@ final class GameSession {
             play(.milestone)
             milestoneGlow = 1
         case .nearMiss:
+            nearMisses += 1
             let point = CGPoint(runnerLeft + Self.runnerWidth / 2, CGFloat(game.runnerY + Self.runnerHeight * 0.6))
             burst(at: point, count: 6, color: NSColor(hex: 0x8FD3FF), speed: 60, life: 0.4, drift: 0.5)
             popups.append(Popup(text: "아슬!", position: point, life: 0.7))
@@ -281,6 +294,7 @@ final class GameSession {
             flash = 1
             let center = CGPoint(runnerLeft + Self.runnerWidth / 2, CGFloat(game.runnerY + Self.runnerHeight / 2))
             burst(at: center, count: 12, color: .white, speed: 120, life: 0.55, drift: 0)
+            creditRun()
             if !finished, !isRace {
                 finished = true
                 if live {
@@ -289,6 +303,19 @@ final class GameSession {
                 }
                 onFinish(game)
             }
+        }
+    }
+
+    /// 판이 끝나면 코인과 미션을 지갑에 넣는다. 고스트와 겨룬 판도 넣는다 (꾸미기에만 쓰는 코인이라).
+    private func creditRun() {
+        guard live, !credited else { return }
+        credited = true
+        let run = DailyMissions.Run(coins: game.coinsTaken, nearMisses: nearMisses, score: game.score, jumps: jumps,
+                                    wonRace: (raceLead ?? 0) > 0)
+        let completed = GameWallet.shared.finishRun(run)
+        if !completed.isEmpty {
+            let reward = completed.reduce(0) { $0 + $1.reward }
+            announce("미션 완료: \(completed.map(\.title).joined(separator: ", ")) +\(reward)")
         }
     }
 
@@ -355,6 +382,61 @@ final class GameSession {
         let from = Self.sky(zone: skyFrom), to = Self.sky(zone: skyTo ?? target)
         let t = skyBlend * skyBlend * (3 - 2 * skyBlend)
         return t >= 1 ? to : from.mixed(with: to, t)
+    }
+
+    // MARK: 꾸미기
+
+    private var dustColor: NSColor {
+        GameWallet.shared.equipped(.dust)?.color ?? NSColor(white: 0.85, alpha: 1)
+    }
+
+    private func updateTrail(_ k: CGFloat) {
+        guard game.phase == .playing, GameWallet.shared.equipped(.trail) != nil else {
+            if !trail.isEmpty { trail.removeFirst() }
+            return
+        }
+        let shift = CGFloat(game.speed) * k
+        for i in trail.indices { trail[i].x -= shift }
+        let height = Self.runnerHeight * (game.isDucking ? 0.3 : 0.45)
+        trail.append(CGPoint(runnerLeft + 2, CGFloat(game.runnerY + height)))
+        if trail.count > 22 { trail.removeFirst(trail.count - 22) }
+    }
+
+    private func drawTrail(_ cg: CGContext, groundY: CGFloat, time: Double) {
+        guard let item = GameWallet.shared.equipped(.trail), trail.count > 1 else { return }
+        let points = trail.map { CGPoint($0.x, groundY - $0.y) }
+        cg.saveGState()
+        cg.setLineCap(.round)
+        switch item {
+        case .rainbowTrail:
+            for (band, color) in SpriteEffects.rainbow.enumerated() {
+                let dy = (CGFloat(band) - 2.5) * 2.2
+                for i in 1..<points.count {
+                    let t = CGFloat(i) / CGFloat(points.count)
+                    cg.setStrokeColor(color.withAlphaComponent(0.85 * t).cgColor)
+                    cg.setLineWidth(2.4)
+                    cg.move(to: CGPoint(points[i - 1].x, points[i - 1].y + dy))
+                    cg.addLine(to: CGPoint(points[i].x, points[i].y + dy))
+                    cg.strokePath()
+                }
+            }
+        case .cometTrail:
+            for i in 1..<points.count {
+                let t = CGFloat(i) / CGFloat(points.count)
+                cg.setStrokeColor(item.color.withAlphaComponent(0.7 * t).cgColor)
+                cg.setLineWidth(1 + 7 * t)
+                cg.move(to: points[i - 1])
+                cg.addLine(to: points[i])
+                cg.strokePath()
+            }
+        default:
+            for (i, point) in points.enumerated() where i % 3 == 0 {
+                let t = CGFloat(i) / CGFloat(points.count)
+                let twinkle = 0.7 + 0.3 * CGFloat(sin(time * 9 + Double(i)))
+                SpriteEffects.sparkle(cg, at: point, radius: (1.5 + 3 * t) * twinkle, color: item.color.withAlphaComponent(t))
+            }
+        }
+        cg.restoreGState()
     }
 
     // MARK: 화면 효과
@@ -478,6 +560,7 @@ final class GameSession {
                 cg.restoreGState()
             }
         }
+        drawTrail(cg, groundY: groundY, time: time)
         drawRunner(cg, game, left: runnerLeft, groundY: groundY, stageAnchorX: stageAnchorX, stageScale: stageScale,
                    theme: theme, time: time)
 
