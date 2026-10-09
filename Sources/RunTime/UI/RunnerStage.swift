@@ -14,7 +14,7 @@ struct RunnerStage: View {
     /// 메뉴에서 고른 동작. 바뀔 때마다 무대 러너가 그 동작을 한다.
     var trickRequest: TrickRequest?
     /// Claude가 대화 차례를 마쳤다 (폴더 이름).
-    var claudeFinished: AnyPublisher<String?, Never> = Empty().eraseToAnyPublisher()
+    var claudeFinished: AnyPublisher<TurnEndDetector.FinishedTurn, Never> = Empty().eraseToAnyPublisher()
 
     @StateObject private var model = StageModel()
     /// 무대를 누르고 있는지. 제스처가 취소돼도 저절로 풀려 게임 입력이 눌린 채 남지 않는다.
@@ -37,7 +37,7 @@ struct RunnerStage: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.white.opacity(0.07)))
         .overlay { bubbleLayer }
-        .onReceive(claudeFinished) { model.claudeFinished(project: $0) }
+        .onReceive(claudeFinished) { model.claudeFinished(project: $0.project) }
         .contentShape(Rectangle())
         // 누르는 순간과 떼는 순간을 따로 받아야 게임에서 길게 누르면 높이 뛴다
         .gesture(DragGesture(minimumDistance: 0)

@@ -41,3 +41,47 @@ struct TurnEndDetectorTests {
         #expect(detector.finishedTurns(in: [event], now: event.timestamp.addingTimeInterval(3600)).isEmpty)
     }
 }
+
+struct TurnDurationTests {
+    private func event(_ at: Date, id: String, ends: Bool = false, project: String = "RunTime") -> UsageEvent {
+        UsageEvent(timestamp: at, model: "claude-opus-5-5", requestId: "req_\(id)", messageId: "msg_\(id)",
+                   inputTokens: 1, outputTokens: 1, cacheCreationTokens: 0, cacheReadTokens: 0,
+                   endsTurn: ends, project: project)
+    }
+
+    @Test func measuresFromFirstReplyToEnd() {
+        let start = Date()
+        var detector = TurnEndDetector()
+        // 여러 번에 나눠 읽어도 첫 응답부터 센다
+        #expect(detector.finishedTurns(in: [event(start, id: "a")], now: start).isEmpty)
+        #expect(detector.finishedTurns(in: [event(start.addingTimeInterval(60), id: "b")], now: start.addingTimeInterval(60)).isEmpty)
+        let end = start.addingTimeInterval(150)
+        let turns = detector.finishedTurns(in: [event(end, id: "c", ends: true)], now: end)
+        #expect(turns.count == 1)
+        #expect(turns.first?.duration == 150)
+        #expect(turns.first?.project == "RunTime")
+        // 다음 차례는 다시 처음부터
+        let next = end.addingTimeInterval(30)
+        #expect(detector.finishedTurns(in: [event(next, id: "d", ends: true)], now: next).first?.duration == 0)
+    }
+
+    @Test func projectsAreTimedSeparately() {
+        let start = Date()
+        var detector = TurnEndDetector()
+        _ = detector.finishedTurns(in: [event(start, id: "a", project: "A")], now: start)
+        let later = start.addingTimeInterval(100)
+        let turns = detector.finishedTurns(in: [event(later, id: "b", ends: true, project: "B")], now: later)
+        #expect(turns.first?.duration == 0)
+    }
+
+    @Test func longIdleStartsANewTurn() {
+        let start = Date()
+        var detector = TurnEndDetector()
+        _ = detector.finishedTurns(in: [event(start, id: "a")], now: start)
+        let end = start.addingTimeInterval(3600)
+        // 끝 표시 없이 한 시간 쉬었다가 온 대답은 그 대답부터 센다
+        let turns = detector.finishedTurns(in: [event(end.addingTimeInterval(-20), id: "b"), event(end, id: "c", ends: true)],
+                                           now: end)
+        #expect(turns.first?.duration == 20)
+    }
+}

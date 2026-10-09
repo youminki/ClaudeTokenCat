@@ -122,9 +122,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             .sink { [weak self] display in self?.animator.set(display: display) }
             .store(in: &cancellables)
 
-        // Claude가 일을 마치면 메뉴바 러너가 축하 동작으로 알린다 (다른 창을 보고 있어도 눈에 띄게)
+        // Claude가 일을 마치면 메뉴바 러너가 축하 동작으로 알린다 (다른 창을 보고 있어도 눈에 띄게).
+        // 오래 걸린 작업이고 사용량 창이 닫혀 있으면 알림도 보낸다. 짧은 대답마다 보내면 대화하는 동안 계속 울린다.
         engine.turnEnded
-            .sink { [weak self] _ in _ = self?.animator.perform(.celebrate) }
+            .sink { [weak self] turn in
+                guard let self else { return }
+                _ = self.animator.perform(.celebrate)
+                guard self.engine.settings.claudeDoneAlertEnabled, turn.duration >= Self.claudeDoneMinimum,
+                      self.popover?.isShown != true else { return }
+                let minutes = Int((turn.duration / 60).rounded())
+                Notifier.shared.send(title: "Claude 작업이 끝났어요",
+                                     body: [turn.project, "\(minutes)분 걸림"].compactMap { $0 }.joined(separator: " · "))
+            }
             .store(in: &cancellables)
 
         GlobalHotKey.shared.action = { [weak self] in
@@ -338,6 +347,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         guard let gauge else { return StatusLabel(text: "--%", level: .normal) }
         return StatusLabel(text: "\(gauge.displayPercent)%", level: UsageAlertLevel.level(percent: gauge.percent))
     }
+
+    /// 이보다 오래 걸린 작업만 알림을 보낸다.
+    private static let claudeDoneMinimum: TimeInterval = 60
 
     private static let statusLabelFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
     /// 러너와 숫자 사이 간격. 러너 칸 오른쪽 끝이 이미 코끝이라 1pt만 둔다.

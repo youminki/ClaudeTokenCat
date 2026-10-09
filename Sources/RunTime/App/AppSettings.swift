@@ -9,7 +9,7 @@ final class AppSettings: ObservableObject {
     static let pollIntervalOptions: [Double] = [1, 3, 5, 10]
 
     private enum Key: String {
-        case officialEnabled, sensitivity, pollInterval, limitAlertsEnabled, newSessionAlertEnabled, weeklyResetAlertEnabled, globalHotKeyEnabled, spriteTheme
+        case officialEnabled, sensitivity, pollInterval, limitAlertsEnabled, newSessionAlertEnabled, weeklyResetAlertEnabled, claudeDoneAlertEnabled, globalHotKeyEnabled, spriteTheme
         case menuBarLabel, menuBarLabelLast, runner, smoothness, tricksEnabled, customRunner, runnerSize
     }
 
@@ -31,6 +31,8 @@ final class AppSettings: ObservableObject {
     @Published var globalHotKeyEnabled: Bool { didSet { save(globalHotKeyEnabled, .globalHotKeyEnabled) } }
     /// 주간 사용량이 초기화되면 알림 (기본 끔).
     @Published var weeklyResetAlertEnabled: Bool { didSet { save(weeklyResetAlertEnabled, .weeklyResetAlertEnabled) } }
+    /// 사용량 창이 닫혀 있을 때 1분 넘게 걸린 Claude 작업이 끝나면 알린다.
+    @Published var claudeDoneAlertEnabled: Bool { didSet { save(claudeDoneAlertEnabled, .claudeDoneAlertEnabled) } }
 
     /// 메뉴바 러너 종류와 색상 (색은 코드로 그린 러너에만 적용).
     @Published var runner: Runner { didSet { save(runner.rawValue, .runner) } }
@@ -125,6 +127,7 @@ final class AppSettings: ObservableObject {
         limitAlertsEnabled = bool(.limitAlertsEnabled, true)
         newSessionAlertEnabled = bool(.newSessionAlertEnabled, false)
         weeklyResetAlertEnabled = bool(.weeklyResetAlertEnabled, false)
+        claudeDoneAlertEnabled = bool(.claudeDoneAlertEnabled, true)
         globalHotKeyEnabled = bool(.globalHotKeyEnabled, true)
         runner = Runner(rawValue: string(.runner)) ?? .cat
         // 산 적 없는 상점 색은 기본으로 (설정 파일을 직접 고친 경우)
