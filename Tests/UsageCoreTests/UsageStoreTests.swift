@@ -144,6 +144,20 @@ struct UsageStoreTests {
         #expect(snap.dailyTotals.map(\.tokens).reduce(0, +) == 100)
     }
 
+    @Test func dailyTotalsSplitByProject() {
+        let store = UsageStore()
+        let now = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: Date())!
+        func at(_ minutes: Double, _ tokens: Int, _ id: String, _ project: String?) -> UsageEvent {
+            UsageEvent(timestamp: now.addingTimeInterval(-minutes * 60), model: "claude-sonnet-5",
+                       requestId: "req_\(id)", messageId: "msg_\(id)", inputTokens: tokens, outputTokens: 0,
+                       cacheCreationTokens: 0, cacheReadTokens: 0, project: project)
+        }
+        store.add([at(1, 300, "a", "RunTime"), at(2, 200, "b", "RunTime"), at(3, 500, "c", "cafeteria"), at(4, 50, "d", nil)])
+        let today = store.snapshot(now: now).dailyTotals[0]
+        #expect(today.projectTokens == ["RunTime": 500, "cafeteria": 500, "": 50])
+        #expect(abs(today.projectCostUSD.values.reduce(0, +) - today.costUSD) < 1e-9)
+    }
+
     @Test func dailyTotalsSplitByModel() {
         let store = UsageStore()
         // 자정 직후에 돌면 2분 전이 어제가 되므로 한낮으로 고정한다

@@ -33,6 +33,9 @@ public final class UsageStore {
         public let costUSD: Double
         /// 모델별 토큰 (일별 상세의 모델 구성 막대용).
         public let modelTokens: [String: Int]
+        /// 폴더(프로젝트)별 토큰과 비용. 폴더를 남기지 않은 옛 기록은 빈 이름("")으로 모은다.
+        public var projectTokens: [String: Int] = [:]
+        public var projectCostUSD: [String: Double] = [:]
     }
 
     private let queue = DispatchQueue(label: "runtime.usagestore")
@@ -79,7 +82,8 @@ public final class UsageStore {
             var weeklyTokens = 0
             var weeklyModelTokens: [String: Int] = [:]
             var sparkline = [Int](repeating: 0, count: Self.sparklineMinutes)
-            var daily: [Date: (tokens: Int, cost: Double, models: [String: Int])] = [:]
+            var daily: [Date: (tokens: Int, cost: Double, models: [String: Int], projects: [String: Int],
+                               projectCost: [String: Double])] = [:]
 
             for event in events where event.timestamp <= now {
                 let tokens = event.totalTokens
@@ -90,9 +94,11 @@ public final class UsageStore {
                     if event.isProgrammatic { todayProgrammatic += tokens }
                 }
                 let eventDay = calendar.startOfDay(for: event.timestamp)
-                daily[eventDay, default: (0, 0, [:])].tokens += tokens
+                daily[eventDay, default: (0, 0, [:], [:], [:])].tokens += tokens
                 daily[eventDay]!.cost += cost
                 daily[eventDay]!.models[event.model, default: 0] += tokens
+                daily[eventDay]!.projects[event.project ?? "", default: 0] += tokens
+                daily[eventDay]!.projectCost[event.project ?? "", default: 0] += cost
                 if event.timestamp > now.addingTimeInterval(-60) {
                     last60s += tokens
                 }
@@ -121,7 +127,8 @@ public final class UsageStore {
                 todayProgrammaticTokens: todayProgrammatic,
                 dailyTotals: daily
                     .map { DailyTotal(dayStart: $0.key, tokens: $0.value.tokens, costUSD: $0.value.cost,
-                                      modelTokens: $0.value.models) }
+                                      modelTokens: $0.value.models, projectTokens: $0.value.projects,
+                                      projectCostUSD: $0.value.projectCost) }
                     .sorted { $0.dayStart > $1.dayStart },
                 latestClientVersion: events.last { $0.clientVersion != nil }?.clientVersion
             )

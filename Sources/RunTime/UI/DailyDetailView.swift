@@ -16,7 +16,8 @@ struct DailyDetailView: View {
             } else {
                 summary(totals)
                 chart(totals)
-                GroupedSection("날짜별", footer: "비용은 API 단가로 환산한 참고값입니다.") {
+                projects(totals)
+                GroupedSection("날짜별", footer: "비용은 API 단가로 환산한 참고값입니다. 날짜에 마우스를 올리면 모델과 프로젝트별로 나눠 보여 줍니다.") {
                     ForEach(totals, id: \.dayStart) { row($0) }
                 }
             }
@@ -131,6 +132,65 @@ struct DailyDetailView: View {
         .foregroundStyle(.secondary)
     }
 
+    // MARK: 프로젝트
+
+    /// 최근 8일 동안 폴더(프로젝트)별로 쓴 양. 많이 쓴 6개만 보이고 나머지는 묶는다.
+    @ViewBuilder
+    private func projects(_ totals: [UsageStore.DailyTotal]) -> some View {
+        let (tokens, costs) = Self.projectTotals(totals)
+        let sorted = tokens.sorted { $0.value > $1.value }
+        let total = max(sorted.map(\.value).reduce(0, +), 1)
+        let shown = Array(sorted.prefix(Self.shownProjects))
+        let rest = sorted.dropFirst(Self.shownProjects)
+        if sorted.count > 1 || sorted.first?.key.isEmpty == false {
+            GroupedSection("프로젝트별", footer: "Claude Code를 연 폴더 이름으로 나눕니다.") {
+                ForEach(shown, id: \.key) { name, value in
+                    projectRow(name.isEmpty ? "폴더 모름" : name, tokens: value, cost: costs[name] ?? 0,
+                               share: Double(value) / Double(total))
+                }
+                if !rest.isEmpty {
+                    let value = rest.map(\.value).reduce(0, +)
+                    projectRow("그 밖 \(rest.count)개", tokens: value, cost: rest.map { costs[$0.key] ?? 0 }.reduce(0, +),
+                               share: Double(value) / Double(total))
+                }
+            }
+        }
+    }
+
+    private static let shownProjects = 6
+
+    private static func projectTotals(_ totals: [UsageStore.DailyTotal]) -> ([String: Int], [String: Double]) {
+        var tokens: [String: Int] = [:], costs: [String: Double] = [:]
+        for day in totals {
+            for (name, value) in day.projectTokens { tokens[name, default: 0] += value }
+            for (name, value) in day.projectCostUSD { costs[name, default: 0] += value }
+        }
+        return (tokens, costs)
+    }
+
+    private func projectRow(_ name: String, tokens: Int, cost: Double, share: Double) -> some View {
+        // 긴 폴더 이름은 두 줄로 꺾이지 않게 줄이고, 마우스를 올리면 전체 이름을 보여 준다
+        GroupedRow(name.count > 12 ? name.prefix(11) + "…" : name) {
+            // 열 너비를 고정해 줄마다 막대와 숫자가 같은 자리에 오게 한다
+            HStack(spacing: 8) {
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.primary.opacity(0.08)).frame(width: 44, height: 5)
+                    Capsule().fill(Palette.blue).frame(width: max(3, 44 * share), height: 5)
+                }
+                Text("\(Int((share * 100).rounded()))%").foregroundStyle(.secondary)
+                    .frame(width: 32, alignment: .trailing)
+                Text(Format.tokens(tokens))
+                    .frame(width: 58, alignment: .trailing)
+                Text(Format.usd(cost)).foregroundStyle(.secondary)
+                    .frame(width: 56, alignment: .trailing)
+            }
+            .font(.system(size: 12).monospacedDigit())
+            .lineLimit(1)
+            .fixedSize()
+        }
+        .help(name)
+    }
+
     // MARK: 목록
 
     private func row(_ day: UsageStore.DailyTotal) -> some View {
@@ -193,9 +253,13 @@ struct DailyDetailView: View {
     }
 
     private func breakdown(_ day: UsageStore.DailyTotal) -> String {
-        segments(of: day)
+        let models = segments(of: day)
             .map { "\($0.family) \(Format.tokens($0.tokens))" }
             .joined(separator: " · ")
+        let projects = day.projectTokens.sorted { $0.value > $1.value }.prefix(3)
+            .map { "\($0.key.isEmpty ? "폴더 모름" : $0.key) \(Format.tokens($0.value))" }
+            .joined(separator: " · ")
+        return projects.isEmpty ? models : models + "\n" + projects
     }
 
     /// Opus·Sonnet·Haiku·Fable 밖의 모델은 "기타"로 묶는다.
