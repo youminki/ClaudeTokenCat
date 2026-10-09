@@ -18,6 +18,8 @@ enum Palette {
     static let groupedBackground = dynamic(light: 0xF2F2F7, dark: 0x1C1C1E)
     static let groupedRow = dynamic(light: 0xFFFFFF, dark: 0x2C2C2E)
     static let separator = dynamic(light: 0xC6C6C8, dark: 0x3D3D41)
+    /// 캐릭터를 올리는 바탕. 흰 캐릭터(토끼·오리·판다)도 묻히지 않게 라이트에서도 옅은 청회색을 깐다.
+    static let characterBackdrop = dynamic(light: 0xDCE3EC, dark: 0x3A3A40)
 
     private static func dynamic(light: UInt32, dark: UInt32) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in

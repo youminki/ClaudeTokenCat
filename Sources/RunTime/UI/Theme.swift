@@ -4,8 +4,9 @@ import UsageCore
 /// 팝오버 디자인 토큰. 색은 상태를 알릴 때만 쓰고, 나머지는 흰색의 농도와 글자 크기로 위계를 만든다.
 enum Theme {
     static let primary = Color.white.opacity(0.92)
-    static let secondary = Color.white.opacity(0.58)
-    static let tertiary = Color.white.opacity(0.38)
+    // 어두운 카드 위에서도 작은 글씨가 읽히는 농도 (보조 글자 대비 약 4.5:1)
+    static let secondary = Color.white.opacity(0.68)
+    static let tertiary = Color.white.opacity(0.5)
     static let hairline = Color.white.opacity(0.09)
     static let track = Color.white.opacity(0.11)
     static let hover = Color.white.opacity(0.08)
