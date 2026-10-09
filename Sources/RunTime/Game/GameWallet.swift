@@ -109,12 +109,12 @@ final class GameWallet: ObservableObject {
     func equipped(_ slot: Cosmetic.Slot) -> Cosmetic? { (preview ?? equipped).first { $0.slot == slot } }
 
     /// 판이 끝났다. 먹은 코인을 넣고, 새로 채운 미션의 보상을 더해 그 미션들을 돌려준다.
-    func finishRun(_ run: DailyMissions.Run) -> [DailyMissions.Mission] {
+    func finishRun(_ run: DailyMissions.Run, bonusCoins: Int = 0) -> [DailyMissions.Mission] {
         var board = missions
         let completed = board.record(run)
         stored = board
         if let data = try? JSONEncoder().encode(board) { defaults.set(data, forKey: Key.missions) }
-        coins += run.coins + completed.reduce(0) { $0 + $1.reward }
+        coins += run.coins + bonusCoins + completed.reduce(0) { $0 + $1.reward }
         return completed
     }
 

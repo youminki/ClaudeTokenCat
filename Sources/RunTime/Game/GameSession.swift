@@ -65,6 +65,8 @@ final class GameSession {
     private var jumps = 0
     private var nearMisses = 0
     private var credited = false
+    /// Claude가 일하는 동안 한 판이면 코인을 두 배로 준다 (기다리는 동안 한 판).
+    private(set) var boosted = false
     /// 꼬리를 그릴 지난 자리들 (화면 x, 바닥 위 높이). 땅이 흐르는 만큼 뒤로 민다.
     private var trail: [CGPoint] = []
     /// 하늘 구간. 500점마다 다음 하늘로 넘어가고, 1.5초 동안 섞어 바꾼다.
@@ -199,6 +201,7 @@ final class GameSession {
         jumps = 0
         nearMisses = 0
         credited = false
+        boosted = false
         trail.removeAll()
         skyTo = nil
         zoneBanner = nil
@@ -228,6 +231,7 @@ final class GameSession {
         if let current = zoneBanner { zoneBanner = current.life > k ? (current.text, current.life - k) : nil }
         skyBlend = min(1, skyBlend + k / 1.5)
         updateTrail(k)
+        if live, game.phase == .playing, !boosted, UsageEngine.isClaudeWorking { boosted = true }
         for i in particles.indices {
             particles[i].velocity.y += particles[i].gravity * k
             particles[i].position.x += particles[i].velocity.x * k - CGFloat(game.phase == .playing ? game.speed : 0) * k * particles[i].drift
@@ -300,7 +304,7 @@ final class GameSession {
         credited = true
         let run = DailyMissions.Run(coins: game.coinsTaken, nearMisses: nearMisses, score: game.score, jumps: jumps,
                                     wonRace: (raceLead ?? 0) > 0)
-        let completed = GameWallet.shared.finishRun(run)
+        let completed = GameWallet.shared.finishRun(run, bonusCoins: boosted ? game.coinsTaken : 0)
         if !completed.isEmpty {
             let reward = completed.reduce(0) { $0 + $1.reward }
             announce("미션 완료: \(completed.map(\.title).joined(separator: ", ")) +\(reward)")
@@ -678,8 +682,9 @@ final class GameSession {
             labels.append(Label(text: Text("최고 \(max(game.best, game.score))").font(small)
                                     .foregroundColor(.white.opacity(0.75)),
                                 position: CGPoint(12, 29), anchor: .topLeading))
-            if game.coinsTaken > 0 {
-                labels.append(Label(text: Text("코인 \(game.coinsTaken)").font(small).foregroundColor(gold.opacity(0.9)),
+            if game.coinsTaken > 0 || boosted {
+                let double = boosted ? "  ×2 Claude 작업 중" : ""
+                labels.append(Label(text: Text("코인 \(game.coinsTaken)\(double)").font(small).foregroundColor(gold.opacity(0.9)),
                                     position: CGPoint(12, 43), anchor: .topLeading))
             }
         }

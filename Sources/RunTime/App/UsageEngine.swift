@@ -55,6 +55,15 @@ final class UsageEngine: ObservableObject {
     private var turnDetector = TurnEndDetector()
     /// Claude가 대화 차례를 마쳤다 (폴더 이름). 메인 스레드에서 보낸다.
     let turnEnded = PassthroughSubject<String?, Never>()
+    /// 마지막 기록과 마지막으로 차례가 끝난 때. 메인 스레드에서 읽고 쓴다.
+    static private(set) var lastActivity: Date?
+    static private(set) var lastTurnEnd: Date?
+
+    /// Claude가 지금 일하는 중인지. 1분 안에 기록이 있고, 그 뒤로 차례가 끝나지 않았다.
+    static var isClaudeWorking: Bool {
+        guard let last = lastActivity, Date().timeIntervalSince(last) < 60 else { return false }
+        return lastTurnEnd.map { last > $0 } ?? true
+    }
     private let store = UsageStore()
     private let meter = BurnRateMeter()
     private let provider = OAuthUsageProvider()
@@ -226,8 +235,12 @@ final class UsageEngine: ObservableObject {
         let scanned = watcher.scan(now: now)
         let finished = turnDetector.finishedTurns(in: scanned, now: now)
         store.add(scanned)
-        if let last = finished.last {
-            DispatchQueue.main.async { self.turnEnded.send(last.project) }
+        let lastEvent = scanned.map(\.timestamp).max()
+        let lastEnd = finished.map(\.timestamp).max()
+        DispatchQueue.main.async {
+            if let lastEvent, lastEvent > Self.lastActivity ?? .distantPast { Self.lastActivity = lastEvent }
+            if let lastEnd { Self.lastTurnEnd = max(lastEnd, Self.lastTurnEnd ?? .distantPast) }
+            if let last = finished.last { self.turnEnded.send(last.project) }
         }
         let snap = store.snapshot(now: now, weeklySince: weeklyStart)
         if let version = snap.latestClientVersion { clientVersion = version }
