@@ -10,6 +10,8 @@ struct RunnerStage: View {
     let theme: SpriteTheme
     var onPet: (Trick) -> Void = { _ in }
     var openLeaderboard: () -> Void = {}
+    /// 메뉴에서 고른 동작. 바뀔 때마다 무대 러너가 그 동작을 한다.
+    var trickRequest: TrickRequest?
 
     @StateObject private var model = StageModel()
     /// 무대를 누르고 있는지. 제스처가 취소돼도 저절로 풀려 게임 입력이 눌린 채 남지 않는다.
@@ -42,6 +44,9 @@ struct RunnerStage: View {
                 onPet(model.pet(character: character, display: display))
             })
         .onChange(of: pressed) { model.setPressed($0) }
+        .onChange(of: trickRequest) { request in
+            if let request { model.play(request.trick) }
+        }
         .overlay(alignment: .topTrailing) { controls }
         .background(WindowReader { model.window = $0 })
         .onHover { model.setPointer($0) }
@@ -309,6 +314,13 @@ final class StageModel: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.say(line, seconds: 2.4) }
     }
 
+    /// 메뉴에서 고른 동작을 무대 러너도 한다. 게임 중에는 판을 방해하지 않게 하지 않는다.
+    func play(_ kind: Trick) {
+        guard game == nil else { return }
+        trick = (kind, Date())
+        nextIdle = Date().addingTimeInterval(kind.duration + 9)
+    }
+
     /// 누르면 장난 하나 + 말풍선. 메뉴바 러너도 같은 장난을 하도록 고른 동작을 돌려준다.
     func pet(character: RunnerCharacter, display: SpriteDisplay) -> Trick {
         let kind: Trick
@@ -374,7 +386,7 @@ final class StageModel: ObservableObject {
         let runnerX = size.width * Self.runnerAnchor + speed / 140 * 16
         let origin = CGPoint(runnerX - Stage.size.width / 2 * scale, groundY - Stage.ground * scale)
         let isSpace = display == .normal(.rainbow)
-        let sky = Sky.at(hour: Calendar.current.component(.hour, from: date), space: isSpace)
+        let sky = Sky.at(hour: Sky.hourOverride ?? Calendar.current.component(.hour, from: date), space: isSpace)
 
         drawBackdrop(cg, size: size, sky: sky, time: time, groundY: groundY)
 
@@ -461,7 +473,7 @@ final class StageModel: ObservableObject {
         let groundY = size.height - 15
         let time = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 10_000)
         scroll = CGFloat(game.game.distance)
-        let sky = Sky.at(hour: Calendar.current.component(.hour, from: date), space: false)
+        let sky = Sky.at(hour: Sky.hourOverride ?? Calendar.current.component(.hour, from: date), space: false)
         let shake = game.shakeOffset
         cg.saveGState()
         cg.translateBy(x: shake.x, y: shake.y)
@@ -509,9 +521,9 @@ final class StageModel: ObservableObject {
                 let span = size.width + 90
                 let raw = Self.hash(i, 7) * span - scroll * 0.22 - time * 4
                 let x = raw - floor(raw / span) * span - 45
-                let y = 30 + Self.hash(i, 8) * 18
+                let y = 12 + Self.hash(i, 8) * 14   // 러너 머리보다 위로 지나가게
                 let s = 0.7 + Self.hash(i, 9) * 0.6
-                cg.setFillColor(NSColor.white.withAlphaComponent(0.85 * sky.clouds).cgColor)
+                cg.setFillColor(NSColor.white.withAlphaComponent(0.6 * sky.clouds).cgColor)
                 for (dx, dy, r) in [(0.0, 0.0, 7.0), (8.0, -3.0, 8.5), (17.0, 0.0, 6.5), (8.0, 2.5, 7.0)] as [(CGFloat, CGFloat, CGFloat)] {
                     cg.fillEllipse(in: CGRect(x: x + dx * s - r * s, y: y + dy * s - r * s, width: r * 2 * s, height: r * 2 * s))
                 }
@@ -630,7 +642,7 @@ final class StageModel: ObservableObject {
 }
 
 /// 시간대별 하늘색.
-private struct Sky {
+struct Sky {
     var top: NSColor
     var bottom: NSColor
     var far: NSColor
@@ -642,6 +654,9 @@ private struct Sky {
     var orb: NSColor
     var moon = false
     var orbLow = false
+
+    /// 화면 점검(--ui-shots)에서 시간대별 하늘을 찍으려고 시각을 고정한다.
+    static var hourOverride: Int?
 
     static func at(hour: Int, space: Bool) -> Sky {
         if space {
@@ -668,4 +683,10 @@ private struct Sky {
                        stars: 0.85, orb: NSColor(hex: 0xF2EBD0), moon: true)
         }
     }
+}
+
+/// 무대에 동작을 요청한다. 같은 동작을 다시 골라도 바뀐 것으로 보이게 매번 새 id를 붙인다.
+struct TrickRequest: Equatable {
+    let id = UUID()
+    let trick: Trick
 }

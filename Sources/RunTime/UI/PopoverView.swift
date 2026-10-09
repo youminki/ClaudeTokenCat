@@ -7,20 +7,19 @@ struct PopoverView: View {
     @ObservedObject var engine: UsageEngine
     @ObservedObject var settings: AppSettings
     var openSettings: () -> Void = {}
+    /// 설정 창의 러너 구역을 연다 (Petdex 받기·그림 불러오기).
+    var openRunnerSettings: () -> Void = {}
     var openDailyDetail: () -> Void = {}
     var openLeaderboard: () -> Void = {}
     /// 무대에서 러너를 누르거나 메뉴에서 동작을 고르면 메뉴바 러너도 같은 동작을 한다.
     var performTrick: (Trick) -> Void = { _ in }
+    /// 화면 점검에서 러너 고르기 화면을 바로 띄울 때.
+    var startsOnRunnerPage = false
 
     @StateObject private var sparklineHover = HoverIndex()
+    @StateObject private var page = PopoverPage()
     @ObservedObject private var customRunners = CustomRunnerStore.shared
     @ObservedObject private var petdex = PetdexStore.shared
-
-    /// 메뉴의 기본 러너 선택. 내 러너를 쓰는 중이면 아무 것도 체크하지 않는다.
-    private var builtInSelection: Binding<Runner?> {
-        Binding(get: { settings.customRunnerID == nil ? settings.runner : nil },
-                set: { if let runner = $0 { settings.select(runner) } })
-    }
 
     private var customSelection: Binding<String?> {
         Binding(get: { settings.customRunnerID },
@@ -55,38 +54,62 @@ struct PopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             RunnerStage(display: display, character: settings.character, theme: settings.spriteTheme,
-                        onPet: performTrick, openLeaderboard: openLeaderboard)
+                        onPet: performTrick, openLeaderboard: openLeaderboard, trickRequest: page.trick)
             stageCaption.padding(.top, 10).padding(.horizontal, 2)
-            // 세션과 주간을 나란히 두어 두 값을 한눈에 견준다
-            Card(padding: 0) {
-                HStack(alignment: .top, spacing: 0) {
-                    sessionRow
-                    Rectangle().fill(Theme.hairline).frame(width: 1)
-                    weeklyRow
-                }
-                .fixedSize(horizontal: false, vertical: true)
+            if page.showsRunners {
+                runnerPage.padding(.top, 10)
+            } else {
+                usageContent
             }
-            .padding(.top, 12)
-            Card(padding: 0) {
-                VStack(spacing: 0) {
-                    activitySection.padding(12)
-                    Hairline()
-                    statColumns
-                }
-            }
-            .padding(.top, 8)
-            footer.padding(.top, 10)
         }
         .padding(14)
         .frame(width: 376)
+        .onAppear { if startsOnRunnerPage { page.showsRunners = true } }
+    }
+
+    @ViewBuilder
+    private var usageContent: some View {
+        // 세션과 주간을 나란히 두어 두 값을 한눈에 견준다
+        Card(padding: 0) {
+            HStack(alignment: .top, spacing: 0) {
+                sessionRow
+                Rectangle().fill(Theme.hairline).frame(width: 1)
+                weeklyRow
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 12)
+        Card(padding: 0) {
+            VStack(spacing: 0) {
+                activitySection.padding(12)
+                Hairline()
+                statColumns
+            }
+        }
+        .padding(.top, 8)
+        footer.padding(.top, 10)
     }
 
     // MARK: 무대 아래 한 줄
 
     private var stageCaption: some View {
-        HStack(spacing: 0) {
-            runnerMenu
+        HStack(spacing: 8) {
+            Button { page.showsRunners.toggle() } label: {
+                HStack(spacing: 4) {
+                    Text(settings.character.name).foregroundStyle(Theme.primary)
+                    Text("·").foregroundStyle(Theme.tertiary)
+                    Text(stateLabel).foregroundStyle(display == .alert ? Theme.critical : Theme.secondary)
+                    Image(systemName: page.showsRunners ? "chevron.up" : "chevron.right")
+                        .font(.system(size: 8.5, weight: .bold))
+                        .foregroundStyle(Theme.tertiary)
+                }
+                .font(Theme.label)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(page.showsRunners ? "사용량으로 돌아가기" : "러너 바꾸기")
             Spacer(minLength: 8)
+            tricksMenu
         }
     }
 
@@ -98,61 +121,64 @@ struct PopoverView: View {
         }
     }
 
-    /// 러너 이름이 곧 메뉴 버튼: 러너·색상 바꾸기, 동작 해보기.
-    private var runnerMenu: some View {
+    /// 동작 해보기: 무대와 메뉴바 러너가 같은 동작을 한다.
+    private var tricksMenu: some View {
         Menu {
-            ForEach(Runner.Group.allCases, id: \.self) { group in
-                Picker(group.rawValue, selection: builtInSelection) {
-                    ForEach(Runner.runners(in: group), id: \.self) { Text($0.displayName).tag(Optional($0)) }
-                }
-                .pickerStyle(.inline)
-            }
-            if !LocalPack.runners.isEmpty {
-                // 개인 팩과 Petdex는 수십~백 명이라 펼쳐 두면 메뉴가 화면을 넘는다
-                Picker("개인 팩", selection: customSelection) {
-                    ForEach(LocalPack.runners, id: \.id) { Text($0.name).tag(Optional(LocalPack.storageID($0))) }
-                }
-                .pickerStyle(.menu)
-            }
-            if !petdex.pets.isEmpty {
-                Picker("Petdex", selection: customSelection) {
-                    ForEach(petdex.pets) { Text($0.name).tag(Optional(PetdexStore.storageID($0.slug))) }
-                }
-                .pickerStyle(.menu)
-            }
-            if !customRunners.runners.isEmpty {
-                Picker("내 러너", selection: customSelection) {
-                    ForEach(customRunners.runners) { Text($0.name).tag(Optional($0.id)) }
-                }
-                .pickerStyle(.inline)
-            }
-            Button("아무거나", action: pickRandomRunner)
-            Divider()
-            Picker("색상", selection: $settings.spriteTheme) {
-                ForEach(SpriteTheme.allCases, id: \.self) { Text($0.displayName).tag($0) }
-            }
-            Menu("동작 해보기") {
-                ForEach(Trick.allCases.filter { Trick.awake.contains($0) }, id: \.self) { trick in
-                    Button(trick.label) { performTrick(trick) }
-                }
+            ForEach(Trick.allCases.filter { Trick.awake.contains($0) }, id: \.self) { trick in
+                Button(trick.label) { play(trick) }
             }
         } label: {
-            HStack(spacing: 4) {
-                Text(settings.character.name).foregroundStyle(Theme.primary)
-                Text("·").foregroundStyle(Theme.tertiary)
-                Text(stateLabel).foregroundStyle(display == .alert ? Theme.critical : Theme.secondary)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(Theme.tertiary)
+            HStack(spacing: 3) {
+                Image(systemName: "sparkles").font(.system(size: 9.5, weight: .semibold))
+                Text("동작")
             }
             .font(Theme.label)
+            .foregroundStyle(Theme.secondary)
+            .padding(.horizontal, 8)
+            .frame(height: 20)
+            .background(Capsule().fill(Theme.surface))
+            .overlay(Capsule().strokeBorder(Theme.hairline))
         }
-        // 기본 메뉴 스타일은 레이블을 제 모양으로 바꾼다. 버튼 스타일로 두면 레이블을 그대로 그린다.
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("러너·색상 바꾸기, 동작 해보기")
+        // 지쳤거나 한도 경고 중에는 메뉴바 러너가 그 모습을 유지해야 해서 동작을 받지 않는다
+        .disabled(display == .tired || display == .alert)
+        .help(display == .tired || display == .alert ? "한도에 가까워 쉬는 중이라 동작을 하지 않아요" : "동작 해보기")
+    }
+
+    private func play(_ trick: Trick) {
+        page.trick = TrickRequest(trick: trick)
+        performTrick(trick)
+    }
+
+    // MARK: 러너 고르기
+
+    /// 러너 이름을 누르면 아래 사용량 대신 고르기 화면을 띄운다. 무대는 위에 그대로 두어 고른 러너가 바로 달린다.
+    private var runnerPage: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ScrollView {
+                RunnerPicker(settings: settings, openFullPicker: openRunnerSettings)
+                    .padding(.horizontal, 2)
+                    .padding(.bottom, 4)
+            }
+            .frame(height: 320)   // 사용량 화면과 높이를 맞춰 전환할 때 팝오버가 출렁이지 않게
+            HStack(spacing: 8) {
+                Button { page.showsRunners = false } label: {
+                    Label("사용량", systemImage: "chevron.left")
+                }
+                .keyboardShortcut(.cancelAction)
+                Spacer()
+                Picker("색상", selection: $settings.spriteTheme) {
+                    ForEach(SpriteTheme.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                }
+                .pickerStyle(.menu)
+                .fixedSize()
+                Button("아무거나", action: pickRandomRunner)
+            }
+            .controlSize(.small)
+        }
     }
 
     // MARK: 세션 · 주간
@@ -407,4 +433,10 @@ struct PopoverView: View {
 /// 스파크라인에서 마우스가 가리키는 분. `@State`를 못 쓰는 이유는 HoverFlag 참고.
 final class HoverIndex: ObservableObject {
     @Published var index: Int?
+}
+
+/// 팝오버 안 화면과 무대에 보낼 동작. `@State`를 못 쓰는 이유는 HoverFlag 참고.
+final class PopoverPage: ObservableObject {
+    @Published var showsRunners = false
+    @Published var trick: TrickRequest?
 }

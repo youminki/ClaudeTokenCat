@@ -6,6 +6,8 @@ import UsageCore
 /// 'Petdex'는 petdex.dev에서 골라 받은 펫, 맨 아래 '내 러너'는 사용자가 불러온 GIF·PNG로 만든 러너다.
 struct RunnerPicker: View {
     @ObservedObject var settings: AppSettings
+    /// 팝오버 안처럼 시트나 파일 창을 띄우면 닫혀 버리는 곳에서는, 받기·불러오기를 이 동작(설정 창 열기)으로 넘긴다.
+    var openFullPicker: (() -> Void)?
     @ObservedObject private var store = CustomRunnerStore.shared
     @ObservedObject private var petdex = PetdexStore.shared
     @StateObject private var petdexSheet = SheetFlag()
@@ -97,7 +99,7 @@ struct RunnerPicker: View {
                         .help("오른쪽 클릭: Petdex에서 보기, 삭제")
                     }
                 }
-                Button { petdexSheet.isPresented = true } label: {
+                Button { if let openFullPicker { openFullPicker() } else { petdexSheet.isPresented = true } } label: {
                     actionTile(icon: "magnifyingglass", title: "Petdex에서 찾기")
                 }
                 .buttonStyle(.plain)
@@ -116,7 +118,9 @@ struct RunnerPicker: View {
                     .contextMenu { customMenu(custom) }
                     .help("오른쪽 클릭: 이름 바꾸기, 실루엣, 삭제")
                 }
-                Button(action: importRunner) { actionTile(icon: "plus", title: "그림 불러오기") }
+                Button { if let openFullPicker { openFullPicker() } else { importRunner() } } label: {
+                    actionTile(icon: "plus", title: "그림 불러오기")
+                }
                     .buttonStyle(.plain)
                     .help("GIF나 PNG(여러 장이면 파일 이름 순서가 프레임 순서)로 러너 만들기")
             }
@@ -158,7 +162,7 @@ struct RunnerPicker: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(Color.primary.opacity(selected ? 0.08 : (live ? 0.05 : 0.025))))
+            .fill(Palette.characterBackdrop.opacity(selected ? 1 : (live ? 0.85 : 0.6))))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
             .strokeBorder(selected ? Color.accentColor.opacity(0.9) : Color.primary.opacity(0.06), lineWidth: 1))
         .contentShape(Rectangle())
