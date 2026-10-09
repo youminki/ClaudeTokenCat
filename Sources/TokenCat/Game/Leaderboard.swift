@@ -219,7 +219,7 @@ final class Leaderboard: ObservableObject {
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.setValue("TokenCat", forHTTPHeaderField: "User-Agent")
+        request.setValue("RunTime", forHTTPHeaderField: "User-Agent")
         // 순위표에서 내 줄을 찾는 데 쓴다. 이 ID로 기록을 지울 수 있어 주소(로그에 남는 곳)에는 싣지 않는다
         if identify { request.setValue(playerID, forHTTPHeaderField: "X-Player") }
         if let body {

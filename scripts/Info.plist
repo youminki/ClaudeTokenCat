@@ -12,8 +12,10 @@
 	<string>dev.tokencat.TokenCat</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>CFBundleDisplayName</key>
+	<string>RunTime</string>
 	<key>CFBundleName</key>
-	<string>TokenCat</string>
+	<string>RunTime</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

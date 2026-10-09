@@ -136,7 +136,7 @@ final class AppUpdater: ObservableObject {
         }
         var request = URLRequest(url: url, timeoutInterval: 15)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("TokenCat", forHTTPHeaderField: "User-Agent")
+        request.setValue("RunTime", forHTTPHeaderField: "User-Agent")
         URLSession.shared.dataTask(with: request) { data, response, error in
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             let comparison = data.flatMap { try? JSONDecoder().decode(Comparison.self, from: $0) }

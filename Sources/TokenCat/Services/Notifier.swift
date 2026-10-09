@@ -20,7 +20,7 @@ final class Notifier {
 
     func send(title: String, body: String) {
         guard available else {
-            NSLog("[TokenCat] (알림 비활성 — 번들 앱 아님) %@ %@", title, body)
+            NSLog("[RunTime] (알림 비활성 — 번들 앱 아님) %@ %@", title, body)
             return
         }
         let content = UNMutableNotificationContent()

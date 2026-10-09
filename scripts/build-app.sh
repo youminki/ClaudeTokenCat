@@ -1,5 +1,5 @@
 #!/bin/bash
-# TokenCat.app 번들 + dmg 생성 (§6 M3).
+# RunTime.app 번들 + dmg 생성 (§6 M3).
 #
 # 사용법:
 #   scripts/build-app.sh                          # 고정 identity 서명 (기본 "TokenCat Dev")
@@ -27,7 +27,7 @@ fi
 echo "▸ release 빌드"
 swift build -c release
 
-APP=dist/TokenCat.app
+APP=dist/RunTime.app
 rm -rf dist
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
@@ -66,14 +66,14 @@ echo "▸ 서명: $CODESIGN_IDENTITY"
 codesign --force --deep -s "$CODESIGN_IDENTITY" "$APP"
 
 echo "▸ dmg 생성"
-hdiutil create -volname TokenCat -srcfolder "$APP" -ov -format UDZO dist/TokenCat.dmg > /dev/null
+hdiutil create -volname RunTime -srcfolder "$APP" -ov -format UDZO dist/RunTime.dmg > /dev/null
 
 if [ -n "${NOTARY_PROFILE:-}" ]; then
   echo "▸ notarize 제출"
-  xcrun notarytool submit dist/TokenCat.dmg --keychain-profile "$NOTARY_PROFILE" --wait
+  xcrun notarytool submit dist/RunTime.dmg --keychain-profile "$NOTARY_PROFILE" --wait
   xcrun stapler staple "$APP"
-  xcrun stapler staple dist/TokenCat.dmg
+  xcrun stapler staple dist/RunTime.dmg
 fi
 
-echo "✓ 완료: $APP, dist/TokenCat.dmg"
+echo "✓ 완료: $APP, dist/RunTime.dmg"
 codesign -dv "$APP" 2>&1 | grep -E "Identifier=|Authority" || true

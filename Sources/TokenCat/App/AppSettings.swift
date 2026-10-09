@@ -99,6 +99,7 @@ final class AppSettings: ObservableObject {
         tricksEnabled = bool(.tricksEnabled, true)
         menuBarLabel = MenuBarLabel(rawValue: string(.menuBarLabel)) ?? .off
         runnerSize = RunnerSize(rawValue: string(.runnerSize)) ?? .large
+        LaunchAtLogin.restoreAfterRename()
         launchAtLogin = LaunchAtLogin.isEnabled
     }
 

@@ -63,7 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.layoutSprite() }
             .store(in: &cancellables)
-        statusItem.button?.setAccessibilityLabel("TokenCat 사용량")
+        statusItem.button?.setAccessibilityLabel("RunTime 사용량")
 
         Publishers.CombineLatest(engine.$sessionGauge, engine.$weeklyGauge)
             .map { Self.tooltip(session: $0, weekly: $1) }
@@ -146,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     private func openSettings() {
-        settingsWindow = showWindow(settingsWindow, title: "TokenCat 설정",
+        settingsWindow = showWindow(settingsWindow, title: "RunTime 설정",
                                     style: [.titled, .closable, .resizable]) {   // 세로 드래그로 크기 조절
             SettingsView(settings: engine.settings, engine: engine)
         }
@@ -270,7 +270,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         func line(_ name: String, _ gauge: GaugeReading?) -> String {
             "\(name) \(gauge.map { "\($0.displayPercent)" } ?? "--")%"
         }
-        return "TokenCat · \(line("세션", session)) · \(line("주간", weekly))"
+        return "RunTime · \(line("세션", session)) · \(line("주간", weekly))"
     }
 }
 

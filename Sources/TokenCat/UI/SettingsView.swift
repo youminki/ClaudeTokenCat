@@ -21,7 +21,7 @@ struct SettingsView: View {
                 Toggle("한도 임박 알림 (80% / 95%, 각 1회)", isOn: $settings.limitAlertsEnabled)
                 Toggle("세션 초기화 알림 (5시간)", isOn: $settings.newSessionAlertEnabled)
                 if !Notifier.shared.available {
-                    Text("알림은 빌드된 TokenCat.app에서만 동작합니다 (swift run 개발 실행 제외).")
+                    Text("알림은 빌드된 RunTime.app에서만 동작합니다 (swift run 개발 실행 제외).")
                         .font(.caption).foregroundStyle(.orange)
                 }
             }
@@ -30,7 +30,7 @@ struct SettingsView: View {
                 Toggle("로그인 시 자동 시작", isOn: $settings.launchAtLogin)
                     .disabled(!LaunchAtLogin.available)
                 if !LaunchAtLogin.available {
-                    Text("자동 시작은 빌드된 TokenCat.app에서만 설정할 수 있습니다.")
+                    Text("자동 시작은 빌드된 RunTime.app에서만 설정할 수 있습니다.")
                         .font(.caption).foregroundStyle(.orange)
                 }
                 Picker("로컬 기록 확인 주기", selection: $settings.pollInterval) {
@@ -77,7 +77,7 @@ struct SettingsView: View {
                         .controlSize(.small)
                 }
                 .help(Self.projectsDirectory.path)
-                Link("GitHub 저장소", destination: URL(string: "https://github.com/youminki/ClaudeTokenCat")!)
+                Link("GitHub 저장소", destination: URL(string: "https://github.com/youminki/RunTime")!)
             }
         }
         .formStyle(.grouped)   // 내용이 넘치면 Form이 스스로 스크롤

@@ -325,7 +325,7 @@ struct PopoverView: View {
             Button { NSApp.terminate(nil) } label: { Image(systemName: "power") }
                 .buttonStyle(ToolbarButtonStyle(tint: Theme.critical))
                 .keyboardShortcut("q")
-                .help("TokenCat 종료 (⌘Q)")
+                .help("RunTime 종료 (⌘Q)")
         }
         .buttonStyle(ToolbarButtonStyle())
     }

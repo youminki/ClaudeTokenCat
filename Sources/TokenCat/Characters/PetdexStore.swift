@@ -142,7 +142,7 @@ final class PetdexStore: ObservableObject {
         guard force || age > Self.catalogLifetime || entries.isEmpty else { return }
         catalogState = entries.isEmpty ? .loading : catalogState
         var request = URLRequest(url: Self.manifestURL, timeoutInterval: 30)
-        request.setValue("TokenCat", forHTTPHeaderField: "User-Agent")
+        request.setValue("RunTime", forHTTPHeaderField: "User-Agent")
         let task = session.dataTask(with: request) { data, response, error in
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             let list = data.flatMap(Self.decode)
@@ -208,7 +208,7 @@ final class PetdexStore: ObservableObject {
         }
         installing.insert(entry.slug)
         var request = URLRequest(url: url, timeoutInterval: 60)
-        request.setValue("TokenCat", forHTTPHeaderField: "User-Agent")
+        request.setValue("RunTime", forHTTPHeaderField: "User-Agent")
         session.dataTask(with: request) { data, response, error in
             // 풀기와 PNG 저장은 URLSession 콜백 큐를 막지 않게 따로 돌린다
             DispatchQueue.global(qos: .userInitiated).async {
