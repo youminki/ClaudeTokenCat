@@ -1,6 +1,8 @@
 import AppKit
 import UsageCore
 
+LegacyMigration.run()
+
 // 디버그/수용기준 검증용: GUI 없이 1회 풀스캔 집계를 출력하고 종료.
 // ccusage blocks 결과와 대조하는 데 사용 (§7 오차 2% 기준).
 if CommandLine.arguments.contains("--report") {
@@ -94,7 +96,7 @@ if let index = CommandLine.arguments.firstIndex(of: "--sprite-sheet") {
 
 // README GIF 생성: 러너 몇 마리가 차례로 달리는 애니메이션.
 if let index = CommandLine.arguments.firstIndex(of: "--hero-gif") {
-    let path = CommandLine.arguments.dropFirst(index + 1).first ?? "tokencat-run.gif"
+    let path = CommandLine.arguments.dropFirst(index + 1).first ?? "runtime-run.gif"
     try? SpriteSheet.writeHeroGIF(to: URL(fileURLWithPath: path))
     print("saved: \(path)")
     exit(0)

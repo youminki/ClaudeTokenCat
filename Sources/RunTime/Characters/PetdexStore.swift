@@ -94,7 +94,7 @@ final class PetdexStore: ObservableObject {
 
     static var directory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("TokenCat/Petdex", isDirectory: true)
+        return base.appendingPathComponent("RunTime/Petdex", isDirectory: true)
     }
 
     private static var catalogURL: URL { directory.appendingPathComponent("manifest.json") }

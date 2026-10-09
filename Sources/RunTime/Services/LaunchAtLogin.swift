@@ -19,8 +19,8 @@ enum LaunchAtLogin {
         }
     }
 
-    /// 자동 시작 기록은 앱 경로에 묶여 있어서 TokenCat.app이 RunTime.app으로 바뀌면 풀린다.
-    /// install.sh가 옛 앱에서 켜져 있던 것을 남겨 두면 새 경로로 다시 등록한다.
+    /// 자동 시작 기록은 번들 ID와 앱 경로에 묶여 있어서 옛 TokenCat 앱의 기록은 이어지지 않는다.
+    /// install.sh가 옛 앱에서 켜져 있던 것을 남겨 두면 이 앱으로 다시 등록한다.
     static func restoreAfterRename() {
         let key = "restoreLaunchAtLogin"
         guard available, UserDefaults.standard.bool(forKey: key) else { return }

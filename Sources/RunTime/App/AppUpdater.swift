@@ -38,7 +38,7 @@ final class AppUpdater: ObservableObject {
 
     private static let checkInterval: TimeInterval = 6 * 60 * 60
     static let logURL = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("Logs/TokenCat/update.log")
+        .appendingPathComponent("Logs/RunTime/update.log")
 
     let build: Build?
     @Published private(set) var state: State
@@ -53,11 +53,11 @@ final class AppUpdater: ObservableObject {
 
     private static func bundleBuild() -> Build? {
         let info = Bundle.main.infoDictionary ?? [:]
-        guard let commit = info["TokenCatCommitSHA"] as? String, let path = info["TokenCatSourcePath"] as? String
+        guard let commit = info["RunTimeCommitSHA"] as? String, let path = info["RunTimeSourcePath"] as? String
         else { return nil }
-        return Build(commit: commit, subject: info["TokenCatCommitSubject"] as? String ?? "", sourcePath: path,
-                     repo: info["TokenCatRepo"] as? String, branch: info["TokenCatBranch"] as? String ?? "main",
-                     dirty: info["TokenCatDirty"] as? Bool ?? false)
+        return Build(commit: commit, subject: info["RunTimeCommitSubject"] as? String ?? "", sourcePath: path,
+                     repo: info["RunTimeRepo"] as? String, branch: info["RunTimeBranch"] as? String ?? "main",
+                     dirty: info["RunTimeDirty"] as? Bool ?? false)
     }
 
     /// 앱은 `shared`를 쓴다. 다른 빌드 정보로 만드는 것은 점검용이다.

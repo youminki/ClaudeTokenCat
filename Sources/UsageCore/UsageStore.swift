@@ -35,7 +35,7 @@ public final class UsageStore {
         public let modelTokens: [String: Int]
     }
 
-    private let queue = DispatchQueue(label: "tokencat.usagestore")
+    private let queue = DispatchQueue(label: "runtime.usagestore")
     private var events: [UsageEvent] = []
     private var seenKeys: Set<String> = []
     private var sorted = true

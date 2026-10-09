@@ -69,7 +69,7 @@ public final class OAuthUsageProvider {
 
     /// 키체인 프롬프트가 떠 있으면 `security`는 사용자가 답할 때까지 끝나지 않는다.
     /// 그동안 Swift 동시성 스레드를 붙잡지 않도록 자격증명은 이 큐에서만 읽고, 캐시도 이 큐에서만 만진다.
-    private let credentialQueue = DispatchQueue(label: "tokencat.credentials")
+    private let credentialQueue = DispatchQueue(label: "runtime.credentials")
     private var cachedToken: CachedToken?
 
     public init() {}

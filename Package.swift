@@ -2,13 +2,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "TokenCat",
+    name: "RunTime",
     platforms: [.macOS(.v13)],
     targets: [
         .target(name: "UsageCore"),
         .target(name: "GameCore"),
         .executableTarget(
-            name: "TokenCat",
+            name: "RunTime",
             dependencies: ["UsageCore", "GameCore"],
             resources: [.copy("Assets")]
         ),

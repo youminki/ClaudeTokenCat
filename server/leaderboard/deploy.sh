@@ -21,4 +21,4 @@ sed -i '' -E "s/\"database_id\": \"[^\"]*\"/\"database_id\": \"$ID\"/" wrangler.
 
 "${WRANGLER[@]}" d1 execute "$NAME" --remote --file=schema.sql --yes
 "${WRANGLER[@]}" deploy
-echo "배포했습니다. 위의 workers.dev 주소를 Sources/TokenCat/Game/Leaderboard.swift의 serverURL에 넣고 앱을 다시 빌드하세요."
+echo "배포했습니다. 위의 workers.dev 주소를 Sources/RunTime/Game/Leaderboard.swift의 serverURL에 넣고 앱을 다시 빌드하세요."

@@ -5,7 +5,7 @@ Swift PixelCat.runFrame과 동일한 18×11 도트 기하(무지개 트레일 �
 스프라이트 디자인을 바꾸면 이 스크립트도 함께 수정할 것.
 
 사용: python3 scripts/generate-brand.py
-산출: assets/AppIcon.icns, assets/tokencat-run.gif
+산출: assets/AppIcon.icns, assets/runtime-run.gif
 """
 import subprocess
 import tempfile
@@ -59,7 +59,7 @@ def make_gif():
         frame = Image.new("RGBA", size, CARD)
         frame.alpha_composite(render(i, cell, size, (pad, pad)))
         frames.append(frame.convert("P", palette=Image.ADAPTIVE))
-    frames[0].save(OUT / "tokencat-run.gif", save_all=True, append_images=frames[1:],
+    frames[0].save(OUT / "runtime-run.gif", save_all=True, append_images=frames[1:],
                    duration=70, loop=0, disposal=2)
 
 
@@ -91,4 +91,4 @@ if __name__ == "__main__":
     make_icns()
     # 검수용 프리뷰
     render(0, 12, (GRID_W * 12 + 36, GRID_H * 12 + 36), (18, 18)).save("/tmp/preview_frame.png")
-    print("✓ assets/tokencat-run.gif, assets/AppIcon.icns")
+    print("✓ assets/runtime-run.gif, assets/AppIcon.icns")

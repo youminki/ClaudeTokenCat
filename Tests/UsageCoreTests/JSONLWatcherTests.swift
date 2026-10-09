@@ -8,7 +8,7 @@ final class JSONLWatcherTests {
 
     init() throws {
         tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("tokencat-test-\(UUID().uuidString)/proj-a")
+            .appendingPathComponent("runtime-test-\(UUID().uuidString)/proj-a")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
     }
 

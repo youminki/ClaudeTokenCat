@@ -192,7 +192,7 @@ struct SpriteClip {
 
 /// 상태별 스프라이트 프레임 로더.
 ///
-/// 에셋 교체: `Sources/TokenCat/Assets/`에 `<러너>_<상태>_<번호>.png`를 넣고 다시 빌드하면
+/// 에셋 교체: `Sources/RunTime/Assets/`에 `<러너>_<상태>_<번호>.png`를 넣고 다시 빌드하면
 /// 코드로 그린 러너 대신 자동 사용된다 (Assets/README.md 참조). 예: cat_run_0.png ... cat_run_7.png
 enum SpriteFrames {
 

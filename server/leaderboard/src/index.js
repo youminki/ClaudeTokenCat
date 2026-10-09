@@ -1,4 +1,4 @@
-// TokenCat 미니게임 순위 서버 (Cloudflare Workers + D1).
+// RunTime 미니게임 순위 서버 (Cloudflare Workers + D1).
 //   POST   /v1/runs                 판 기록 올리기 → 내 순위
 //   GET    /v1/leaderboard          순위표 (?period=all|week, ?limit). 내 줄은 X-Player 헤더로 찾는다.
 //   GET    /v1/summary              앱이 주기적으로 받는 요약: 전체·이번 주 1위, 내 순위, 라이벌 점수
@@ -148,6 +148,7 @@ function invalidate(env) {
 /// 사람을 가리는 키. 설치 ID를 되돌릴 수 없게 해시한 것이라 이 키로 이름을 바꾸거나 기록을 지울 수 없다.
 /// 앱은 닉네임이 바뀌어도 같은 사람인지, 라이벌 중 누가 나인지 이 키로 안다.
 async function playerKey(id) {
+  // 앱(Leaderboard.swift)과 같은 키가 나와야 하고 이미 쌓인 기록도 이 키를 쓰므로 옛 이름을 그대로 둔다
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`tokencat:${id}`));
   return [...new Uint8Array(digest).slice(0, 8)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }

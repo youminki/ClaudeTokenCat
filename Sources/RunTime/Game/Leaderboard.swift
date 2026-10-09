@@ -10,7 +10,7 @@ final class Leaderboard: ObservableObject {
     static let shared = Leaderboard()
 
     /// 배포한 순위 서버 주소. 비어 있으면 순위 기능을 숨긴다.
-    /// 직접 띄운 서버로 바꾸려면 `defaults write dev.tokencat.TokenCat leaderboardURL <주소>`.
+    /// 직접 띄운 서버로 바꾸려면 `defaults write dev.runtime.RunTime leaderboardURL <주소>`.
     static let serverURL = URL(string: "https://tokencat-leaderboard.youminki.workers.dev")
 
     private enum Key {
@@ -45,6 +45,7 @@ final class Leaderboard: ObservableObject {
     /// 서버가 순위 줄마다 붙이는 사람 키와 같은 값 (server/leaderboard의 playerKey). 참여하지 않아 ID를 보내지 않아도
     /// 라이벌 중 누가 나인지, 1위가 나인지 알 수 있다.
     var playerKey: String {
+        // 서버에 이미 쌓인 기록과 같은 키가 나와야 해서 옛 이름을 그대로 쓴다
         SHA256.hash(data: Data("tokencat:\(playerID)".utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
     }
 

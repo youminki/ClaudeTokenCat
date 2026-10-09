@@ -31,10 +31,10 @@ APP=dist/RunTime.app
 rm -rf dist
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-cp .build/release/TokenCat "$APP/Contents/MacOS/"
+cp .build/release/RunTime "$APP/Contents/MacOS/"
 # SPM 리소스 번들 (스프라이트 Assets) — Bundle.module이 Contents/Resources에서 찾음
-if [ -d .build/release/TokenCat_TokenCat.bundle ]; then
-  cp -R .build/release/TokenCat_TokenCat.bundle "$APP/Contents/Resources/"
+if [ -d .build/release/RunTime_RunTime.bundle ]; then
+  cp -R .build/release/RunTime_RunTime.bundle "$APP/Contents/Resources/"
 fi
 cp scripts/Info.plist "$APP/Contents/Info.plist"
 # 설정 화면에서 지금 설치된 빌드가 어느 커밋인지 확인할 수 있게 남긴다 (+ = 커밋 안 된 변경 포함)
@@ -46,19 +46,19 @@ if COMMIT=$(git rev-parse --short HEAD 2>/dev/null); then
   [ -z "$(git status --porcelain --untracked-files=no 2>/dev/null)" ] || { COMMIT="$COMMIT+"; DIRTY=true; }
   # 따옴표·백슬래시가 든 경로나 제목도 그대로 들어가게 plutil로 넣는다
   put() { plutil -insert "$1" -string "$2" "$PLIST"; }
-  put TokenCatCommit "$COMMIT"
-  put TokenCatCommitSHA "$(git rev-parse HEAD)"
-  put TokenCatCommitSubject "$(git log -1 --format=%s)"
-  put TokenCatSourcePath "$PWD"
-  plutil -insert TokenCatDirty -bool "$DIRTY" "$PLIST"
+  put RunTimeCommit "$COMMIT"
+  put RunTimeCommitSHA "$(git rev-parse HEAD)"
+  put RunTimeCommitSubject "$(git log -1 --format=%s)"
+  put RunTimeSourcePath "$PWD"
+  plutil -insert RunTimeDirty -bool "$DIRTY" "$PLIST"
   # https://(user@)github.com/o/r(.git)(/), git@github.com:o/r.git, ssh://git@github.com/o/r 에서 o/r만 뽑는다.
   # origin이나 origin/HEAD가 없는 클론도 설치는 되어야 해서 실패를 무시한다
   REPO=$( (git remote get-url origin 2>/dev/null || true) \
     | sed -E 's#^(https://([^@/]+@)?|ssh://git@|git@)github\.com[:/]##; s#/$##; s#\.git$##' \
     | grep -E '^[^/ ]+/[^/ ]+$' || true)
   BRANCH=$( (git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true) | sed 's#^origin/##')
-  [ -n "$REPO" ] && put TokenCatRepo "$REPO"
-  put TokenCatBranch "${BRANCH:-main}"
+  [ -n "$REPO" ] && put RunTimeRepo "$REPO"
+  put RunTimeBranch "${BRANCH:-main}"
 fi
 cp assets/AppIcon.icns "$APP/Contents/Resources/"
 

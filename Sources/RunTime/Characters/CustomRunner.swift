@@ -109,7 +109,7 @@ final class CustomRunnerStore: ObservableObject {
 
     static var directory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("TokenCat/Runners", isDirectory: true)
+        return base.appendingPathComponent("RunTime/Runners", isDirectory: true)
     }
 
     func runner(id: String?) -> CustomRunner? {

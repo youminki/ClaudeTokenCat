@@ -2,7 +2,7 @@ import Foundation
 
 /// 저장소에 올리지 않는 개인용 러너 팩.
 ///
-/// `Sources/TokenCat/LocalPack/`(.gitignore)에 `@objc(TokenCatLocalPack)` 클래스를 두고 이 프로토콜을 따르게 하면
+/// `Sources/RunTime/LocalPack/`(.gitignore)에 `@objc(RunTimeLocalPack)` 클래스를 두고 이 프로토콜을 따르게 하면
 /// 그 Mac에서 빌드한 앱에만 러너가 더해진다. 저작권이 있는 캐릭터를 공개 저장소에 싣지 않고 개인적으로
 /// 쓰려는 경우를 위한 연결 고리라, 이 파일은 팩이 없어도 빌드된다.
 /// 그림 파일은 `Assets/LocalPack/`(.gitignore)에 두면 번들에 함께 들어가 `Bundle.module`로 읽을 수 있다.
@@ -26,7 +26,9 @@ struct PackRunner {
 
 enum LocalPack {
     /// 팩 클래스를 이름으로 찾는다. 팩 파일이 없으면 빈 목록.
-    static let runners: [PackRunner] = (NSClassFromString("TokenCatLocalPack") as? LocalRunnerPack.Type)?.runners ?? []
+    /// 옛 이름(TokenCatLocalPack)으로 만든 팩도 찾는다.
+    static let runners: [PackRunner] = ((NSClassFromString("RunTimeLocalPack") ?? NSClassFromString("TokenCatLocalPack"))
+        as? LocalRunnerPack.Type)?.runners ?? []
 
     private static var fittedRigs: [String: CharacterRig] = [:]
 

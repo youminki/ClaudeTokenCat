@@ -55,7 +55,7 @@ final class UsageEngine: ObservableObject {
     private let store = UsageStore()
     private let meter = BurnRateMeter()
     private let provider = OAuthUsageProvider()
-    private let workQueue = DispatchQueue(label: "tokencat.engine", qos: .utility)
+    private let workQueue = DispatchQueue(label: "runtime.engine", qos: .utility)
     private var jsonlTimer: DispatchSourceTimer?
     private var officialTimer: DispatchSourceTimer?
     private var activityToken: NSObjectProtocol?
@@ -76,8 +76,8 @@ final class UsageEngine: ObservableObject {
     /// 최근 공식 세션 %의 오름세. "약 N분 뒤 한도"를 공식 값만으로 계산한다.
     private var sessionTrend = OfficialTrend()
 
-    /// 진단용: `log stream --predicate 'subsystem == "dev.tokencat.TokenCat"' --info`
-    private let log = Logger(subsystem: "dev.tokencat.TokenCat", category: "engine")
+    /// 진단용: `log stream --predicate 'subsystem == "dev.runtime.RunTime"' --info`
+    private let log = Logger(subsystem: "dev.runtime.RunTime", category: "engine")
 
     init(settings: AppSettings = .shared) {
         self.settings = settings

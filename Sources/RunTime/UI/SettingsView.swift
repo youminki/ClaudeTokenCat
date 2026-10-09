@@ -91,7 +91,7 @@ struct SettingsView: View {
     private static var versionText: String {
         let info = Bundle.main.infoDictionary
         guard let version = info?["CFBundleShortVersionString"] as? String else { return "개발 실행" }
-        return (info?["TokenCatCommit"] as? String).map { "\(version) (\($0))" } ?? version
+        return (info?["RunTimeCommit"] as? String).map { "\(version) (\($0))" } ?? version
     }
 
     private var officialStatusText: String {
