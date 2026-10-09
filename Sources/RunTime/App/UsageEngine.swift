@@ -151,6 +151,7 @@ final class UsageEngine: ObservableObject {
         let limitAlertsEnabled: Bool
         let newSessionAlertEnabled: Bool
         let weeklyResetAlertEnabled: Bool
+        let weeklySummaryEnabled: Bool
         let pollInterval: TimeInterval
 
         init(_ settings: AppSettings) {
@@ -159,6 +160,7 @@ final class UsageEngine: ObservableObject {
             limitAlertsEnabled = settings.limitAlertsEnabled
             newSessionAlertEnabled = settings.newSessionAlertEnabled
             weeklyResetAlertEnabled = settings.weeklyResetAlertEnabled
+            weeklySummaryEnabled = settings.weeklySummaryEnabled
             pollInterval = settings.pollInterval
         }
     }
@@ -233,6 +235,7 @@ final class UsageEngine: ObservableObject {
             ?? WeeklyWindow.rollingStart(now: now)
 
         let scanned = watcher.scan(now: now)
+        defer { checkWeeklySummary(nextReset: nextWeeklyReset, now: now, enabled: config.weeklySummaryEnabled) }
         let finished = turnDetector.finishedTurns(in: scanned, now: now)
         store.add(scanned)
         let lastEvent = scanned.map(\.timestamp).max()
@@ -330,6 +333,40 @@ final class UsageEngine: ObservableObject {
         DispatchQueue.main.async {
             Notifier.shared.send(title: "주간 초기화", body: "주간 사용량이 초기화되었습니다.")
         }
+    }
+
+    // MARK: - 주간 요약
+
+    private static let summaryBoundaryKey = "weeklySummaryBoundary"
+
+    /// 새 주가 시작된 뒤 처음 보는 틱에 지난 7일을 한 번 요약해 알린다. 처음 설치한 주에는 기준만 잡는다.
+    /// 공식 연동을 켜고 끄면 주의 경계가 공식 리셋과 월요일 사이를 오가 한 번 더 알릴 수 있다.
+    private func checkWeeklySummary(nextReset: Date?, now: Date, enabled: Bool) {
+        let boundary = WeeklyWindow.currentStart(nextReset: nextReset, now: now)
+        let defaults = UserDefaults.standard
+        let stored = defaults.double(forKey: Self.summaryBoundaryKey)
+        guard stored == 0 || boundary.timeIntervalSince1970 > stored + 3600 else { return }
+        defaults.set(boundary.timeIntervalSince1970, forKey: Self.summaryBoundaryKey)
+        // 처음이거나, 잠자기·꺼짐으로 이틀 넘게 지난 주의 요약은 보내지 않는다
+        guard stored != 0, enabled, now.timeIntervalSince(boundary) < 2 * 24 * 3600 else { return }
+        let summary = store.summary(from: boundary.addingTimeInterval(-WeeklyWindow.duration), to: boundary)
+        guard summary.tokens > 0 else { return }
+        let body = Self.describe(summary)
+        DispatchQueue.main.async { Notifier.shared.send(title: "지난주 Claude 사용 요약", body: body) }
+    }
+
+    static func describe(_ summary: UsageStore.PeriodSummary) -> String {
+        var parts = ["\(Format.tokens(summary.tokens)) 토큰", "약 \(Format.usd(summary.costUSD))"]
+        if let day = summary.busiestDay {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "ko_KR")
+            formatter.dateFormat = "EEEE"
+            parts.append("가장 많이 쓴 날 \(formatter.string(from: day))")
+        }
+        if let project = summary.topProject {
+            parts.append("\(project) \(Int((summary.topProjectShare * 100).rounded()))%")
+        }
+        return parts.joined(separator: " · ")
     }
 
     // MARK: - 공식 % 폴링 (180초)

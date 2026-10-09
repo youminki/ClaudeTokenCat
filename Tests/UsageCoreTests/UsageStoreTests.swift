@@ -200,3 +200,41 @@ struct PricingTableTests {
         #expect(PricingTable.rates(forModel: "gpt-5") == nil)
     }
 }
+
+struct PeriodSummaryTests {
+    private func event(_ at: Date, _ tokens: Int, _ id: String, project: String?) -> UsageEvent {
+        UsageEvent(timestamp: at, model: "claude-sonnet-5", requestId: "req_\(id)", messageId: "msg_\(id)",
+                   inputTokens: tokens, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, project: project)
+    }
+
+    @Test func summarizesTokensBusiestDayAndTopProject() throws {
+        let calendar = Calendar.current
+        let end = calendar.date(bySettingHour: 0, minute: 0, second: 0, of: Date())!
+        let start = end.addingTimeInterval(-WeeklyWindow.duration)
+        let tuesday = start.addingTimeInterval(36 * 3600)
+        let store = UsageStore()
+        store.add([
+            event(start.addingTimeInterval(3600), 100, "a", project: "cafeteria"),
+            event(tuesday, 500, "b", project: "RunTime"),
+            event(tuesday.addingTimeInterval(60), 300, "c", project: "RunTime"),
+            event(end.addingTimeInterval(60), 9_999, "d", project: "next-week"),   // 기간 밖
+        ])
+        let summary = store.summary(from: start, to: end, calendar: calendar)
+        #expect(summary.tokens == 900)
+        #expect(summary.busiestDay == calendar.startOfDay(for: tuesday))
+        #expect(summary.busiestDayTokens == 800)
+        #expect(summary.topProject == "RunTime")
+        #expect(abs(summary.topProjectShare - 800.0 / 900.0) < 1e-9)
+    }
+
+    @Test func weekStartsAtOfficialResetOrMonday() throws {
+        let reset = Date(timeIntervalSince1970: 1_800_000_000)
+        #expect(WeeklyWindow.currentStart(nextReset: reset) == reset.addingTimeInterval(-WeeklyWindow.duration))
+        let start = WeeklyWindow.currentStart(nextReset: nil)
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2
+        #expect(calendar.component(.weekday, from: start) == 2)   // 월요일
+        #expect(start <= Date())
+        #expect(Date().timeIntervalSince(start) < WeeklyWindow.duration)
+    }
+}

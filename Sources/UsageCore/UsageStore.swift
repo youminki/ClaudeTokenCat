@@ -136,6 +136,37 @@ public final class UsageStore {
     }
 
     /// 정렬된 상태에서 호출. queue 안에서만 사용.
+    /// 한 주(또는 아무 기간)를 묶은 요약. 주간 초기화 때 지난주를 알린다.
+    public struct PeriodSummary: Equatable, Sendable {
+        public let tokens: Int
+        public let costUSD: Double
+        /// 가장 많이 쓴 날의 시작과 그날 토큰.
+        public let busiestDay: Date?
+        public let busiestDayTokens: Int
+        /// 가장 많이 쓴 폴더와 그 비율 (0~1). 폴더를 남기지 않은 기록뿐이면 nil.
+        public let topProject: String?
+        public let topProjectShare: Double
+    }
+
+    /// [from, to) 기간 요약. 보관 기간(retention)보다 오래된 기록은 이미 버려져 셈에 들지 않는다.
+    public func summary(from: Date, to: Date, calendar: Calendar = .current) -> PeriodSummary {
+        queue.sync {
+            var tokens = 0, cost = 0.0
+            var days: [Date: Int] = [:], projects: [String: Int] = [:]
+            for event in events where event.timestamp >= from && event.timestamp < to {
+                let t = event.totalTokens
+                tokens += t
+                cost += PricingTable.cost(of: event)
+                days[calendar.startOfDay(for: event.timestamp), default: 0] += t
+                if let project = event.project, !project.isEmpty { projects[project, default: 0] += t }
+            }
+            let busiest = days.max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }
+            let top = projects.max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }
+            return PeriodSummary(tokens: tokens, costUSD: cost, busiestDay: busiest?.key, busiestDayTokens: busiest?.value ?? 0,
+                                 topProject: top?.key, topProjectShare: tokens > 0 ? Double(top?.value ?? 0) / Double(tokens) : 0)
+        }
+    }
+
     private func pruneEvents(before cutoff: Date) {
         guard let keep = events.firstIndex(where: { $0.timestamp >= cutoff }) else {
             events.removeAll()

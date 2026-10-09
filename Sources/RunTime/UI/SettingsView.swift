@@ -152,7 +152,7 @@ struct SettingsView: View {
                 }
             }
 
-            GroupedSection("알림", footer: "한도 임박 알림은 세션·주간 사용률이 80%, 95%에 닿을 때 한 번씩, 초기화 알림은 5시간·주간 창이 새로 시작될 때 보냅니다. 주간 초기화는 공식 사용량 연동을 켜야 알 수 있습니다. Claude 작업 끝 알림은 사용량 창이 닫혀 있고 1분 넘게 걸린 작업만 알립니다.") {
+            GroupedSection("알림", footer: "한도 임박 알림은 세션·주간 사용률이 80%, 95%에 닿을 때 한 번씩, 초기화 알림은 5시간·주간 창이 새로 시작될 때 보냅니다. 주간 초기화는 공식 사용량 연동을 켜야 알 수 있습니다. Claude 작업 끝 알림은 사용량 창이 닫혀 있고 1분 넘게 걸린 작업만 알립니다. 주간 요약은 한 주가 끝나면 지난 7일의 토큰, 비용, 가장 많이 쓴 날과 프로젝트를 한 번 알립니다.") {
                 ToggleRow(title: "한도 임박 알림", icon: "bell.badge.fill", tint: Palette.red, isOn: $settings.limitAlertsEnabled)
                 ToggleRow(title: "세션 초기화 알림", icon: "arrow.clockwise", tint: Palette.green,
                           isOn: $settings.newSessionAlertEnabled)
@@ -161,6 +161,8 @@ struct SettingsView: View {
                     .disabled(!settings.officialEnabled)   // 주간 창은 공식 값으로만 안다
                 ToggleRow(title: "Claude 작업 끝 알림", icon: "checkmark.bubble.fill", tint: Palette.orange,
                           isOn: $settings.claudeDoneAlertEnabled)
+                ToggleRow(title: "주간 요약 알림", icon: "chart.bar.doc.horizontal", tint: Palette.indigo,
+                          isOn: $settings.weeklySummaryEnabled)
                 GroupedRow("알림 보내 보기", icon: "paperplane.fill", tint: Palette.blue) {
                     Button("보내기") {
                         Notifier.shared.send(title: "RunTime 알림", body: "알림이 이렇게 와요. 사용률이 80%, 95%에 닿으면 알려 드릴게요.")
