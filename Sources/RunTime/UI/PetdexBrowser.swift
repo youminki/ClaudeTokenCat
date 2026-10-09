@@ -13,7 +13,7 @@ struct PetdexBrowser: View {
         let results = store.search(form.query, kind: form.kind)
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                TextField("이름으로 찾기 (영어·원어, 예: shinchan, doraemon, 鸣人)", text: $form.query)
+                TextField("이름으로 찾기 (예: 짱구, 피카츄, 고양이, doraemon)", text: $form.query)
                     .textFieldStyle(.roundedBorder)
                 Picker("", selection: $form.kind) {
                     ForEach(PetdexStore.Kind.allCases, id: \.self) { Text($0.displayName).tag($0) }

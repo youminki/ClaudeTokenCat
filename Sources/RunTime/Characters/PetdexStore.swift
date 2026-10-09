@@ -1,5 +1,6 @@
 import AppKit
 import ImageIO
+import SearchCore
 
 /// Petdex(petdex.dev)에 올라온 Codex 펫을 찾아 러너로 내려받는다.
 /// 펫은 사용자가 올린 팬아트라 앱에 싣지 않고, 사용자가 고른 것만 이 Mac의 Application Support에 받는다.
@@ -80,7 +81,11 @@ final class PetdexStore: ObservableObject {
     /// 목록은 하루 동안 다시 받지 않는다 (1.7MB).
     static let catalogLifetime: TimeInterval = 24 * 60 * 60
 
-    @Published private(set) var entries: [Entry] = []
+    @Published private(set) var entries: [Entry] = [] {
+        didSet { targets = Dictionary(uniqueKeysWithValues: entries.map { ($0.slug, HangulSearch.Target($0.slug, $0.displayName)) }) }
+    }
+    /// 검색용 글. 목록이 바뀔 때 한 번만 만든다 (4천여 개를 글자마다 다시 만들지 않게).
+    private var targets: [String: HangulSearch.Target] = [:]
     @Published private(set) var catalogState: CatalogState = .idle
     @Published private(set) var pets: [Pet] = []
     @Published private(set) var installing: Set<String> = []
@@ -174,14 +179,11 @@ final class PetdexStore: ObservableObject {
         return list.isEmpty ? nil : list
     }
 
-    /// 이름이나 slug에 검색어가 들어간 펫. 검색어가 비어 있으면 종류만 거른다.
+    /// 이름이나 slug에 검색어가 들어간 펫. 한글은 별칭 사전과 소리로도 찾는다 (짱구 → Shin-chan, 나루토 → Naruto).
+    /// 검색어가 비어 있으면 종류만 거른다.
     func search(_ query: String, kind: Kind) -> [Entry] {
-        let words = query.lowercased().split(separator: " ").map(String.init)
-        return entries.filter { entry in
-            guard kind == .all || entry.kind == kind.rawValue else { return false }
-            let haystack = "\(entry.slug) \(entry.displayName)".lowercased()
-            return words.allSatisfy { haystack.contains($0) }
-        }
+        let pool = entries.filter { kind == .all || $0.kind == kind.rawValue }
+        return HangulSearch.search(query, in: pool) { targets[$0.slug] ?? HangulSearch.Target($0.slug, $0.displayName) }
     }
 
     // MARK: 내려받기
