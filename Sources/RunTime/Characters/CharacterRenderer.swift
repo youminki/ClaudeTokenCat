@@ -46,6 +46,8 @@ struct CharacterScene {
         let width: CGFloat
         /// 머리 기울기 (라디안).
         let tilt: CGFloat
+        /// 눈 자리를 알고 있는지. 그림 러너는 어림이라 얼굴 꾸미기를 씌우지 않는다.
+        var hasEyes = true
     }
 
     var headAnchor: HeadAnchor? {
@@ -71,9 +73,11 @@ struct CharacterScene {
             return HeadAnchor(eye: eye.applying(t), top: CGPoint(x: (head.midX + eye.x) / 2, y: crown).applying(t),
                               width: head.width * scale, tilt: tilt)
         }
-        let top = CGPoint(x: bounds.midX + bounds.width * 0.12, y: bounds.minY)
+        // 그림 러너의 맨 위는 귀·머리카락 끝이라 모자를 조금 내려 머리에 얹는다
+        let top = CGPoint(x: bounds.midX + bounds.width * 0.08, y: bounds.minY + bounds.height * 0.1)
         let eye = CGPoint(x: top.x + bounds.width * 0.1, y: bounds.minY + bounds.height * 0.28)
-        return HeadAnchor(eye: eye.applying(t), top: top.applying(t), width: bounds.width * 0.45 * scale, tilt: tilt)
+        return HeadAnchor(eye: eye.applying(t), top: top.applying(t), width: bounds.width * 0.45 * scale, tilt: tilt,
+                          hasEyes: false)
     }
 
     /// 변형한 몸이 `range`(설계 y) 위아래로 나가면 줄이고 옮겨 안에 넣는다.
@@ -179,7 +183,17 @@ struct CharacterScene {
         // 작은 원본(도트 그림)은 부드럽게 키우면 뭉개진다
         cg.interpolationQuality = image.height < 80 ? .none : .high
         let box = CGRect(origin: .zero, size: rect.size)
-        if look.rich {
+        if look.rich, let tint = look.palette.imageTint {
+            // 명암은 그림 그대로 두고 색상만 바꾼다. 그림 밖으로 색이 번지지 않게 그림 모양으로 자른다
+            // 그림의 알파로 자른다. 칠한 뒤 destinationIn으로 다시 잘라 내면 상자 가장자리에 옅은 테두리가 남는다
+            cg.beginTransparencyLayer(auxiliaryInfo: nil)
+            cg.draw(image, in: box)
+            cg.clip(to: box, mask: image)
+            cg.setBlendMode(.color)
+            cg.setFillColor(tint.withAlphaComponent(0.85).cgColor)
+            cg.fill(box)
+            cg.endTransparencyLayer()
+        } else if look.rich {
             cg.draw(image, in: box)
         } else {
             cg.beginTransparencyLayer(auxiliaryInfo: nil)

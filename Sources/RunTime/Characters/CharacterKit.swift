@@ -48,6 +48,8 @@ struct CharacterPalette {
     var horn: NSColor = NSColor(hex: 0xFFD45E)
     var pink: NSColor = NSColor(hex: 0xFF8FA8)
     var extra: NSColor = NSColor(hex: 0xB48CFF)
+    /// 그림 러너(Petdex, 내 그림)에 덧입힐 색. 그림의 명암은 두고 색만 바꾼다.
+    var imageTint: NSColor?
 }
 
 enum Role {

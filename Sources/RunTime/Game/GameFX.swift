@@ -279,7 +279,7 @@ enum GameFX {
         let flip = scene.transform.scaleX < 0
         // 고래·슬라임처럼 머리가 곧 몸인 러너는 머리 폭이 커서 몸 높이로 크기를 묶는다
         let limit = max(scene.placedBounds.height * 0.42, 3.5)
-        if let face, let art = face.art {
+        if let face, let art = face.art, head.hasEyes {
             let size = min(max(head.width * 0.95, 3), limit * 0.85)
             drawArt(art, at: CGPoint(x: head.eye.x - (flip ? -1 : 1) * size * 0.12, y: head.eye.y + size * 0.02), size: size,
                     rotation: head.tilt, flip: flip, cg)

@@ -21,10 +21,23 @@ struct RunnerCharacter {
     let rig: CharacterRig
     /// 기본 러너만: Assets 폴더의 PNG로 교체할 때 쓰는 이름.
     let assetPrefix: String?
-    /// 내 러너는 원본 색을 그대로 쓴다. 실루엣이면 nil이라 설정 색을 따른다.
+    /// 그림 러너는 자동일 때 원본 색을 그대로 쓴다. 실루엣이면 nil이라 설정 색을 따른다.
     let fixedTheme: SpriteTheme?
 
-    func theme(_ chosen: SpriteTheme) -> SpriteTheme { fixedTheme ?? chosen }
+    /// 색을 고르면 그림 러너에도 그 색을 덧입힌다 (자동이면 원본 색).
+    func theme(_ chosen: SpriteTheme) -> SpriteTheme {
+        guard let fixedTheme else { return chosen }
+        return chosen == .auto ? fixedTheme : chosen
+    }
+
+    /// 메뉴바에서 그리는 방식. 그림 러너는 실루엣으로 바꾸지 않고 늘 그림 그대로 그린다.
+    func menuBarTheme(_ chosen: SpriteTheme) -> SpriteTheme { fixedTheme ?? chosen }
+
+    /// 메뉴바 그림 러너에 덧입힐 색 테마. 자동·본래 색이면 nil.
+    func imageTint(_ chosen: SpriteTheme) -> SpriteTheme? {
+        guard fixedTheme != nil, chosen != .auto, chosen != .natural else { return nil }
+        return chosen
+    }
 }
 
 extension Runner {

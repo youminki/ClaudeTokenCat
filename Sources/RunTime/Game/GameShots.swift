@@ -232,11 +232,17 @@ enum GameFrames {
 /// 모자·안경 점검 (`--accessory-sheet <파일>`): 모든 러너에 왕관과 선글라스를 씌운 모습을 한 장에 모아 PNG로 저장한다.
 enum AccessorySheet {
     @MainActor
-    static func run(to url: URL, hat: Cosmetic = .crownHat, face: Cosmetic = .sunglassesFace) throws {
-        let runners = Runner.allCases
+    /// `set`: 기본 러너(nil), "petdex", "pack". 그림 러너는 본래 색·황금·루비로 그려 색 입히기도 함께 본다.
+    static func run(to url: URL, set: String? = nil, hat: Cosmetic = .crownHat, face: Cosmetic = .sunglassesFace) throws {
+        let images = set != nil
+        let runners: [RunnerCharacter] = switch set {
+        case "petdex": PetdexStore.shared.pets.compactMap(PetdexStore.shared.character(for:))
+        case "pack": LocalPack.runners.map(\.character)
+        default: Runner.allCases.map(\.character)
+        }
         let cell = CGSize(width: 140, height: 84), columns = 7
         let rows = (runners.count + columns - 1) / columns
-        let size = CGSize(width: cell.width * CGFloat(columns), height: cell.height * CGFloat(rows))
+        let size = CGSize(width: cell.width * CGFloat(columns), height: cell.height * CGFloat(rows) + 80)
         guard let cg = CGContext(data: nil, width: Int(size.width * 2), height: Int(size.height * 2), bitsPerComponent: 8,
                                  bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
@@ -246,10 +252,11 @@ enum AccessorySheet {
         cg.setFillColor(NSColor(hex: 0x1B2140).cgColor)
         cg.fill(CGRect(origin: .zero, size: size))
         for (i, runner) in runners.enumerated() {
-            let origin = CGPoint(x: CGFloat(i % columns) * cell.width, y: CGFloat(i / columns) * cell.height)
-            let character = runner.character
-            // 서기, 달리기, 뒤돈 모습 (모자가 뒤집히지 않는지)
+            let origin = CGPoint(x: CGFloat(i % columns) * cell.width, y: CGFloat(i / columns) * cell.height + 80)
+            let character = runner
+            // 서기, 달리기, 뒤돈 모습 (모자가 뒤집히지 않는지). 그림 러너는 색 입히기도 함께 본다
             let poses: [(CharacterPose.Activity, CGFloat)] = [(.stand, 1), (.run, 1), (.stand, -1)]
+            let themes: [SpriteTheme] = images ? [.auto, .gold, .ruby] : [.auto, .auto, .auto]
             for (k, (activity, facing)) in poses.enumerated() {
                 var turn = CharacterTransform()
                 turn.scaleX = facing
@@ -258,7 +265,7 @@ enum AccessorySheet {
                 cg.saveGState()
                 cg.translateBy(x: origin.x + CGFloat(k) * 46 + 2, y: origin.y + 4)
                 cg.scaleBy(x: scale, y: scale)
-                let look = CharacterLook(rich: true, palette: character.theme(.auto).richPalette(character.rig.palette, phase: 0),
+                let look = CharacterLook(rich: true, palette: character.theme(themes[k]).richPalette(character.rig.palette, phase: 0),
                                          tint: .white, outline: 0.36)
                 scene.draw(in: cg, look: look)
                 GameFX.drawAccessories(hat: hat, face: face, on: scene, cg)

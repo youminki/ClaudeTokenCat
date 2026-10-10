@@ -182,6 +182,7 @@ enum SpriteTheme: String, CaseIterable {
         let color = tint(at: phase).usingColorSpace(.sRGB) ?? .systemOrange
         palette.body = color.tinted(by: 0.12)
         palette.belly = color.tinted(by: 0.6)
+        palette.imageTint = color
         return palette
     }
 }
@@ -231,7 +232,8 @@ enum SpriteFrames {
     static func clip(for display: SpriteDisplay, character: RunnerCharacter, theme chosen: SpriteTheme,
                      fps: Double, visibleY: ClosedRange<CGFloat>? = nil) -> SpriteClip {
         if let prefix = character.assetPrefix, let assets = assetClip(for: display, prefix: prefix) { return assets }
-        let theme = character.theme(chosen)
+        let theme = character.menuBarTheme(chosen)
+        let overlay = character.imageTint(chosen)
         let (count, interval) = timing(cycle: display.cycle, fps: min(fps, display.maxFPS))
         let rig = character.rig
         let fit = visibleY.map { SceneFit.fixed(loopFit(display, rig: rig, range: $0, count: count)) } ?? .none
@@ -239,7 +241,7 @@ enum SpriteFrames {
             let phase = CGFloat(i) / CGFloat(count)
             return image { cg in
                 render(cg, rig: rig, frame: display.motion(at: phase), theme: theme, themePhase: phase,
-                       alarm: display == .alert, fit: fit) { cg, scene, tint, front in
+                       alarm: display == .alert, fit: fit, overlay: overlay) { cg, scene, tint, front in
                     display.drawLoopEffects(in: cg, scene: scene, phase: phase, tint: tint, front: front)
                 }
             }
@@ -251,14 +253,15 @@ enum SpriteFrames {
     static func clip(for trick: Trick, character: RunnerCharacter, theme chosen: SpriteTheme, fps: Double,
                      visibleY: ClosedRange<CGFloat>? = nil) -> SpriteClip? {
         if let prefix = character.assetPrefix, loadAssets(named: "\(prefix)_run", count: 8) != nil { return nil }
-        let theme = character.theme(chosen)
+        let theme = character.menuBarTheme(chosen)
+        let overlay = character.imageTint(chosen)
         let (count, interval) = timing(cycle: trick.duration, fps: fps)
         let rig = character.rig
         let frames = (0...count).map { i -> NSImage in
             let t = CGFloat(i) / CGFloat(count)
             return image { cg in
                 render(cg, rig: rig, frame: trick.frame(at: t), theme: theme, themePhase: t, alarm: false,
-                       fit: visibleY.map(SceneFit.each) ?? .none) { _, _, _, _ in }
+                       fit: visibleY.map(SceneFit.each) ?? .none, overlay: overlay) { _, _, _, _ in }
             }
         }
         return SpriteClip(frames: frames, interval: interval)
@@ -285,7 +288,7 @@ enum SpriteFrames {
 
     /// 러너 한 장면을 그린다. 효과는 `loopEffects`(뒤·앞 두 번 불림)와 동작 자체의 효과를 함께 얹는다.
     static func render(_ cg: CGContext, rig: CharacterRig, frame: MotionFrame, theme: SpriteTheme,
-                       themePhase: CGFloat, alarm: Bool, fit: SceneFit = .none,
+                       themePhase: CGFloat, alarm: Bool, fit: SceneFit = .none, overlay: SpriteTheme? = nil,
                        loopEffects: (CGContext, CharacterScene, NSColor, Bool) -> Void) {
         var scene = CharacterScene(rig: rig, pose: frame.pose, transform: frame.transform)
         switch fit {
@@ -293,7 +296,9 @@ enum SpriteFrames {
         case .each(let range): scene.fit(verticallyIn: range)
         case .fixed(let transform): scene.apply(fit: transform)
         }
-        let look = theme.look(palette: rig.palette, phase: themePhase, alarm: alarm)
+        var palette = rig.palette
+        palette.imageTint = overlay?.tint(at: themePhase)
+        let look = theme.look(palette: palette, phase: themePhase, alarm: alarm)
         let tint = theme == .natural ? NSColor.labelColor : look.tint
         loopEffects(cg, scene, tint, false)
         scene.draw(in: cg, look: look)

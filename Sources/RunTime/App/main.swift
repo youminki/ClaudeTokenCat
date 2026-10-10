@@ -94,7 +94,7 @@ if let index = CommandLine.arguments.firstIndex(of: "--accessory-sheet") {
     let path = CommandLine.arguments.dropFirst(index + 1).first ?? "accessory-sheet.png"
     Task { @MainActor in
         do {
-            try AccessorySheet.run(to: URL(fileURLWithPath: path))
+            try AccessorySheet.run(to: URL(fileURLWithPath: path), set: CommandLine.arguments.dropFirst(index + 2).first)
             print("saved: \(path)")
             exit(0)
         } catch {
