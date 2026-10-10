@@ -384,16 +384,20 @@ struct PopoverView: View {
             Spacer(minLength: 8)
             Button(action: openDailyDetail) { Image(systemName: "chart.bar") }
                 .help("일별 사용량")
+                .accessibilityLabel("일별 사용량")
             Button { engine.refreshNow(forceOfficial: true) } label: { Image(systemName: "arrow.clockwise") }
                 .keyboardShortcut("r")
                 .help("새로고침 (⌘R)")
+                .accessibilityLabel("새로고침")
             Button(action: openSettings) { Image(systemName: "gearshape") }
                 .keyboardShortcut(",")
                 .help("설정 (⌘,)")
+                .accessibilityLabel("설정")
             Button { NSApp.terminate(nil) } label: { Image(systemName: "power") }
                 .buttonStyle(ToolbarButtonStyle(tint: Theme.critical))
                 .keyboardShortcut("q")
                 .help("RunTime 종료 (⌘Q)")
+                .accessibilityLabel("RunTime 종료")
         }
         .buttonStyle(ToolbarButtonStyle())
     }

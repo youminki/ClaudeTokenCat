@@ -125,6 +125,7 @@ struct ToggleRow: View {
     var body: some View {
         GroupedRow(title, icon: icon, tint: tint) {
             Toggle(title, isOn: $isOn).toggleStyle(.switch).labelsHidden().controlSize(.small).tint(Palette.green)
+                .accessibilityLabel(title)
         }
     }
 }

@@ -342,6 +342,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             return window
         }()
         window.makeKeyAndOrderFront(nil)
+        // 처음 열 때 글 칸(순위표 닉네임)에 커서가 가서 글자가 통째로 선택되지 않게 한다. SwiftUI가 초점을 잡은 뒤에 푼다
+        if existing == nil { DispatchQueue.main.async { window.makeFirstResponder(nil) } }
         NSApp.activate(ignoringOtherApps: true)
         return window
     }

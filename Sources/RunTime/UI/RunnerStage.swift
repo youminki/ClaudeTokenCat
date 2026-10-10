@@ -77,17 +77,18 @@ struct RunnerStage: View {
     private var controls: some View {
         HStack(spacing: 4) {
             if Leaderboard.shared.isAvailable {
-                StageButton(systemImage: "trophy.fill", action: openLeaderboard).help("순위")
+                StageButton(systemImage: "trophy.fill", label: "순위", action: openLeaderboard).help("순위")
             }
             if model.game == nil {
                 StageButton(systemImage: "gamecontroller.fill", title: "게임") { model.startGame(character: character) }
                     .help("장애물 피하기 게임 (최고 \(GameRecords.best)점)")
             } else {
-                StageButton(systemImage: model.soundOn ? "speaker.wave.2.fill" : "speaker.slash.fill") {
+                StageButton(systemImage: model.soundOn ? "speaker.wave.2.fill" : "speaker.slash.fill",
+                            label: model.soundOn ? "효과음 끄기" : "효과음 켜기") {
                     model.toggleSound()
                 }
                 .help(model.soundOn ? "효과음 끄기" : "효과음 켜기")
-                StageButton(systemImage: "xmark") { model.endGame() }
+                StageButton(systemImage: "xmark", label: "게임 나가기") { model.endGame() }
                     .help("게임 나가기 (esc)")
             }
         }
@@ -152,6 +153,8 @@ private struct SpeechBubble: View {
 private struct StageButton: View {
     let systemImage: String
     var title: String?
+    /// 화면 읽기 프로그램이 읽을 이름. 글자 없는 단추에 붙인다.
+    var label: String?
     let action: () -> Void
     @StateObject private var hover = HoverFlag()
 
@@ -170,6 +173,7 @@ private struct StageButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hover.on = $0 }
+        .accessibilityLabel(label ?? title ?? "")
     }
 }
 
