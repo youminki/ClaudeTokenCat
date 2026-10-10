@@ -40,11 +40,12 @@ if [ ! -w "$TARGET" ]; then
   TARGET="$HOME/Applications"
   mkdir -p "$TARGET"
 fi
-# 옛 이름으로 설치한 앱은 실행 파일 이름이 TokenCat이다
-pkill -x RunTime 2>/dev/null || true
-pkill -x TokenCat 2>/dev/null || true
+# 옛 이름으로 설치한 앱은 실행 파일 이름이 TokenCat이다.
+# 앱 안의 업데이트는 앱의 자식 프로세스로 돌아서, -a가 없으면 pkill·pgrep이 조상인 앱을 건너뛴다
+pkill -a -x RunTime 2>/dev/null || true
+pkill -a -x TokenCat 2>/dev/null || true
 # 종료가 끝나기 전에 open하면 LaunchServices가 -600으로 실행을 거부한다
-for _ in $(seq 1 50); do pgrep -x RunTime > /dev/null || pgrep -x TokenCat > /dev/null || break; sleep 0.1; done
+for _ in $(seq 1 50); do pgrep -a -x RunTime > /dev/null || pgrep -a -x TokenCat > /dev/null || break; sleep 0.1; done
 
 # 옛 번들 ID로 설치한 앱(TokenCat.app, 이름만 바뀐 RunTime.app)은 지운다. 자동 시작 기록은 번들 ID에 묶여 있어서,
 # 옛 앱에서 켜져 있었으면 새 앱이 처음 켜질 때 다시 등록하도록 남긴다
