@@ -157,6 +157,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 self.openDailyDetail()
             }
         }
+        // 설정 창을 열어 둔 채 시스템 설정에서 자동 시작을 바꾸고 돌아와도 맞게 보이게
+        NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in self?.engine.settings.reloadLaunchAtLogin() }
+            .store(in: &cancellables)
         Notifier.shared.requestAuthorization()
         engine.start()
         // 처음 설치한 사람에게만 한 번. 러너가 메뉴바에 자리 잡은 뒤에 띄운다
@@ -291,6 +295,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func openSettings(tab: SettingsView.Tab? = nil) {
         if let tab { settingsTab.selection = tab }
+        engine.settings.reloadLaunchAtLogin()
         settingsWindow = showWindow(settingsWindow, title: "RunTime 설정",
                                     style: [.titled, .closable, .resizable]) {   // 세로 드래그로 크기 조절
             SettingsView(settings: engine.settings, engine: engine, tab: settingsTab)

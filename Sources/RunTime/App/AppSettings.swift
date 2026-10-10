@@ -111,10 +111,20 @@ final class AppSettings: ObservableObject {
     /// 로그인 시 자동 시작 (SMAppService, 번들 앱에서만 동작). 시스템 상태가 원본이라 저장하지 않는다.
     @Published var launchAtLogin: Bool {
         didSet {
-            guard launchAtLogin != oldValue else { return }
+            guard launchAtLogin != oldValue, !syncingLaunchAtLogin else { return }
             do { try LaunchAtLogin.set(launchAtLogin) }
             catch { launchAtLogin = oldValue }   // 실패 시 토글 원복
         }
+    }
+    private var syncingLaunchAtLogin = false
+
+    /// 시스템 설정 > 로그인 항목에서 바꾼 값을 토글에 다시 읽어 온다. 시스템 상태를 건드리지 않는다.
+    func reloadLaunchAtLogin() {
+        let current = LaunchAtLogin.isEnabled
+        guard current != launchAtLogin else { return }
+        syncingLaunchAtLogin = true
+        launchAtLogin = current
+        syncingLaunchAtLogin = false
     }
 
     private init() {
