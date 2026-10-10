@@ -136,6 +136,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             }
             .store(in: &cancellables)
 
+        // 같은 단계 안에서도 많이 쓸수록 빨리 달리고, 사용량 흐름의 순간마다 동작으로 반응한다
+        engine.$tempo
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.animator.setTempo($0) }
+            .store(in: &cancellables)
+        engine.reacted
+            .sink { [weak self] reaction in
+                guard let self, self.engine.settings.tricksEnabled else { return }
+                self.animator.perform(SpriteAnimator.trick(for: reaction))
+            }
+            .store(in: &cancellables)
+
         GlobalHotKey.shared.action = { [weak self] in
             // 다른 앱이 앞에 있을 때 누르므로, 열 때는 앱을 앞으로 가져와야 키 입력과 바깥 클릭 닫기가 된다
             if self?.popover?.isShown != true { NSApp.activate(ignoringOtherApps: true) }

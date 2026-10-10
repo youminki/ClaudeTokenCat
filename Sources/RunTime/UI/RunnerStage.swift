@@ -15,6 +15,10 @@ struct RunnerStage: View {
     var trickRequest: TrickRequest?
     /// Claude가 대화 차례를 마쳤다 (폴더 이름).
     var claudeFinished: AnyPublisher<TurnEndDetector.FinishedTurn, Never> = Empty().eraseToAnyPublisher()
+    /// 같은 단계 안에서의 빠르기 (사용량이 많을수록 빨리).
+    var tempo: Double = 1
+    /// 사용량 흐름에서 반응할 순간.
+    var reactions: AnyPublisher<UsageReactions.Reaction, Never> = Empty().eraseToAnyPublisher()
 
     @StateObject private var model = StageModel()
     /// 무대를 누르고 있는지. 제스처가 취소돼도 저절로 풀려 게임 입력이 눌린 채 남지 않는다.
@@ -30,7 +34,7 @@ struct RunnerStage: View {
             Canvas { context, size in
                 context.withCGContext { cg in
                     model.draw(cg, size: size, date: timeline.date, display: display, character: character,
-                               theme: character.theme(theme))
+                               theme: character.theme(theme), tempo: tempo)
                 }
                 if let game = model.game { Self.drawOverlay(game.overlay(size: size), in: &context) }
             }
@@ -40,6 +44,7 @@ struct RunnerStage: View {
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.white.opacity(0.07)))
         .overlay { bubbleLayer }
         .onReceive(claudeFinished) { model.claudeFinished(project: $0.project) }
+        .onReceive(reactions) { model.react($0, display: display) }
         .contentShape(Rectangle())
         // 누르는 순간과 떼는 순간을 따로 받아야 게임에서 길게 누르면 높이 뛴다
         .gesture(DragGesture(minimumDistance: 0)
@@ -352,6 +357,20 @@ final class StageModel: ObservableObject {
         return kind
     }
 
+    /// 사용량 흐름에 반응한다. 메뉴바 러너와 같은 동작을 하고 무슨 일인지 말풍선으로 알린다. 게임 중에는 판을 방해하지 않는다.
+    func react(_ reaction: UsageReactions.Reaction, display: SpriteDisplay) {
+        guard game == nil, AppSettings.shared.tricksEnabled, display != .tired, display != .alert else { return }
+        play(SpriteAnimator.trick(for: reaction))
+        let line = switch reaction {
+        case .burst: "부스트! 토큰이 쏟아진다"
+        case .resumed: "다시 달려 볼까"
+        case .sessionMilestone(let percent): "세션 \(percent)% 지났어"
+        case .multitask(let count): "프로젝트 \(count)개 동시 진행!"
+        case .newSession: "새 세션! 다시 가득 찼어"
+        }
+        say(line, seconds: 2.4)
+    }
+
     /// 게임 중이면 판을 멈추지 않고 화면 위에 알리고, 아니면 러너가 말한다.
     func claudeFinished(project: String?) {
         let name = project.map { " · \($0)" } ?? ""
@@ -387,7 +406,7 @@ final class StageModel: ObservableObject {
     // MARK: 한 프레임
 
     func draw(_ cg: CGContext, size: CGSize, date: Date, display: SpriteDisplay, character: RunnerCharacter,
-              theme: SpriteTheme) {
+              theme: SpriteTheme, tempo: Double = 1) {
         if let game {
             drawGame(game, cg, size: size, date: date, character: character, theme: theme)
             return
@@ -402,10 +421,10 @@ final class StageModel: ObservableObject {
         let playing = active.flatMap { $0.t < 1 ? $0 : nil }
 
         // 속도는 목표를 향해 부드럽게 따라간다 (장난 중에는 멈춘다)
-        let target: CGFloat = (playing != nil && playing?.kind != .zoom) ? 0 : Self.worldSpeed(display)
+        let target: CGFloat = (playing != nil && playing?.kind != .zoom) ? 0 : Self.worldSpeed(display) * CGFloat(tempo)
         speed += (target - speed) * min(1, dt * 2.4)
         scroll += speed * dt
-        if playing == nil { gait += dt / CGFloat(display.cycle) }
+        if playing == nil { gait += dt / CGFloat(display.cycle) * CGFloat(tempo) }
 
         let groundY = size.height - 15
         let scale: CGFloat = 5.0

@@ -19,6 +19,8 @@ final class UsageEngine: ObservableObject {
     @Published var snapshot: UsageStore.Snapshot?
     @Published var burnRate: Double = 0
     @Published var catState: CatState = .sleeping
+    /// 같은 단계 안에서의 빠르기 (0.85~1.3). 메뉴바와 무대 러너의 걸음 빠르기에 곱한다.
+    @Published var tempo: Double = 1
     /// 한도 임박 오버라이드 (§F2: 80% 지침, 95% 경고). 세션/주간 중 높은 쪽 기준.
     @Published var alertLevel: UsageAlertLevel = .normal
 
@@ -55,6 +57,8 @@ final class UsageEngine: ObservableObject {
     private var turnDetector = TurnEndDetector()
     /// Claude가 대화 차례를 마쳤다 (폴더 이름, 일한 시간). 메인 스레드에서 보낸다.
     let turnEnded = PassthroughSubject<TurnEndDetector.FinishedTurn, Never>()
+    /// 사용량 흐름에서 러너가 반응할 순간 (부스트, 다시 시작, 세션 단계, 동시 작업, 새 세션). 메인 스레드에서 보낸다.
+    let reacted = PassthroughSubject<UsageReactions.Reaction, Never>()
     /// 마지막 기록과 마지막으로 차례가 끝난 때. 메인 스레드에서 읽고 쓴다.
     static private(set) var lastActivity: Date?
     static private(set) var lastTurnEnd: Date?
@@ -88,6 +92,9 @@ final class UsageEngine: ObservableObject {
     private var knownWeeklyReset: Date?
     /// 최근 공식 세션 %의 오름세. "약 N분 뒤 한도"를 공식 값만으로 계산한다.
     private var sessionTrend = OfficialTrend()
+    private var reactions = UsageReactions()
+    /// 폴더별 마지막 기록 시각. 1분 안에 기록이 있는 폴더 수로 동시 작업을 센다.
+    private var projectSeen: [String: Date] = [:]
 
     /// 진단용: `log stream --predicate 'subsystem == "dev.runtime.RunTime"' --info`
     private let log = Logger(subsystem: "dev.runtime.RunTime", category: "engine")
@@ -249,8 +256,15 @@ final class UsageEngine: ObservableObject {
         if let version = snap.latestClientVersion { clientVersion = version }
         let rate = meter.update(tokensInLastMinute: snap.tokensLast60s)
         let idle = snap.lastEventDate.map { now.timeIntervalSince($0) } ?? .infinity
-        let state = Thresholds.preset(sensitivity: config.sensitivity)
-            .state(burnRate: rate, idleSeconds: idle)
+        let thresholds = Thresholds.preset(sensitivity: config.sensitivity)
+        let state = thresholds.state(burnRate: rate, idleSeconds: idle)
+        let tempo = thresholds.tempo(burnRate: rate, state: state)
+        for event in scanned {
+            guard let project = event.project, event.timestamp > projectSeen[project] ?? .distantPast else { continue }
+            projectSeen[project] = event.timestamp
+        }
+        projectSeen = projectSeen.filter { now.timeIntervalSince($0.value) < 10 * 60 }
+        let activeProjects = projectSeen.values.filter { now.timeIntervalSince($0) < 60 }.count
 
         let blockTokens = snap.currentBlock?.totalTokens ?? 0
         let result = UsageEvaluator.evaluate(UsageEvaluator.Input(
@@ -263,6 +277,11 @@ final class UsageEngine: ObservableObject {
         if config.limitAlertsEnabled {
             fireLimitAlerts(snap: snap, nextWeeklyReset: nextWeeklyReset, result: result)
         }
+        // 새 세션은 공식 창으로만 센다. 로컬 블록과 섞으면 공식 값이 오가며 창이 바뀐 것처럼 보인다
+        let window = result.sessionResetsAt.map(LimitAlertTracker.windowId(resetsAt:))
+        let reaction = reactions.update(.init(rate: rate, runThreshold: thresholds.run, idleSeconds: idle,
+                                              sessionPercent: result.session?.percent, sessionWindow: window,
+                                              activeProjects: activeProjects, now: now))
         checkNewBlock(snap: snap, enabled: config.newSessionAlertEnabled)
 
         log.debug("tick: today=\(snap.todayTokens) block=\(blockTokens) last60s=\(snap.tokensLast60s) rate=\(Int(rate)) state=\(state.rawValue, privacy: .public) 세션%=\(result.session.map { String(format: "%.1f", $0.percent) } ?? "없음", privacy: .public)")
@@ -272,6 +291,8 @@ final class UsageEngine: ObservableObject {
             self.snapshot = snap
             self.burnRate = rate
             self.catState = state
+            if abs(self.tempo - tempo) > 0.02 { self.tempo = tempo }
+            if let reaction { self.reacted.send(reaction) }
             self.alertLevel = result.level
             self.sessionGauge = result.session
             self.weeklyGauge = result.weekly
