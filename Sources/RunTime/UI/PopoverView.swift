@@ -13,13 +13,14 @@ struct PopoverView: View {
     var openLeaderboard: () -> Void = {}
     /// 무대에서 러너를 누르거나 메뉴에서 동작을 고르면 메뉴바 러너도 같은 동작을 한다.
     var performTrick: (Trick) -> Void = { _ in }
-    /// 화면 점검에서 러너 고르기 화면을 바로 띄울 때.
-    var startsOnRunnerPage = false
+    /// 화면 점검에서 러너·상점·퀘스트 화면을 바로 띄울 때.
+    var startSection: PopoverPage.Section?
 
     @StateObject private var sparklineHover = HoverIndex()
     @StateObject private var page = PopoverPage()
     @ObservedObject private var customRunners = CustomRunnerStore.shared
     @ObservedObject private var petdex = PetdexStore.shared
+    @ObservedObject private var wallet = GameWallet.shared
 
     private var customSelection: Binding<String?> {
         Binding(get: { settings.customRunnerID },
@@ -66,7 +67,12 @@ struct PopoverView: View {
         .padding(14)
         .frame(width: 376)
         .background(Theme.background)
-        .onAppear { if startsOnRunnerPage { page.showsRunners = true } }
+        .onAppear {
+            if let startSection {
+                page.section = startSection
+                page.showsRunners = true
+            }
+        }
     }
 
     @ViewBuilder
@@ -158,31 +164,93 @@ struct PopoverView: View {
 
     // MARK: 러너 고르기
 
-    /// 러너 이름을 누르면 아래 사용량 대신 고르기 화면을 띄운다. 무대는 위에 그대로 두어 고른 러너가 바로 달린다.
+    /// 러너 이름을 누르면 아래 사용량 대신 러너·상점·퀘스트 화면을 띄운다. 무대는 위에 그대로 두어 고른 러너와 꾸미기가 바로 보인다.
     private var runnerPage: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ScrollView {
-                GameShopView(settings: settings).padding(.horizontal, 2).padding(.bottom, 2)
-                RunnerPicker(settings: settings, openFullPicker: openRunnerSettings)
-                    .padding(.horizontal, 2)
-                    .padding(.bottom, 4)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                hubTabs
+                Spacer(minLength: 4)
+                coinBalance
             }
-            .frame(height: 320)   // 사용량 화면과 높이를 맞춰 전환할 때 팝오버가 출렁이지 않게
+            ScrollView {
+                Group {
+                    switch page.section {
+                    case .runners: RunnerPicker(settings: settings, openFullPicker: openRunnerSettings)
+                    case .shop: GameShopView(settings: settings)
+                    case .quests: QuestView()
+                    }
+                }
+                .padding(.horizontal, 2)
+                .padding(.bottom, 4)
+            }
+            .frame(height: 304)   // 사용량 화면과 높이를 맞춰 전환할 때 팝오버가 출렁이지 않게
             HStack(spacing: 8) {
                 Button { page.showsRunners = false } label: {
                     Label("사용량", systemImage: "chevron.left")
                 }
                 .keyboardShortcut(.cancelAction)
                 Spacer()
-                Picker("색상", selection: $settings.spriteTheme) {
-                    ForEach(SpriteTheme.owned(current: settings.spriteTheme), id: \.self) { Text($0.displayName).tag($0) }
+                if page.section == .runners {
+                    Picker("색상", selection: $settings.spriteTheme) {
+                        ForEach(SpriteTheme.owned(current: settings.spriteTheme), id: \.self) { Text($0.displayName).tag($0) }
+                    }
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                    Button("아무거나", action: pickRandomRunner)
                 }
-                .pickerStyle(.menu)
-                .fixedSize()
-                Button("아무거나", action: pickRandomRunner)
             }
             .controlSize(.small)
         }
+    }
+
+    /// 러너·상점·퀘스트. 퀘스트에는 오늘 남은 미션 수를 붙인다.
+    private var hubTabs: some View {
+        HStack(spacing: 2) {
+            ForEach(PopoverPage.Section.allCases, id: \.self) { section in
+                let on = page.section == section
+                Button { page.section = section } label: {
+                    HStack(spacing: 4) {
+                        Text(section.title)
+                        if section == .quests, questsLeft > 0 {
+                            Text("\(questsLeft)")
+                                .font(.system(size: 9, weight: .bold).monospacedDigit())
+                                .foregroundStyle(.black.opacity(0.8))
+                                .padding(.horizontal, 4)
+                                .background(Capsule().fill(GameShopView.gold))
+                        }
+                    }
+                    .font(.system(size: 11.5, weight: on ? .semibold : .medium))
+                    .foregroundStyle(on ? Theme.primary : Theme.secondary)
+                    .padding(.horizontal, 10)
+                    .frame(height: 24)
+                    .background(Capsule().fill(on ? Color.white.opacity(0.13) : Color.clear))
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(section == .quests && questsLeft > 0 ? "\(section.title), 남은 미션 \(questsLeft)개" : section.title)
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(Capsule().fill(Theme.surface))
+        .overlay(Capsule().strokeBorder(Theme.hairline))
+    }
+
+    private var questsLeft: Int {
+        let daily = wallet.missions
+        return daily.missions.count - daily.doneCount
+    }
+
+    private var coinBalance: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "dollarsign.circle.fill")
+            Text(wallet.coins.formatted()).contentTransition(.numericText())
+        }
+        .font(Theme.value)
+        .foregroundStyle(GameShopView.gold)
+        .animation(.easeOut(duration: 0.25), value: wallet.coins)
+        .help("미니게임에서 먹은 코인과 퀘스트 보상. Claude가 일하는 동안 한 판은 두 배")
+        .accessibilityLabel("코인 \(wallet.coins)개")
     }
 
     // MARK: 세션 · 주간
@@ -445,6 +513,19 @@ final class HoverIndex: ObservableObject {
 
 /// 팝오버 안 화면과 무대에 보낼 동작. `@State`를 못 쓰는 이유는 HoverFlag 참고.
 final class PopoverPage: ObservableObject {
+    enum Section: CaseIterable {
+        case runners, shop, quests
+
+        var title: String {
+            switch self {
+            case .runners: "러너"
+            case .shop: "상점"
+            case .quests: "퀘스트"
+            }
+        }
+    }
+
     @Published var showsRunners = false
+    @Published var section: Section = .runners
     @Published var trick: TrickRequest?
 }

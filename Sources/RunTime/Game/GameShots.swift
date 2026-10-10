@@ -57,8 +57,13 @@ enum GameShots {
             if game.phase == .over { break }
         }
         // 꾸미기를 단 모습 (꼬리 셋, 발먼지)
-        for item in [Cosmetic.rainbowTrail, .fireTrail, .noteTrail, .heartTrail] where game.phase == .playing {
-            GameWallet.shared.preview = [item, .rainbowDust, .fireworksCrash]
+        let looks: [(trail: Cosmetic, dust: Cosmetic, buddy: Cosmetic)] = [
+            (.rainbowTrail, .rainbowDust, .greenBuddy), (.fireTrail, .cloudDust, .boxBuddy), (.noteTrail, .starDust, .pinkBuddy),
+            (.heartTrail, .heartDust, .tinyBuddy), (.magicTrail, .starDust, .beigeBuddy), (.smokeTrail, .cloudDust, .yellowBuddy),
+            (.sparkTrail, .goldDust, .blueBuddy),
+        ]
+        for (item, dust, buddy) in looks where game.phase == .playing {
+            GameWallet.shared.preview = [item, dust, buddy, .magicCrash]
             step(0.5, autoplay: true)
             try shot("2-play-\(item.rawValue)")
         }
@@ -140,6 +145,20 @@ enum GameBench {
         session.release()
         measure("게임", model) { pilot.step() }
         GameWallet.shared.preview = nil
+
+        // 상점 칸 미리보기. 한 화면에 칸이 여러 개라 가장 무거운 칸을 본다
+        let cell = CGSize(width: 160, height: 62)
+        var worst = (name: "", ms: 0.0), total = 0.0
+        for item in Cosmetic.allCases {
+            let preview = ItemPreview(kind: .cosmetic(item), character: character)
+            let start = Date()
+            for k in 0..<frames { preview.draw(cg, size: cell, time: Double(k) / 30) }
+            let ms = Date().timeIntervalSince(start) * 1000 / Double(frames)
+            total += ms
+            if ms > worst.ms { worst = (item.rawValue, ms) }
+        }
+        print(String(format: "상점 칸: 평균 %.2fms, 가장 무거운 %@ %.2fms (20fps 한 칸이면 1초에 %.0fms)",
+                     total / Double(Cosmetic.allCases.count), worst.name, worst.ms, worst.ms * 20))
     }
 }
 

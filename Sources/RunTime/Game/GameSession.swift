@@ -70,6 +70,8 @@ final class GameSession {
     private(set) var boosted = false
     /// 꼬리를 그릴 지난 자리들 (화면 x, 바닥 위 높이). 땅이 흐르는 만큼 뒤로 민다.
     var trail: [CGPoint] = []
+    /// 동료가 따라 뛸 러너 높이 (오래된 것부터).
+    var buddyHeights: [(time: Double, height: Double)] = []
     /// 점수판으로 날아가는 코인 (화면 좌표).
     struct CoinFlyer {
         let from: CGPoint
@@ -257,6 +259,7 @@ final class GameSession {
         if let current = zoneBanner { zoneBanner = current.life > k ? (current.text, current.life - k) : nil }
         skyBlend = min(1, skyBlend + k / 1.5)
         updateTrail(k)
+        updateBuddy()
         landBounce = max(0, landBounce - k * 7)
         for i in coinFlyers.indices { coinFlyers[i].t += k / 0.45 }
         coinFlyers.removeAll { $0.t >= 1 }
@@ -283,9 +286,9 @@ final class GameSession {
         case .jumped:
             play(.jump)
             jumps += 1
-            burst(at: feet, count: 5, colors: dustColors, speed: 40, life: 0.35, drift: 1)
+            dust(at: feet, landing: false)
         case .landed:
-            burst(at: feet, count: 4, colors: dustColors, speed: 30, life: 0.3, drift: 1)
+            dust(at: feet, landing: true)
             landBounce = 1
         case .coin(let id):
             play(.coin)
@@ -352,7 +355,7 @@ final class GameSession {
     }
 
     /// 판이 끝나면 코인과 미션을 지갑에 넣는다. 고스트와 겨룬 판도 넣는다 (꾸미기에만 쓰는 코인이라).
-    /// 미션을 새로 채웠으면 true.
+    /// 미션·도전·업적을 새로 채웠으면 true.
     func creditRun() -> Bool {
         guard live, !credited else { return false }
         credited = true
@@ -360,8 +363,10 @@ final class GameSession {
                                     wonRace: (raceLead ?? 0) > 0)
         let completed = GameWallet.shared.finishRun(run, bonusCoins: boosted ? game.coinsTaken : 0)
         if !completed.isEmpty {
-            let reward = completed.reduce(0) { $0 + $1.reward }
-            announce("미션 완료: \(completed.map(\.title).joined(separator: ", ")) +\(reward)", sound: false)
+            let reward = completed.reduce(0) { $0 + $1.coins }
+            // 줄이 길면 무대 폭을 넘어 첫 보상과 개수만 쓴다
+            let what = completed.count == 1 ? completed[0].title : "\(completed[0].title) 외 \(completed.count - 1)개"
+            announce("완료: \(what) +\(reward)", sound: false)
         }
         return !completed.isEmpty
     }

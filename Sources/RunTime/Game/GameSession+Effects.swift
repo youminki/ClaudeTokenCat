@@ -61,32 +61,22 @@ extension GameSession {
 
     // MARK: 꾸미기
 
-    var dustColors: [NSColor] {
-        switch GameWallet.shared.equipped(.dust) {
-        case .rainbowDust: SpriteEffects.rainbow
-        case let dust?: [dust.color]
-        case nil: [NSColor(white: 0.85, alpha: 1)]
+    /// 발을 디딜 때 먼지. 상점 발먼지를 달면 그 색과 모양으로.
+    func dust(at feet: CGPoint, landing: Bool) {
+        spray(GameFX.dust(GameWallet.shared.equipped(.dust), landing: landing), at: feet)
+    }
+
+    /// 부딪힌 순간. 기본은 흰 점, 상점 효과를 달면 그 모양으로 터진다.
+    func crashBurst(at center: CGPoint) {
+        for part in GameFX.crash(GameWallet.shared.equipped(.crash)) {
+            // offset의 y는 위로 + (입자 좌표처럼 바닥 위 높이)
+            spray(part.spray, at: CGPoint(center.x + part.offset.x, center.y + part.offset.y))
         }
     }
 
-    /// 부딪힌 순간. 기본은 흰 별, 상점 효과를 달면 그 모양으로 터진다.
-    func crashBurst(at center: CGPoint) {
-        switch GameWallet.shared.equipped(.crash) {
-        case .fireworksCrash:
-            for (k, dx) in [-18.0, 0, 20].enumerated() {
-                let point = CGPoint(center.x + CGFloat(dx), center.y + 18 + CGFloat(k % 2) * 10)
-                burst(at: point, count: 14, colors: SpriteEffects.rainbow.shuffled(), shape: .spark, speed: 110,
-                      life: 0.9, drift: 0, spread: 2)
-            }
-        case .heartCrash:
-            burst(at: center, count: 12, colors: [NSColor(hex: 0xFF8FB8), NSColor(hex: 0xFF5C8A)], shape: .heart,
-                  speed: 120, life: 0.9, drift: 0, spread: 2, size: 2.2...3.4)
-        case .coinCrash:
-            burst(at: center, count: 16, colors: [.white], shape: .coin, speed: 170, life: 1.1, drift: 0.3,
-                  size: 1.6...2.4)
-        default:
-            burst(at: center, count: 12, color: .white, speed: 120, life: 0.55, drift: 0)
-        }
+    func spray(_ spray: GameFX.Spray, at point: CGPoint) {
+        burst(at: point, count: spray.count, colors: spray.colors, shape: spray.shape, speed: spray.speed, life: spray.life,
+              drift: spray.drift, spread: spray.spread, size: spray.size, gravity: -spray.gravity)
     }
 
     func updateTrail(_ k: CGFloat) {
@@ -102,71 +92,36 @@ extension GameSession {
     }
 
     func drawTrail(_ cg: CGContext, groundY: CGFloat, time: Double) {
-        guard let item = GameWallet.shared.equipped(.trail), trail.count > 1 else { return }
-        let points = trail.map { CGPoint($0.x, groundY - $0.y) }
-        cg.saveGState()
-        cg.setLineCap(.round)
-        switch item {
-        case .rainbowTrail:
-            for (band, color) in SpriteEffects.rainbow.enumerated() {
-                let dy = (CGFloat(band) - 2.5) * 2.2
-                for i in 1..<points.count {
-                    let t = CGFloat(i) / CGFloat(points.count)
-                    cg.setStrokeColor(color.withAlphaComponent(0.85 * t).cgColor)
-                    cg.setLineWidth(2.4)
-                    cg.move(to: CGPoint(points[i - 1].x, points[i - 1].y + dy))
-                    cg.addLine(to: CGPoint(points[i].x, points[i].y + dy))
-                    cg.strokePath()
-                }
-            }
-        case .cometTrail:
-            for i in 1..<points.count {
-                let t = CGFloat(i) / CGFloat(points.count)
-                cg.setStrokeColor(item.color.withAlphaComponent(0.7 * t).cgColor)
-                cg.setLineWidth(1 + 7 * t)
-                cg.move(to: points[i - 1])
-                cg.addLine(to: points[i])
-                cg.strokePath()
-            }
-        case .fireTrail:
-            // 꼬리 쪽으로 갈수록 노랗고 작아지며 흔들린다
-            for (i, point) in points.enumerated() {
-                let t = CGFloat(i) / CGFloat(points.count)
-                let flicker = CGFloat(sin(time * 23 + Double(i) * 1.7)) * 1.2
-                let r = 1 + 4 * t
-                let color = NSColor(hex: 0xFFE14D).blended(withFraction: t, of: NSColor(hex: 0xFF5A1F)) ?? item.color
-                cg.setFillColor(color.withAlphaComponent(0.25 + 0.6 * t).cgColor)
-                cg.fillEllipse(in: CGRect(x: point.x - r, y: point.y - r + flicker, width: r * 2, height: r * 2))
-            }
-        case .noteTrail, .heartTrail:
-            for (i, point) in points.enumerated() where i % 5 == 1 {
-                let t = CGFloat(i) / CGFloat(points.count)
-                let bob = CGFloat(sin(time * 6 + Double(i))) * 3
-                let p = CGPoint(point.x, point.y - 6 + bob)
-                let color = item.color.withAlphaComponent(0.3 + 0.7 * t)
-                if item == .heartTrail {
-                    Self.fillHeart(cg, at: p, size: 4 + 3 * t, color: color)
-                } else {
-                    // 음표: 기운 머리와 기둥
-                    let s = 0.8 + 0.5 * t
-                    cg.setFillColor(color.cgColor)
-                    cg.fillEllipse(in: CGRect(x: p.x - 2.4 * s, y: p.y + 1.5 * s, width: 3.6 * s, height: 2.6 * s))
-                    cg.setStrokeColor(color.cgColor)
-                    cg.setLineWidth(1.1 * s)
-                    cg.move(to: CGPoint(p.x + 1.1 * s, p.y + 2.6 * s))
-                    cg.addLine(to: CGPoint(p.x + 1.1 * s, p.y - 4 * s))
-                    cg.addLine(to: CGPoint(p.x + 3.2 * s, p.y - 2.6 * s))
-                    cg.strokePath()
-                }
-            }
-        default:
-            for (i, point) in points.enumerated() where i % 3 == 0 {
-                let t = CGFloat(i) / CGFloat(points.count)
-                let twinkle = 0.7 + 0.3 * CGFloat(sin(time * 9 + Double(i)))
-                SpriteEffects.sparkle(cg, at: point, radius: (1.5 + 3 * t) * twinkle, color: item.color.withAlphaComponent(t))
-            }
+        guard let item = GameWallet.shared.equipped(.trail) else { return }
+        GameFX.drawTrail(item, points: trail.map { CGPoint($0.x, groundY - $0.y) }, time: time, cg)
+    }
+
+    // MARK: 동료
+
+    /// 동료는 러너 뒤에서 조금 늦게 따라 뛴다. 러너 높이를 0.15초 늦춰 쓴다 (화면 주사율과 상관없이).
+    func updateBuddy() {
+        guard GameWallet.shared.equipped(.buddy) != nil else {
+            buddyHeights.removeAll()
+            return
         }
-        cg.restoreGState()
+        buddyHeights.append((clock, game.phase == .playing ? game.runnerY : 0))
+        while buddyHeights.count > 1, clock - buddyHeights[1].time >= Self.buddyDelay { buddyHeights.removeFirst() }
+    }
+
+    static let buddyDelay = 0.15
+
+    func drawBuddy(_ cg: CGContext, groundY: CGFloat, time: Double) {
+        guard let item = GameWallet.shared.equipped(.buddy), entrance >= 1 else { return }
+        let lift = CGFloat(buddyHeights.first?.height ?? 0)
+        let x = runnerLeft - 18
+        // 그림자
+        let shadow = 14 * (1 - min(lift / 120, 0.6))
+        cg.setFillColor(NSColor.black.withAlphaComponent(0.22 * (1 - min(lift / 90, 0.8))).cgColor)
+        cg.fillEllipse(in: CGRect(x: x - shadow / 2, y: groundY - 2, width: shadow, height: 4))
+        let running = game.phase == .playing
+        let step = running ? game.distance / 18 : time * 2
+        let bob = running && lift == 0 ? CGFloat(abs(sin(game.distance / 18 * .pi))) * 1.5 : 0
+        GameFX.drawBuddy(item, feet: CGPoint(x, groundY - lift - bob), step: step, cg)
     }
 
     // MARK: 화면 효과
@@ -177,13 +132,14 @@ extension GameSession {
     }
 
     /// `spread`가 1이면 위쪽 반원, 2면 사방으로 흩어진다.
-    func burst(at point: CGPoint, count: Int, colors: [NSColor], shape: Particle.Shape = .dot, speed: CGFloat,
-                       life: CGFloat, drift: CGFloat, spread: CGFloat = 1, size: ClosedRange<CGFloat> = 1.4...2.6) {
+    func burst(at point: CGPoint, count: Int, colors: [NSColor], shape: GameFX.Shape = .dot, speed: CGFloat,
+                       life: CGFloat, drift: CGFloat, spread: CGFloat = 1, size: ClosedRange<CGFloat> = 1.4...2.6,
+                       gravity: CGFloat = -220) {
         for i in 0..<count {
             let angle = CGFloat(i) / CGFloat(count) * .pi * spread + .pi * 0.05 + CGFloat.random(in: -0.2...0.2)
             let v = speed * CGFloat.random(in: 0.6...1.1)
             particles.append(Particle(position: point, velocity: CGPoint(-cos(angle) * v, sin(angle) * v),
-                                      gravity: -220, life: life * CGFloat.random(in: 0.7...1), total: life,
+                                      gravity: gravity, life: life * CGFloat.random(in: 0.7...1), total: life,
                                       color: colors[i % colors.count], size: CGFloat.random(in: size), drift: drift,
                                       shape: shape))
         }
@@ -199,9 +155,9 @@ extension GameSession {
         let size: CGFloat
         /// 땅을 따라 뒤로 흘러가는 정도 (먼지 1, 터지는 별 0).
         let drift: CGFloat
-        var shape: Shape = .dot
-
-        enum Shape { case dot, heart, coin, spark }
+        var shape: GameFX.Shape = .dot
+        /// 0~1 고정 값. 입자마다 다르게 돌린다.
+        let seed = CGFloat.random(in: 0...1)
     }
 
     struct Popup {

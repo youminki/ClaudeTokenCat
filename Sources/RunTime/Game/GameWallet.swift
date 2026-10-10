@@ -4,15 +4,17 @@ import GameCore
 
 /// 미니게임 러너에 다는 꾸미기. 그림만 바뀌고 판정과 점수는 같다.
 enum Cosmetic: String, CaseIterable, Identifiable {
-    case sparkleTrail, cometTrail, rainbowTrail, fireTrail, noteTrail, heartTrail
-    case heartDust, goldDust, starDust, rainbowDust
-    case fireworksCrash, heartCrash, coinCrash
+    case sparkleTrail, cometTrail, rainbowTrail, fireTrail, noteTrail, heartTrail, magicTrail, smokeTrail, sparkTrail
+    case heartDust, goldDust, starDust, rainbowDust, cloudDust
+    case fireworksCrash, heartCrash, coinCrash, magicCrash, flameCrash
+    case greenBuddy, blueBuddy, pinkBuddy, yellowBuddy, beigeBuddy, boxBuddy, tinyBuddy
 
     enum Slot: CaseIterable {
-        case trail, dust, crash
+        case buddy, trail, dust, crash
 
         var title: String {
             switch self {
+            case .buddy: "동료"
             case .trail: "꼬리"
             case .dust: "발먼지"
             case .crash: "부딪힘"
@@ -24,9 +26,11 @@ enum Cosmetic: String, CaseIterable, Identifiable {
 
     var slot: Slot {
         switch self {
-        case .sparkleTrail, .cometTrail, .rainbowTrail, .fireTrail, .noteTrail, .heartTrail: .trail
-        case .heartDust, .goldDust, .starDust, .rainbowDust: .dust
-        case .fireworksCrash, .heartCrash, .coinCrash: .crash
+        case .sparkleTrail, .cometTrail, .rainbowTrail, .fireTrail, .noteTrail, .heartTrail, .magicTrail, .smokeTrail,
+             .sparkTrail: .trail
+        case .heartDust, .goldDust, .starDust, .rainbowDust, .cloudDust: .dust
+        case .fireworksCrash, .heartCrash, .coinCrash, .magicCrash, .flameCrash: .crash
+        case .greenBuddy, .blueBuddy, .pinkBuddy, .yellowBuddy, .beigeBuddy, .boxBuddy, .tinyBuddy: .buddy
         }
     }
 
@@ -45,6 +49,19 @@ enum Cosmetic: String, CaseIterable, Identifiable {
         case .fireworksCrash: "폭죽"
         case .heartCrash: "하트 펑"
         case .coinCrash: "코인 비"
+        case .magicTrail: "마법 별"
+        case .smokeTrail: "증기"
+        case .sparkTrail: "번개"
+        case .cloudDust: "구름"
+        case .magicCrash: "마법진"
+        case .flameCrash: "불기둥"
+        case .greenBuddy: "초록이"
+        case .blueBuddy: "파랑이"
+        case .pinkBuddy: "외눈이"
+        case .yellowBuddy: "노랑이"
+        case .beigeBuddy: "우주인"
+        case .boxBuddy: "상자"
+        case .tinyBuddy: "꼬마"
         }
     }
 
@@ -63,6 +80,19 @@ enum Cosmetic: String, CaseIterable, Identifiable {
         case .heartCrash: 100
         case .fireworksCrash: 200
         case .coinCrash: 350
+        case .cloudDust: 120
+        case .smokeTrail: 200
+        case .magicTrail: 280
+        case .sparkTrail: 380
+        case .flameCrash: 260
+        case .magicCrash: 400
+        case .tinyBuddy: 220
+        case .greenBuddy: 300
+        case .blueBuddy: 300
+        case .yellowBuddy: 340
+        case .pinkBuddy: 380
+        case .beigeBuddy: 450
+        case .boxBuddy: 600
         }
     }
 
@@ -78,7 +108,40 @@ enum Cosmetic: String, CaseIterable, Identifiable {
         case .rainbowDust: NSColor(hex: 0x5BD86B)
         case .fireworksCrash: NSColor(hex: 0xFFE14D)
         case .coinCrash: NSColor(hex: 0xFFD45E)
+        case .magicTrail, .magicCrash: NSColor(hex: 0xC68CFF)
+        case .smokeTrail, .cloudDust: NSColor(hex: 0xE8EEF5)
+        case .sparkTrail: NSColor(hex: 0x7FE9FF)
+        case .flameCrash: NSColor(hex: 0xFF8A3D)
+        case .greenBuddy: NSColor(hex: 0x5BD86B)
+        case .blueBuddy: NSColor(hex: 0x6FA8FF)
+        case .pinkBuddy: NSColor(hex: 0xFF8FB8)
+        case .yellowBuddy: NSColor(hex: 0xFFC94D)
+        case .beigeBuddy: NSColor(hex: 0xE8C8A0)
+        case .boxBuddy: NSColor(hex: 0xE0A82E)
+        case .tinyBuddy: NSColor(hex: 0xFF9E3D)
         }
+    }
+
+    /// 동료 그림 (Kenney Pixel Platformer Characters). 두 장을 번갈아 걷는다.
+    var buddyFrames: [String]? { Self.buddyFrameNames[self] }
+
+    private static let buddyFrameNames: [Cosmetic: [String]] = Dictionary(uniqueKeysWithValues: allCases.compactMap { item in
+        item.buddyTiles.map { (item, $0.map { String(format: "buddy_%04d", $0) }) }
+    })
+
+    private var buddyTiles: [Int]? {
+        let tiles: [Int]
+        switch self {
+        case .greenBuddy: tiles = [0, 1]
+        case .blueBuddy: tiles = [2, 3]
+        case .pinkBuddy: tiles = [4, 5]
+        case .yellowBuddy: tiles = [6, 7]
+        case .beigeBuddy: tiles = [9, 10]
+        case .boxBuddy: tiles = [11, 12]
+        case .tinyBuddy: tiles = [13, 14]
+        default: return nil
+        }
+        return tiles
     }
 }
 
@@ -140,6 +203,8 @@ final class GameWallet: ObservableObject {
         static let unlocked = "gameUnlocked"
         static let abilityLevels = "gameAbilityLevels"
         static let abilitiesOff = "gameAbilitiesOff"
+        static let weekly = "gameWeeklyChallenges"
+        static let achievements = "gameAchievements"
     }
 
     private let defaults = UserDefaults.standard
@@ -152,6 +217,10 @@ final class GameWallet: ObservableObject {
         didSet { defaults.set(equipped.map(\.rawValue), forKey: Key.equipped) }
     }
     @Published private var stored: DailyMissions
+    @Published private var storedWeekly: DailyMissions
+    @Published private(set) var achievements: Achievements {
+        didSet { if let data = try? JSONEncoder().encode(achievements) { defaults.set(data, forKey: Key.achievements) } }
+    }
     /// 능력별 산 단계와, 사 두고 끈 능력.
     @Published private(set) var abilityLevels: [String: Int] {
         didSet { defaults.set(abilityLevels, forKey: Key.abilityLevels) }
@@ -175,6 +244,22 @@ final class GameWallet: ObservableObject {
         abilitiesOff = Set(defaults.stringArray(forKey: Key.abilitiesOff) ?? [])
         stored = defaults.data(forKey: Key.missions).flatMap { try? JSONDecoder().decode(DailyMissions.self, from: $0) }
             ?? DailyMissions(day: Self.today())
+        storedWeekly = defaults.data(forKey: Key.weekly).flatMap { try? JSONDecoder().decode(DailyMissions.self, from: $0) }
+            ?? .week(Self.thisWeek())
+        achievements = defaults.data(forKey: Key.achievements).flatMap { try? JSONDecoder().decode(Achievements.self, from: $0) }
+            ?? Achievements()
+    }
+
+    /// 이번 주 (ISO 주, 월요일 시작). yyyyww.
+    static func thisWeek(_ date: Date = Date()) -> Int {
+        let parts = Calendar(identifier: .iso8601).dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
+        return (parts.yearForWeekOfYear ?? 0) * 100 + (parts.weekOfYear ?? 0)
+    }
+
+    /// 이번 주 도전. 주가 바뀌었으면 새 도전.
+    var weekly: DailyMissions {
+        let week = Self.thisWeek()
+        return storedWeekly.day == week ? storedWeekly : .week(week)
     }
 
     static func today(_ date: Date = Date()) -> Int {
@@ -193,14 +278,30 @@ final class GameWallet: ObservableObject {
 
     func equipped(_ slot: Cosmetic.Slot) -> Cosmetic? { (preview ?? equipped).first { $0.slot == slot } }
 
-    /// 판이 끝났다. 먹은 코인을 넣고, 새로 채운 미션의 보상을 더해 그 미션들을 돌려준다.
-    func finishRun(_ run: DailyMissions.Run, bonusCoins: Int = 0) -> [DailyMissions.Mission] {
+    /// 미션·도전·업적을 채워 받은 보상.
+    struct Reward: Equatable {
+        let title: String
+        let coins: Int
+    }
+
+    /// 판이 끝났다. 먹은 코인을 넣고, 새로 채운 미션·주간 도전·업적의 보상을 더해 그 목록을 돌려준다.
+    func finishRun(_ run: DailyMissions.Run, bonusCoins: Int = 0) -> [Reward] {
         var board = missions
-        let completed = board.record(run)
+        let daily = board.record(run)
         stored = board
         if let data = try? JSONEncoder().encode(board) { defaults.set(data, forKey: Key.missions) }
-        coins += run.coins + bonusCoins + completed.reduce(0) { $0 + $1.reward }
-        return completed
+        var week = weekly
+        let challenges = week.record(run)
+        storedWeekly = week
+        if let data = try? JSONEncoder().encode(week) { defaults.set(data, forKey: Key.weekly) }
+        var book = achievements
+        let tiers = book.record(run, missionsDone: daily.count + challenges.count)
+        achievements = book
+        let rewards = daily.map { Reward(title: $0.title(weekly: false), coins: $0.reward) }
+            + challenges.map { Reward(title: $0.title(weekly: true), coins: $0.reward) }
+            + tiers.map { Reward(title: $0.title, coins: $0.reward) }
+        coins += run.coins + bonusCoins + rewards.reduce(0) { $0 + $1.coins }
+        return rewards
     }
 
     func level(_ ability: Ability) -> Int { min(abilityLevels[ability.rawValue] ?? 0, ability.maxLevel) }
@@ -265,15 +366,19 @@ final class GameWallet: ObservableObject {
 }
 
 extension DailyMissions.Mission {
-    var title: String {
-        switch kind {
+    var title: String { title(weekly: false) }
+
+    func title(weekly: Bool) -> String {
+        let text = switch kind {
         case .coins: "코인 \(target)개 먹기"
         case .nearMisses: "아슬! \(target)번"
         case .score: "한 판 \(target)점 넘기"
         case .plays: "\(target)판 하기"
         case .jumps: "\(target)번 뛰기"
         case .ghostWins: target == 1 ? "고스트 이기기" : "고스트 \(target)번 이기기"
+        case .totalScore: "점수 합 \(target.formatted())점"
         }
+        return weekly ? "주간 · \(text)" : text
     }
 
     var icon: String {
@@ -284,8 +389,54 @@ extension DailyMissions.Mission {
         case .plays: "gamecontroller.fill"
         case .jumps: "arrow.up.circle.fill"
         case .ghostWins: "person.2.fill"
+        case .totalScore: "sum"
         }
     }
+}
+
+extension Achievements.Kind {
+    var name: String {
+        switch self {
+        case .plays: "꾸준한 러너"
+        case .coins: "코인 수집가"
+        case .bestScore: "기록 사냥꾼"
+        case .jumps: "점프 장인"
+        case .nearMisses: "아슬아슬 달인"
+        case .ghostWins: "고스트 버스터"
+        case .missions: "미션 해결사"
+        }
+    }
+
+    func goal(_ target: Int) -> String {
+        let n = target.formatted()
+        return switch self {
+        case .plays: "\(n)판 달리기"
+        case .coins: "코인 \(n)개 모으기"
+        case .bestScore: "한 판 \(n)점"
+        case .jumps: "\(n)번 뛰기"
+        case .nearMisses: "아슬! \(n)번"
+        case .ghostWins: "고스트 \(n)번 이기기"
+        case .missions: "미션·도전 \(n)개 채우기"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .plays: "figure.run"
+        case .coins: "dollarsign.circle.fill"
+        case .bestScore: "trophy.fill"
+        case .jumps: "arrow.up.circle.fill"
+        case .nearMisses: "bolt.fill"
+        case .ghostWins: "person.2.fill"
+        case .missions: "checklist"
+        }
+    }
+}
+
+extension Achievements.Tier {
+    static let numerals = ["Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ", "Ⅴ"]
+
+    var title: String { "업적 · \(kind.name) \(Self.numerals[min(level, Self.numerals.count - 1)])" }
 }
 
 extension SpriteTheme {

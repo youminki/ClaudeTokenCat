@@ -96,6 +96,7 @@ extension GameSession {
             }
         }
         drawTrail(cg, groundY: groundY, time: time)
+        drawBuddy(cg, groundY: groundY, time: time)
         // 보호막이 깨진 뒤 지나가는 동안은 깜빡인다
         let blink = game.invulnerable > 0 && Int(time * 18) % 2 == 0
         cg.saveGState()
@@ -108,24 +109,8 @@ extension GameSession {
         // 파티클
         for p in particles {
             let alpha = max(0, min(1, p.life / p.total))
-            let r = p.size
-            let center = CGPoint(p.position.x, ground(Double(p.position.y)))
-            switch p.shape {
-            case .dot:
-                cg.setFillColor(p.color.withAlphaComponent(alpha).cgColor)
-                cg.fillEllipse(in: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
-            case .heart:
-                Self.fillHeart(cg, at: center, size: r * 2.2, color: p.color.withAlphaComponent(alpha))
-            case .spark:
-                SpriteEffects.sparkle(cg, at: center, radius: r * 1.6, color: p.color.withAlphaComponent(alpha))
-            case .coin:
-                if let image = GameSprite.coin.frame(at: time + Double(r)) {
-                    cg.saveGState()
-                    cg.setAlpha(alpha)
-                    GameAssets.draw(image, in: CGRect(x: center.x - r * 2, y: center.y - r * 2, width: r * 4, height: r * 4), cg)
-                    cg.restoreGState()
-                }
-            }
+            GameFX.drawParticle(p.shape, color: p.color, at: CGPoint(p.position.x, ground(Double(p.position.y))), size: p.size,
+                                alpha: alpha, progress: 1 - alpha, seed: p.seed, time: time, cg)
         }
 
         // 먹은 코인이 왼쪽 위 코인 수로 날아간다

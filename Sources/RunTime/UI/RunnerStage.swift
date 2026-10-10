@@ -431,6 +431,17 @@ final class StageModel: ObservableObject {
         cg.fillEllipse(in: CGRect(x: origin.x + bounds.midX * scale - shadowW / 2, y: groundY - 2.5,
                                   width: shadowW, height: 5))
 
+        // 상점에서 데려간 동료가 러너 뒤를 따라 걷는다 (멈춰 있으면 제자리에서 숨 쉰다)
+        if let buddy = GameWallet.shared.equipped(.buddy) {
+            let x = origin.x + bounds.minX * scale - 22
+            let moving = speed > 1
+            let hop = moving ? CGFloat(abs(sin(Double(scroll) / 14 * .pi))) * 2 : 0
+            cg.setFillColor(NSColor.black.withAlphaComponent(0.22).cgColor)
+            cg.fillEllipse(in: CGRect(x: x - 14, y: groundY - 2.5, width: 28, height: 5))
+            GameFX.drawBuddy(buddy, feet: CGPoint(x: x, y: groundY - hop),
+                             step: moving ? Double(scroll) / 14 : Double(time) * 1.5, scale: 2, cg)
+        }
+
         if isSpace && playing == nil { drawStarStreaks(cg, size: size, time: time, groundY: groundY) }
         if display == .normal(.dashing) || (isSpace && playing == nil) {
             drawWind(cg, size: size, time: time, groundY: groundY, strong: isSpace)
