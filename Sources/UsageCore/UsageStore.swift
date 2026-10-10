@@ -5,6 +5,8 @@ public final class UsageStore {
 
     /// 스파크라인 창: 최근 30분, 1분 버킷 (§F3).
     public static let sparklineMinutes = 30
+    /// 일별 합계에 넣는 날 수 (오늘 포함). 보관 기간(8×24시간)으로는 8일 전 날이 중간부터만 남아 그날은 뺀다.
+    public static let dailyDays = 8
 
     public struct Snapshot: Sendable {
         public let todayTokens: Int
@@ -74,6 +76,7 @@ public final class UsageStore {
             let dayStart = calendar.startOfDay(for: now)
             let weekStart = weeklySince ?? WeeklyWindow.rollingStart(now: now)
             let sparkStart = now.addingTimeInterval(-Double(Self.sparklineMinutes) * 60)
+            let firstDay = calendar.date(byAdding: .day, value: -(Self.dailyDays - 1), to: dayStart) ?? dayStart
 
             var todayTokens = 0
             var todayCost = 0.0
@@ -94,11 +97,13 @@ public final class UsageStore {
                     if event.isProgrammatic { todayProgrammatic += tokens }
                 }
                 let eventDay = calendar.startOfDay(for: event.timestamp)
-                daily[eventDay, default: (0, 0, [:], [:], [:])].tokens += tokens
-                daily[eventDay]!.cost += cost
-                daily[eventDay]!.models[event.model, default: 0] += tokens
-                daily[eventDay]!.projects[event.project ?? "", default: 0] += tokens
-                daily[eventDay]!.projectCost[event.project ?? "", default: 0] += cost
+                if eventDay >= firstDay {
+                    daily[eventDay, default: (0, 0, [:], [:], [:])].tokens += tokens
+                    daily[eventDay]!.cost += cost
+                    daily[eventDay]!.models[event.model, default: 0] += tokens
+                    daily[eventDay]!.projects[event.project ?? "", default: 0] += tokens
+                    daily[eventDay]!.projectCost[event.project ?? "", default: 0] += cost
+                }
                 if event.timestamp > now.addingTimeInterval(-60) {
                     last60s += tokens
                 }

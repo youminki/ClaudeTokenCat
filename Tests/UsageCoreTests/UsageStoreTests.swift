@@ -144,6 +144,22 @@ struct UsageStoreTests {
         #expect(snap.dailyTotals.map(\.tokens).reduce(0, +) == 100)
     }
 
+    @Test func dailyTotalsSkipPartialOldestDay() {
+        let store = UsageStore()
+        let calendar = Calendar.current
+        let now = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: Date())!
+        let today = calendar.startOfDay(for: now)
+        // 8×24시간 보관이라 8일 전 날은 오후 기록만 남는다. 일별 합계에는 오늘부터 7일 전까지만 넣는다
+        store.add([
+            event(minutesAgo: now.timeIntervalSince(today.addingTimeInterval(-7 * 86_400 + 3600)) / 60,
+                  tokens: 100, id: "first", now: now),
+            event(minutesAgo: 8 * 24 * 60 - 60, tokens: 999, id: "partial", now: now),
+        ])
+        let days = store.snapshot(now: now).dailyTotals
+        #expect(days.count == 1)
+        #expect(days.first?.tokens == 100)
+    }
+
     @Test func dailyTotalsSplitByProject() {
         let store = UsageStore()
         let now = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: Date())!

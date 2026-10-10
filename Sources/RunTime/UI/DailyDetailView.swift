@@ -46,16 +46,34 @@ struct DailyDetailView: View {
 
     // MARK: 막대
 
+    /// 막대 한 칸. 쓰지 않은 날도 칸을 두어 날짜 간격이 그대로 보이게 한다.
+    private struct ChartDay {
+        let dayStart: Date
+        let total: UsageStore.DailyTotal?
+        var tokens: Int { total?.tokens ?? 0 }
+    }
+
+    /// 오늘부터 거슬러 올라간 8일 (오래된 날부터).
+    private func chartDays(_ totals: [UsageStore.DailyTotal]) -> [ChartDay] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let byDay = Dictionary(totals.map { ($0.dayStart, $0) }, uniquingKeysWith: { first, _ in first })
+        return (0..<UsageStore.dailyDays).reversed().compactMap { back in
+            calendar.date(byAdding: .day, value: -back, to: today).map { ChartDay(dayStart: $0, total: byDay[$0]) }
+        }
+    }
+
     private func chart(_ totals: [UsageStore.DailyTotal]) -> some View {
-        let days = totals.sorted { $0.dayStart < $1.dayStart }
+        let days = chartDays(totals)
         let peak = CGFloat(max(days.map(\.tokens).max() ?? 1, 1))
-        let average = CGFloat(days.map(\.tokens).reduce(0, +)) / CGFloat(max(days.count, 1))
+        // 위 요약과 같게 쓴 날만으로 평균을 낸다
+        let average = CGFloat(totals.map(\.tokens).reduce(0, +)) / CGFloat(max(totals.count, 1))
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 if let index = hover.index, days.indices.contains(index) {
                     let day = days[index]
                     Text(dayTitle(day.dayStart)).font(.system(size: 12, weight: .semibold))
-                    Text("\(Format.tokens(day.tokens)) · \(Format.usd(day.costUSD))")
+                    Text(day.total.map { "\(Format.tokens($0.tokens)) · \(Format.usd($0.costUSD))" } ?? "쓰지 않음")
                         .font(.system(size: 12).monospacedDigit()).foregroundStyle(.secondary)
                 } else {
                     Text("날짜별 토큰").font(.system(size: 12, weight: .semibold))
@@ -66,13 +84,19 @@ struct DailyDetailView: View {
             GeometryReader { geo in
                 let height = geo.size.height
                 ZStack(alignment: .bottomLeading) {
-                    HStack(alignment: .bottom, spacing: 10) {
+                    HStack(alignment: .bottom, spacing: 8) {
                         ForEach(Array(days.enumerated()), id: \.element.dayStart) { index, day in
-                            stackedBar(day, height: max(height * CGFloat(day.tokens) / peak, 3))
-                                .opacity(hover.index == nil || hover.index == index ? 1 : 0.4)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                                .contentShape(Rectangle())   // 낮은 막대도 칸 전체에서 가리킬 수 있게
-                                .onHover { hover.update(index, $0) }
+                            Group {
+                                if let total = day.total {
+                                    stackedBar(total, height: max(height * CGFloat(total.tokens) / peak, 3))
+                                } else {
+                                    RoundedRectangle(cornerRadius: 1.5).fill(Color.primary.opacity(0.08)).frame(height: 3)
+                                }
+                            }
+                            .opacity(hover.index == nil || hover.index == index ? 1 : 0.4)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                            .contentShape(Rectangle())   // 낮은 막대도 칸 전체에서 가리킬 수 있게
+                            .onHover { hover.update(index, $0) }
                         }
                     }
                     // 평균선
@@ -82,24 +106,26 @@ struct DailyDetailView: View {
                         path.addLine(to: CGPoint(x: geo.size.width, y: y))
                     }
                     .stroke(Palette.green, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    .allowsHitTesting(false)
                     Text("평균")
                         .font(.system(size: 9.5, weight: .semibold))
                         .foregroundStyle(Palette.green)
                         .padding(.horizontal, 4)
                         .background(Capsule().fill(Palette.groupedRow))
                         .position(x: geo.size.width - 12, y: max(y - 8, 6))
+                        .allowsHitTesting(false)
                 }
             }
             .frame(height: 120)
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 ForEach(days, id: \.dayStart) { day in
                     Text(weekday(day.dayStart))
                         .font(.system(size: 10, weight: isToday(day.dayStart) ? .bold : .regular))
-                        .foregroundStyle(isToday(day.dayStart) ? .primary : .secondary)
+                        .foregroundStyle(isToday(day.dayStart) ? .primary : day.total == nil ? .tertiary : .secondary)
                         .frame(maxWidth: .infinity)
                 }
             }
-            legend(families(in: days))
+            legend(families(in: totals))
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.groupedRow))
@@ -275,9 +301,10 @@ struct DailyDetailView: View {
     private static func color(for family: String) -> Color {
         switch family {
         case "Fable": return Palette.orange
+        // 쌓인 막대에서 바로 갈라 보이게 색상환에서 떨어진 색을 쓴다
         case "Opus": return Palette.indigo
-        case "Sonnet": return Palette.blue
-        case "Haiku": return Palette.teal
+        case "Sonnet": return Palette.teal
+        case "Haiku": return Palette.green
         default: return Palette.gray
         }
     }
