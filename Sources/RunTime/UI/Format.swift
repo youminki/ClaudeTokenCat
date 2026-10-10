@@ -1,10 +1,12 @@
 import Foundation
 
 enum Format {
-    /// 1_240_000 → "1.24M", 532_100 → "532K"
+    /// 1_240_000 → "1.24M", 532_100 → "532K", 2_310_000_000 → "2.31B"
+    /// 반올림해 다음 단위가 되는 값(999_600 → "1000K")은 다음 단위로 쓴다.
     static func tokens(_ n: Int) -> String {
         switch n {
-        case 1_000_000...: return String(format: "%.2fM", Double(n) / 1_000_000)
+        case 999_995_000...: return String(format: "%.2fB", Double(n) / 1_000_000_000)
+        case 999_500...: return String(format: "%.2fM", Double(n) / 1_000_000)
         case 1_000...: return String(format: "%.0fK", Double(n) / 1_000)
         default: return "\(n)"
         }
