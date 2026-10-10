@@ -145,6 +145,7 @@ struct PopoverView: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
+        .accessibilityLabel("동작")
         // 지쳤거나 한도 경고 중에는 메뉴바 러너가 그 모습을 유지해야 해서 동작을 받지 않는다
         .disabled(display == .tired || display == .alert)
         .help(display == .tired || display == .alert ? "한도에 가까워 쉬는 중이라 동작을 하지 않아요" : "동작 해보기")
