@@ -146,6 +146,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             .sink { GlobalHotKey.shared.setEnabled($0) }
             .store(in: &cancellables)
 
+        // 알림을 누르면 그 내용을 볼 수 있는 화면을 연다
+        Notifier.shared.onOpen = { [weak self] destination in
+            guard let self else { return }
+            switch destination {
+            case .usage:
+                NSApp.activate(ignoringOtherApps: true)
+                if self.popover?.isShown != true { self.togglePopover() }
+            case .daily:
+                self.openDailyDetail()
+            }
+        }
         Notifier.shared.requestAuthorization()
         engine.start()
         // 처음 설치한 사람에게만 한 번. 러너가 메뉴바에 자리 잡은 뒤에 띄운다

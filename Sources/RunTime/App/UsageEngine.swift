@@ -352,7 +352,7 @@ final class UsageEngine: ObservableObject {
         let summary = store.summary(from: boundary.addingTimeInterval(-WeeklyWindow.duration), to: boundary)
         guard summary.tokens > 0 else { return }
         let body = Self.describe(summary)
-        DispatchQueue.main.async { Notifier.shared.send(title: "지난주 Claude 사용 요약", body: body) }
+        DispatchQueue.main.async { Notifier.shared.send(title: "지난주 Claude 사용 요약", body: body, opens: .daily) }
     }
 
     static func describe(_ summary: UsageStore.PeriodSummary) -> String {
