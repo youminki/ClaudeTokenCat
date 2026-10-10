@@ -9,6 +9,21 @@ cd "$(dirname "$0")"
 
 echo "RunTime 설치를 시작합니다"
 
+# 앱 안 업데이트와 직접 실행이 겹치면 같은 .build를 함께 고쳐 빌드가 깨진다. 한 번에 하나만 돈다
+# TMPDIR은 앱이 띄운 셸과 터미널이 달라 늘 같은 자리에 둔다
+mkdir -p "$HOME/Library/Caches/RunTime"
+LOCK="$HOME/Library/Caches/RunTime/install.lock"
+if ! mkdir "$LOCK" 2>/dev/null; then
+  # 강제로 끝나 남은 잠금(30분 넘음)은 치운다
+  if [ -n "$(find "$LOCK" -maxdepth 0 -mmin +30 2>/dev/null)" ]; then
+    rmdir "$LOCK" && mkdir "$LOCK"
+  else
+    echo "✗ 다른 설치가 진행 중입니다. 끝난 뒤 다시 실행하세요." >&2
+    exit 1
+  fi
+fi
+trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
+
 # 1) Swift 툴체인 확인
 if ! command -v swift > /dev/null; then
   echo "✗ Swift가 없습니다. Xcode 또는 Command Line Tools를 설치하세요:" >&2
