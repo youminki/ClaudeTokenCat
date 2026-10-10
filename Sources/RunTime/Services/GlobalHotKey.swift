@@ -135,6 +135,7 @@ final class HotKeyRecorder: ObservableObject {
     @Published private(set) var recording = false
     @Published var hint: String?
     private var monitor: Any?
+    private var resignObserver: Any?
 
     func toggle() { recording ? stop() : start() }
 
@@ -143,15 +144,24 @@ final class HotKeyRecorder: ObservableObject {
         recording = true
         hint = nil
         GlobalHotKey.shared.suspend()
+        // 기록하던 창만 키를 받는다. 기록 중에 창을 닫거나 다른 창으로 가면 멈춘다
+        // (그대로 두면 앱의 모든 키를 삼키고 단축키도 꺼진 채 남는다).
+        let window = NSApp.keyWindow
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard window == nil || event.window === window else { return event }
             self?.handle(event)
             return nil
         }
+        resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: window,
+                                                                queue: .main) { [weak self] _ in self?.stop() }
     }
 
     func stop() {
+        guard recording else { return }
         if let monitor { NSEvent.removeMonitor(monitor) }
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
         monitor = nil
+        resignObserver = nil
         recording = false
         GlobalHotKey.shared.resume()
     }
@@ -177,5 +187,6 @@ final class HotKeyRecorder: ObservableObject {
 
     deinit {
         if let monitor { NSEvent.removeMonitor(monitor) }
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
     }
 }
