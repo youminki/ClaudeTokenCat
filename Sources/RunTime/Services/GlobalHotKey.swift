@@ -135,7 +135,7 @@ final class HotKeyRecorder: ObservableObject {
     @Published private(set) var recording = false
     @Published var hint: String?
     private var monitor: Any?
-    private var resignObserver: Any?
+    private var observers: [Any] = []
 
     func toggle() { recording ? stop() : start() }
 
@@ -144,24 +144,29 @@ final class HotKeyRecorder: ObservableObject {
         recording = true
         hint = nil
         GlobalHotKey.shared.suspend()
-        // 기록하던 창만 키를 받는다. 기록 중에 창을 닫거나 다른 창으로 가면 멈춘다
-        // (그대로 두면 앱의 모든 키를 삼키고 단축키도 꺼진 채 남는다).
-        let window = NSApp.keyWindow
+        // 키를 받을 창이 바뀌거나 앱이 뒤로 가거나 창이 닫히면 멈춘다. 그대로 두면 앱의 모든 키를 삼키고
+        // 단축키도 꺼진 채 남는다. 기록을 누른 순간 키 창이 없을 수도 있어 키는 그때그때의 키 창에서 받는다.
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard window == nil || event.window === window else { return event }
+            guard event.window != nil, event.window === NSApp.keyWindow else { return event }
             self?.handle(event)
             return nil
         }
-        resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: window,
-                                                                queue: .main) { [weak self] _ in self?.stop() }
+        // 기록을 누른 창을 알면 그 창만 본다 (툴팁 같은 다른 창이 닫힐 때 멈추지 않게)
+        let window = NSApp.keyWindow
+        let center = NotificationCenter.default
+        observers = [NSWindow.didResignKeyNotification, NSWindow.willCloseNotification].map { name in
+            center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in self?.stop() }
+        }
+        observers.append(center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil,
+                                            queue: .main) { [weak self] _ in self?.stop() })
     }
 
     func stop() {
         guard recording else { return }
         if let monitor { NSEvent.removeMonitor(monitor) }
-        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+        observers.forEach(NotificationCenter.default.removeObserver)
         monitor = nil
-        resignObserver = nil
+        observers = []
         recording = false
         GlobalHotKey.shared.resume()
     }
@@ -187,6 +192,7 @@ final class HotKeyRecorder: ObservableObject {
 
     deinit {
         if let monitor { NSEvent.removeMonitor(monitor) }
-        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+        observers.forEach(NotificationCenter.default.removeObserver)
+        if recording { GlobalHotKey.shared.resume() }
     }
 }

@@ -63,6 +63,7 @@ struct SettingsView: View {
                         }
                         .controlSize(.small)
                     }
+                    .onDisappear { hotKeyRecorder.stop() }   // 다른 구역으로 넘어가면 기록을 멈춘다
                     if let hint = hotKeyRecorder.hint {
                         GroupedRow(hint) { EmptyView() }
                             .foregroundStyle(Palette.orange)
