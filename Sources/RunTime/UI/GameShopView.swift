@@ -225,7 +225,20 @@ struct GameShopView: View {
 }
 
 extension Cosmetic {
+    /// 기호가 없는 macOS(무지개·폭죽은 14부터)에서는 빈칸 대신 비슷한 기호를 쓴다.
     var icon: String {
+        NSImage(systemSymbolName: preferredIcon, accessibilityDescription: nil) != nil ? preferredIcon : fallbackIcon
+    }
+
+    private var fallbackIcon: String {
+        switch self {
+        case .rainbowTrail: "paintbrush.fill"
+        case .fireworksCrash: "party.popper.fill"
+        default: "sparkles"
+        }
+    }
+
+    private var preferredIcon: String {
         switch self {
         case .sparkleTrail: "sparkles"
         case .cometTrail: "wind"
