@@ -65,7 +65,8 @@ struct RunnerStage: View {
             model.popoverClosed()
             LeaderboardFeed.shared.stageDisappeared()
         }
-        .help(model.game == nil ? "러너를 누르면 장난을 쳐요" : "스페이스·↑·클릭 점프(길게 누르면 높이), ↓ 숙이기, esc 나가기")
+        .help(model.game == nil ? "러너를 누르면 장난을 쳐요"
+              : "스페이스·↑·클릭 점프(길게 누르면 높이), ↓ 숙이기, ←→ 이동, G·1·2 고스트와 겨루기, esc 나가기")
         .accessibilityElement(children: .contain)
         .accessibilityLabel(character.name)
         .accessibilityAddTraits(.isButton)

@@ -31,19 +31,14 @@ extension GameSession {
                                 position: CGPoint(12, 10), anchor: .topLeading))
             // 끝난 화면은 패널이 최고 점수를 보여 주고, 왼쪽 위 글자는 패널 가장자리와 겹친다
             if game.phase == .playing {
-                labels.append(Label(text: Text("최고 \(max(game.best, game.score))").font(small)
-                                        .foregroundColor(.white.opacity(0.75)),
-                                    position: CGPoint(12, 29), anchor: .topLeading))
-            }
-            if game.phase == .playing, !game.abilities.isEmpty {
-                var parts: [String] = []
-                if game.abilities.shields > 0 { parts.append("보호막 \(game.shieldsLeft)") }
-                if game.abilities.airJumps > 0 { parts.append("이단 점프") }
-                if game.abilities.magnet > 0 { parts.append("자석") }
-                if game.abilities.glide { parts.append("글라이드") }
-                labels.append(Label(text: Text(parts.joined(separator: " · ")).font(small)
-                                        .foregroundColor(Color(nsColor: NSColor(hex: 0x8FD3FF)).opacity(0.9)),
-                                    position: CGPoint(12, 57), anchor: .topLeading))
+                // 판 중에 바뀌는 능력은 보호막뿐이라 그것만 최고 점수 옆에 둔다.
+                // 능력 이름을 한 줄 더 쓰면 점프한 러너 머리와 겹친다.
+                var line = Text("최고 \(max(game.best, game.score))").foregroundColor(.white.opacity(0.75))
+                if game.abilities.shields > 0 {
+                    line = line + Text("  보호막 \(game.shieldsLeft)")
+                        .foregroundColor(Color(nsColor: NSColor(hex: 0x8FD3FF)).opacity(game.shieldsLeft > 0 ? 0.9 : 0.4))
+                }
+                labels.append(Label(text: line.font(small), position: CGPoint(12, 29), anchor: .topLeading))
             }
             if game.phase == .playing, game.coinsTaken > 0 || boosted {
                 let double = boosted ? "  ×2 Claude 작업 중" : ""

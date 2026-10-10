@@ -12,8 +12,7 @@ enum UIShots {
             print("failed: \(error)")
             exit(1)
         }
-        // 찍힌 그림에는 창 배경이 빠지므로 뷰 뒤에 배경을 직접 깐다. 팝오버는 실제 팝오버 바탕과 비슷한 색.
-        let popoverBackground = Theme.background
+        // 찍힌 그림에는 창 배경이 빠지므로 뷰 뒤에 배경을 직접 깐다. 팝오버는 PopoverView가 바탕을 칠한다.
         let windowBackground = Color(nsColor: .windowBackgroundColor)
         let screens: [(name: String, appearance: NSAppearance.Name, height: CGFloat?, view: AnyView)] = [
             ("popover", .darkAqua, nil, AnyView(PopoverView(engine: engine, settings: engine.settings))),

@@ -197,8 +197,8 @@ final class GameSession {
             case 124, 2:        // →, D
                 self.game.setMove(forward: down)
                 return nil
-            case 5, 18, 19 where self.game.phase != .playing:   // G 내 고스트, 1 전체 1위, 2 주간 1위 고스트
-                if down, !event.isARepeat {
+            case 5, 18, 19:     // G 내 고스트, 1 전체 1위, 2 주간 1위 고스트. 판 중에는 삼키기만 한다
+                if down, !event.isARepeat, self.game.phase != .playing {
                     switch event.keyCode {
                     case 5: self.startRace(self.savedGhost)
                     case 18: self.startRace(TopGhost.all.record)
