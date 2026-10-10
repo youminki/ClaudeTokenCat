@@ -30,7 +30,7 @@ struct LeaderboardView: View {
                 Text("팝오버 무대의 장애물 피하기 게임").font(.system(size: 12)).foregroundStyle(.secondary)
             }
             Spacer()
-            Button { state.load() } label: {
+            Button { state.load(keepVisible: true) } label: {
                 Image(systemName: "arrow.clockwise").font(.system(size: 12, weight: .semibold))
                     .frame(width: 26, height: 26)
                     .background(Circle().fill(Palette.groupedRow))
@@ -140,13 +140,18 @@ struct LeaderboardView: View {
                             .help("이미 올린 기록의 닉네임도 바꿉니다")
                     }
                 }
-                Button { state.forget() } label: {
+                Button { state.confirmingForget = true } label: {
                     GroupedRow("내 기록 지우기") { EmptyView() }
                         .foregroundStyle(Palette.red)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("서버에서 내 점수와 닉네임을 지우고 참여를 끕니다")
+                .confirmationDialog("서버에서 내 기록을 지울까요?", isPresented: $state.confirmingForget) {
+                    Button("지우기", role: .destructive) { state.forget() }
+                } message: {
+                    Text("내 점수, 닉네임, 고스트를 지우고 순위 참여를 끕니다. 되돌릴 수 없습니다.")
+                }
             }
             if board.isOn, !Leaderboard.isValid(nickname: board.nickname) {
                 Text("한글·영문·숫자로 2~12자를 넣어야 점수를 보냅니다.")
@@ -166,6 +171,7 @@ final class LeaderboardState: ObservableObject {
     @Published private(set) var message: String?
     @Published private(set) var notice: String?
     @Published private(set) var updated: Date?
+    @Published var confirmingForget = false
     private var timer: Timer?
 
     /// 창이 열려 있는 동안 30초마다 새로 받는다. 이미 보이는 표는 받는 동안에도 그대로 둔다.
