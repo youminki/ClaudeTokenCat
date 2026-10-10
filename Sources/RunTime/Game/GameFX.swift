@@ -16,13 +16,28 @@ enum GameFX {
     }
     private static var tinted: [TintKey: CGImage] = [:]
 
-    static func image(_ name: String) -> CGImage? {
-        if let cached = images[name] { return cached }
-        guard let url = Bundle.module.resourceURL?.appendingPathComponent("Assets/Game/\(name).png"),
+    static func image(_ name: String, folder: String = "Game") -> CGImage? {
+        let key = folder + "/" + name
+        if let cached = images[key] { return cached }
+        guard let url = Bundle.module.resourceURL?.appendingPathComponent("Assets/\(folder)/\(name).png"),
               let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
-        images[name] = image
+        images[key] = image
         return image
+    }
+
+    /// Fluent Emoji 3D 그림 하나 (Assets/Fluent, MIT). 가운데에 맞춰 돌려 그린다.
+    static func drawArt(_ name: String, at center: CGPoint, size: CGFloat, alpha: CGFloat = 1, rotation: CGFloat = 0,
+                        flip: Bool = false, _ cg: CGContext) {
+        guard alpha > 0.01, size > 0.5, let image = image(name, folder: "Fluent") else { return }
+        cg.saveGState()
+        cg.setAlpha(alpha)
+        cg.interpolationQuality = .high
+        cg.translateBy(x: center.x, y: center.y)
+        cg.scaleBy(x: flip ? -1 : 1, y: -1)
+        if rotation != 0 { cg.rotate(by: -rotation) }
+        cg.draw(image, in: CGRect(x: -size / 2, y: -size / 2, width: size, height: size))
+        cg.restoreGState()
     }
 
     /// 흰 그림의 밝기는 두고 색만 바꾼 그림. 색마다 한 번만 만든다.
@@ -65,6 +80,8 @@ enum GameFX {
     enum Shape: Equatable {
         case dot, heart, coin, spark
         case texture(Texture)
+        /// Fluent 그림. 떨어지며 빙글 돈다.
+        case art(String)
     }
 
     /// 입자 하나. `progress`는 0(막 생김)에서 1(사라짐).
@@ -85,6 +102,8 @@ enum GameFX {
                 GameAssets.draw(image, in: CGRect(x: center.x - r * 2, y: center.y - r * 2, width: r * 4, height: r * 4), cg)
                 cg.restoreGState()
             }
+        case .art(let name):
+            drawArt(name, at: center, size: r * 5, alpha: alpha, rotation: (seed - 0.5) * 2 + progress * (seed - 0.5) * 5, cg)
         case .texture(let texture):
             // 연기는 퍼지며 커지고, 고리는 크게 번진다
             let grow: CGFloat = switch texture {
@@ -107,6 +126,11 @@ enum GameFX {
         cg.saveGState()
         cg.setLineCap(.round)
         let count = CGFloat(points.count)
+        if let art = item.art {
+            drawArtTrail(item, art: art, points: points, time: time, cg)
+            cg.restoreGState()
+            return
+        }
         switch item {
         case .rainbowTrail:
             for (band, color) in SpriteEffects.rainbow.enumerated() {
@@ -206,6 +230,69 @@ enum GameFX {
         cg.restoreGState()
     }
 
+    /// 그림 꼬리. 꽃잎·잎·눈은 팔랑이며 떨어지고, 비눗방울은 떠오르며 커지고, 사탕은 돈다.
+    private static func drawArtTrail(_ item: Cosmetic, art: String, points: [CGPoint], time: Double, _ cg: CGContext) {
+        let count = CGFloat(points.count)
+        for (i, point) in points.enumerated() where i % 3 == 1 {
+            let t = CGFloat(i) / count          // 러너 쪽이 1
+            let age = 1 - t
+            let phase = time * 3 + Double(i) * 0.8
+            var p = point
+            var rotation: CGFloat = 0
+            var size = 7 + 6 * t
+            switch item {
+            case .bubbleTrail:
+                p.y -= age * 14 + CGFloat(sin(phase)) * 2
+                p.x += CGFloat(sin(phase * 0.7)) * 3
+                size = 6 + 9 * age
+            case .candyTrail:
+                rotation = CGFloat(phase)
+            default:
+                // 팔랑이며 아래로 떨어진다
+                p.y += age * 10
+                p.x += CGFloat(sin(phase)) * 4 * age
+                rotation = CGFloat(sin(phase * 0.9)) * 0.9
+            }
+            drawArt(art, at: p, size: size, alpha: 0.25 + 0.75 * t, rotation: rotation, cg)
+        }
+    }
+
+    // MARK: 동료·모자
+
+    /// 동료 한 프레임. `feet`는 발이 닿는 자리. Kenney 도트는 1pt에 원본 1px(`scale`배), Fluent 펫은 키 `24 × scale`pt.
+    static func drawPet(_ item: Cosmetic, feet: CGPoint, step: Double, scale: CGFloat = 1, moving: Bool, _ cg: CGContext) {
+        if let art = item.art {
+            let size = 24 * scale
+            // 통통 튀며 달리고, 서 있을 때는 숨 쉬듯 흔들린다
+            let hop = moving ? CGFloat(abs(sin(step * .pi))) * 3 * scale : CGFloat(sin(step * 2)) * 0.6 * scale
+            let tilt = moving ? CGFloat(sin(step * .pi * 2)) * 0.08 : 0
+            drawArt(art, at: CGPoint(x: feet.x, y: feet.y - size / 2 - hop + 1), size: size, rotation: tilt, cg)
+        } else {
+            drawBuddy(item, feet: feet, step: step, scale: scale, cg)
+        }
+    }
+
+    /// 모자와 얼굴 꾸미기. 캐릭터를 그린 설계 좌표 안에서 부른다.
+    static func drawAccessories(hat: Cosmetic?, face: Cosmetic?, on scene: CharacterScene, _ cg: CGContext) {
+        // 뒤도는 동안 몸이 옆으로 설 때는 모자만 덩그러니 남지 않게 잠깐 감춘다
+        guard hat != nil || face != nil, abs(scene.transform.scaleX) > 0.3, let head = scene.headAnchor else { return }
+        let flip = scene.transform.scaleX < 0
+        // 고래·슬라임처럼 머리가 곧 몸인 러너는 머리 폭이 커서 몸 높이로 크기를 묶는다
+        let limit = max(scene.placedBounds.height * 0.42, 3.5)
+        if let face, let art = face.art {
+            let size = min(max(head.width * 0.95, 3), limit * 0.85)
+            drawArt(art, at: CGPoint(x: head.eye.x - (flip ? -1 : 1) * size * 0.12, y: head.eye.y + size * 0.02), size: size,
+                    rotation: head.tilt, flip: flip, cg)
+        }
+        if let hat, let art = hat.art {
+            let size = min(max(head.width * 1.15, 3.5), limit)
+            // 그림 아래 여백만큼 머리에 살짝 묻는다
+            let up = CGPoint(x: sin(head.tilt) * size * 0.3, y: -cos(head.tilt) * size * 0.3)
+            drawArt(art, at: CGPoint(x: head.top.x + up.x, y: head.top.y + up.y), size: size, rotation: head.tilt,
+                    flip: flip, cg)
+        }
+    }
+
     // MARK: 발먼지·부딪힘
 
     struct Spray {
@@ -226,6 +313,10 @@ enum GameFX {
     static func dust(_ item: Cosmetic?, landing: Bool) -> Spray {
         let count = landing ? 4 : 5
         let speed: CGFloat = landing ? 30 : 40
+        if let item, let art = item.art {
+            return Spray(count: landing ? 2 : 1, colors: [item.color], shape: .art(art), speed: speed * 0.8, life: 0.6,
+                         size: 1.2...1.8, gravity: 80, drift: 1)
+        }
         switch item {
         case .cloudDust:
             return Spray(count: 3, colors: [item!.color], shape: .texture(.smoke), speed: speed * 0.7, life: 0.55,
@@ -263,6 +354,25 @@ enum GameFX {
                                   size: 4...4, spread: 2, gravity: 0)),
                     (.zero, Spray(count: 12, colors: [NSColor(hex: 0xC68CFF), NSColor(hex: 0xFF9AE0), .white],
                                   shape: .texture(.star), speed: 130, life: 0.8, size: 1.2...2.0, spread: 2, gravity: 60))]
+        case .boomCrash:
+            return [(.zero, Spray(count: 1, colors: [.white], shape: .art("collision"), speed: 0, life: 0.5, size: 6...6,
+                                  spread: 2, gravity: 0)),
+                    (.zero, Spray(count: 10, colors: [NSColor(hex: 0xFFE14D), NSColor(hex: 0xFF8A3D)], shape: .texture(.star),
+                                  speed: 150, life: 0.6, size: 1.0...1.6, spread: 2))]
+        case .balloonCrash:
+            return [(.zero, Spray(count: 5, colors: [.white], shape: .art("balloon"), speed: 40, life: 1.4, size: 1.6...2.2,
+                                  gravity: -90))]
+        case .sweetCrash:
+            return ["donut", "candy", "lollipop"].map { art in
+                (.zero, Spray(count: 4, colors: [.white], shape: .art(art), speed: 150, life: 1.1, size: 1.3...1.9, spread: 2))
+            }
+        case .confettiCrash:
+            return [(CGPoint(x: 0, y: 6), Spray(count: 1, colors: [.white], shape: .art("confetti"), speed: 0, life: 0.9,
+                                                size: 4.5...4.5, spread: 2, gravity: 0)),
+                    (CGPoint(x: -14, y: 0), Spray(count: 2, colors: [.white], shape: .art("popper"), speed: 60, life: 0.9,
+                                                  size: 2.2...2.6, gravity: 120)),
+                    (.zero, Spray(count: 18, colors: SpriteEffects.rainbow, shape: .texture(.star), speed: 170, life: 1.0,
+                                  size: 0.9...1.5, spread: 2, gravity: 120))]
         case .flameCrash:
             return [(.zero, Spray(count: 14, colors: [NSColor(hex: 0xFFE14D), NSColor(hex: 0xFF8A3D), NSColor(hex: 0xFF4A1F)],
                                   shape: .texture(.flame), speed: 90, life: 0.75, size: 1.6...2.6, gravity: -160)),
@@ -295,7 +405,7 @@ enum GameFX {
     /// 동료 한 프레임. `feet`는 발이 닿는 자리, 1pt에 원본 1px.
     static func drawBuddy(_ item: Cosmetic, feet: CGPoint, step: Double, scale: CGFloat = 1, _ cg: CGContext) {
         guard let names = item.buddyFrames else { return }
-        let frames = names.compactMap(image)
+        let frames = names.compactMap { image($0) }
         guard !frames.isEmpty else { return }
         let image = frames[Int(step) % frames.count]
         let w = CGFloat(image.width) * scale, h = CGFloat(image.height) * scale

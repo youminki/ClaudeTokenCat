@@ -18,3 +18,6 @@ http://creativecommons.org/publicdomain/zero/1.0/
 
 글꼴: Galmuri11 Bold v2.40.4 (https://github.com/quiple/galmuri), SIL Open Font License 1.1 (Galmuri-OFL.txt).
   한글·영문·기호만 남기고 줄였다 (pyftsubset).
+
+3D 그림: Microsoft Fluent Emoji (https://github.com/microsoft/fluentui-emoji), MIT License (Assets/Fluent/LICENSE.txt).
+  Assets/Fluent의 3D PNG를 96px로 줄였다. 펫, 모자, 얼굴 꾸미기, 그림 입자, 퀘스트·상점 아이콘에 쓴다.

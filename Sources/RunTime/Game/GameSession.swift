@@ -366,9 +366,10 @@ final class GameSession {
             let reward = completed.reduce(0) { $0 + $1.coins }
             // 줄이 길면 무대 폭을 넘어 첫 보상과 개수만 쓴다
             let what = completed.count == 1 ? completed[0].title : "\(completed[0].title) 외 \(completed.count - 1)개"
-            announce("완료: \(what) +\(reward)", sound: false)
+            announce("\(what) +\(reward) · 퀘스트에서 받기", sound: false)
         }
-        return !completed.isEmpty
+        // 출석·레벨만 오른 판은 미션 음악을 내지 않는다 (날마다 첫 판이 늘 미션 음악이 되지 않게)
+        return completed.contains { $0.id.first.map("dwa".contains) ?? false }
     }
 
     func announce(_ text: String, sound: Bool = true) {

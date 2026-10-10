@@ -227,7 +227,8 @@ struct PopoverView: View {
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(section == .quests && questsLeft > 0 ? "\(section.title), 남은 미션 \(questsLeft)개" : section.title)
+                .accessibilityLabel(section == .quests && questsLeft > 0
+                    ? "\(section.title), \(wallet.pending.isEmpty ? "남은 미션" : "받을 보상") \(questsLeft)개" : section.title)
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
@@ -236,7 +237,9 @@ struct PopoverView: View {
         .overlay(Capsule().strokeBorder(Theme.hairline))
     }
 
+    /// 받을 보상이 있으면 그 수, 없으면 오늘 남은 미션 수.
     private var questsLeft: Int {
+        if !wallet.pending.isEmpty { return wallet.pending.count }
         let daily = wallet.missions
         return daily.missions.count - daily.doneCount
     }

@@ -438,8 +438,8 @@ final class StageModel: ObservableObject {
             let hop = moving ? CGFloat(abs(sin(Double(scroll) / 14 * .pi))) * 2 : 0
             cg.setFillColor(NSColor.black.withAlphaComponent(0.22).cgColor)
             cg.fillEllipse(in: CGRect(x: x - 14, y: groundY - 2.5, width: 28, height: 5))
-            GameFX.drawBuddy(buddy, feet: CGPoint(x: x, y: groundY - hop),
-                             step: moving ? Double(scroll) / 14 : Double(time) * 1.5, scale: 2, cg)
+            GameFX.drawPet(buddy, feet: CGPoint(x: x, y: groundY - (buddy.art == nil ? hop : 0)),
+                           step: moving ? Double(scroll) / 14 : Double(time) * 1.5, scale: 2, moving: moving, cg)
         }
 
         if isSpace && playing == nil { drawStarStreaks(cg, size: size, time: time, groundY: groundY) }
@@ -459,6 +459,7 @@ final class StageModel: ObservableObject {
                                  tint: .white, outline: 0.36)
         look.alarm = display == .alert && playing == nil
         scene.draw(in: cg, look: look)
+        GameFX.drawAccessories(hat: GameWallet.shared.equipped(.hat), face: GameWallet.shared.equipped(.face), on: scene, cg)
         if playing == nil {
             display.drawLoopEffects(in: cg, scene: scene, phase: loopPhase, tint: .white, front: true, leftEdge: leftEdge)
         }

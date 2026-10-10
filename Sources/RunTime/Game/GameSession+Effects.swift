@@ -121,7 +121,8 @@ extension GameSession {
         let running = game.phase == .playing
         let step = running ? game.distance / 18 : time * 2
         let bob = running && lift == 0 ? CGFloat(abs(sin(game.distance / 18 * .pi))) * 1.5 : 0
-        GameFX.drawBuddy(item, feet: CGPoint(x, groundY - lift - bob), step: step, cg)
+        GameFX.drawPet(item, feet: CGPoint(x, groundY - lift - (item.art == nil ? bob : 0)), step: step, moving: running && lift == 0,
+                       cg)
     }
 
     // MARK: 화면 효과

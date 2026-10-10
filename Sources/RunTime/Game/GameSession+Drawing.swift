@@ -196,6 +196,10 @@ extension GameSession {
         let look = CharacterLook(rich: true, palette: theme.richPalette(rig.palette, phase: CGFloat(time / 6)),
                                  tint: .white, outline: 0.36)
         scene.draw(in: cg, look: look)
+        // 모자·안경은 내 러너에만 (고스트는 그 판의 모습만 남긴다)
+        if game === self.game {
+            GameFX.drawAccessories(hat: GameWallet.shared.equipped(.hat), face: GameWallet.shared.equipped(.face), on: scene, cg)
+        }
         for effect in frame.effects { effect.draw(in: cg, around: scene.placedBounds, tint: .white) }
         cg.restoreGState()
     }

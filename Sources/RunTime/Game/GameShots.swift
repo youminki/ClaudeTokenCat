@@ -57,13 +57,15 @@ enum GameShots {
             if game.phase == .over { break }
         }
         // 꾸미기를 단 모습 (꼬리 셋, 발먼지)
-        let looks: [(trail: Cosmetic, dust: Cosmetic, buddy: Cosmetic)] = [
-            (.rainbowTrail, .rainbowDust, .greenBuddy), (.fireTrail, .cloudDust, .boxBuddy), (.noteTrail, .starDust, .pinkBuddy),
-            (.heartTrail, .heartDust, .tinyBuddy), (.magicTrail, .starDust, .beigeBuddy), (.smokeTrail, .cloudDust, .yellowBuddy),
-            (.sparkTrail, .goldDust, .blueBuddy),
+        let looks: [(trail: Cosmetic, dust: Cosmetic, buddy: Cosmetic, hat: Cosmetic)] = [
+            (.rainbowTrail, .rainbowDust, .greenBuddy, .crownHat), (.fireTrail, .cloudDust, .foxPet, .topHat),
+            (.noteTrail, .starDust, .unicornPet, .capHat), (.heartTrail, .heartDust, .tinyBuddy, .ribbonHat),
+            (.magicTrail, .starDust, .dragonPet, .gradHat), (.smokeTrail, .cloudDust, .yellowBuddy, .helmetHat),
+            (.sparkTrail, .goldDust, .blueBuddy, .headphoneHat), (.blossomTrail, .sparkleDust, .pandaPet, .sunHat),
+            (.bubbleTrail, .noteDust, .penguinPet, .pumpkinHat),
         ]
-        for (item, dust, buddy) in looks where game.phase == .playing {
-            GameWallet.shared.preview = [item, dust, buddy, .magicCrash]
+        for (item, dust, buddy, hat) in looks where game.phase == .playing {
+            GameWallet.shared.preview = [item, dust, buddy, hat, .sunglassesFace, .confettiCrash]
             step(0.5, autoplay: true)
             try shot("2-play-\(item.rawValue)")
         }
@@ -224,5 +226,46 @@ enum GameFrames {
         }
         GameWallet.shared.preview = nil
         print("frames \(index)")
+    }
+}
+
+/// 모자·안경 점검 (`--accessory-sheet <파일>`): 모든 러너에 왕관과 선글라스를 씌운 모습을 한 장에 모아 PNG로 저장한다.
+enum AccessorySheet {
+    @MainActor
+    static func run(to url: URL, hat: Cosmetic = .crownHat, face: Cosmetic = .sunglassesFace) throws {
+        let runners = Runner.allCases
+        let cell = CGSize(width: 140, height: 84), columns = 7
+        let rows = (runners.count + columns - 1) / columns
+        let size = CGSize(width: cell.width * CGFloat(columns), height: cell.height * CGFloat(rows))
+        guard let cg = CGContext(data: nil, width: Int(size.width * 2), height: Int(size.height * 2), bitsPerComponent: 8,
+                                 bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+        // 무대와 같은 위가 0인 좌표로 그린다
+        cg.translateBy(x: 0, y: size.height * 2)
+        cg.scaleBy(x: 2, y: -2)
+        cg.setFillColor(NSColor(hex: 0x1B2140).cgColor)
+        cg.fill(CGRect(origin: .zero, size: size))
+        for (i, runner) in runners.enumerated() {
+            let origin = CGPoint(x: CGFloat(i % columns) * cell.width, y: CGFloat(i / columns) * cell.height)
+            let character = runner.character
+            // 서기, 달리기, 뒤돈 모습 (모자가 뒤집히지 않는지)
+            let poses: [(CharacterPose.Activity, CGFloat)] = [(.stand, 1), (.run, 1), (.stand, -1)]
+            for (k, (activity, facing)) in poses.enumerated() {
+                var turn = CharacterTransform()
+                turn.scaleX = facing
+                let scene = CharacterScene(rig: character.rig, pose: CharacterPose(activity: activity, phase: 0.3), transform: turn)
+                let scale: CGFloat = 1.9
+                cg.saveGState()
+                cg.translateBy(x: origin.x + CGFloat(k) * 46 + 2, y: origin.y + 4)
+                cg.scaleBy(x: scale, y: scale)
+                let look = CharacterLook(rich: true, palette: character.theme(.auto).richPalette(character.rig.palette, phase: 0),
+                                         tint: .white, outline: 0.36)
+                scene.draw(in: cg, look: look)
+                GameFX.drawAccessories(hat: hat, face: face, on: scene, cg)
+                cg.restoreGState()
+            }
+        }
+        guard let image = cg.makeImage() else { return }
+        try NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: url)
     }
 }

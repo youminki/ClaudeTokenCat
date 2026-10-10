@@ -38,6 +38,44 @@ struct CharacterScene {
         return bounds.applying(affine)
     }
 
+    /// 모자·안경을 얹을 자리 (설계 좌표, 변형까지 적용). 앞쪽 눈과 그 눈을 품은 가장 작은 몸 부품을 머리로 본다.
+    /// 눈이 없는 그림 러너(내 그림, Petdex)는 그림 윗부분 앞쪽을 머리로 어림한다.
+    struct HeadAnchor {
+        let eye: CGPoint
+        let top: CGPoint
+        let width: CGFloat
+        /// 머리 기울기 (라디안).
+        let tilt: CGFloat
+    }
+
+    var headAnchor: HeadAnchor? {
+        guard !bounds.isNull else { return nil }
+        let t = affine
+        let scale = sqrt(t.a * t.a + t.b * t.b)
+        // 좌우로 뒤집힌 변형이면 기울기도 뒤집힌 쪽에서 잰다 (그대로 재면 π가 되어 모자가 거꾸로 선다)
+        let mirrored = t.a * t.d - t.b * t.c < 0
+        let tilt = mirrored ? atan2(-t.b, -t.a) : atan2(t.b, t.a)
+        let eyes = parts.filter { $0.layer == .eye }
+        if let eye = eyes.max(by: { $0.eyeCenter.x < $1.eyeCenter.x })?.eyeCenter {
+            let head = parts.filter { $0.layer == .base && $0.fill && $0.path.boundingBoxOfPath.contains(eye) }
+                .min { $0.path.boundingBoxOfPath.width * $0.path.boundingBoxOfPath.height
+                    < $1.path.boundingBoxOfPath.width * $1.path.boundingBoxOfPath.height }?
+                .path.boundingBoxOfPath
+                ?? CGRect(x: eye.x - 3, y: eye.y - 3, width: 6, height: 6)
+            // 눈 높이를 지나는 부품 가운데 가장 높은 곳이 정수리다 (고래처럼 눈이 몸 가운데 있으면 몸 위쪽)
+            let crown = parts.filter { part in
+                let box = part.path.boundingBoxOfPath
+                return part.layer == .base && part.fill && box.minX <= eye.x && box.maxX >= eye.x
+                    && box.minY <= eye.y && box.maxY >= eye.y
+            }.map { $0.path.boundingBoxOfPath.minY }.min() ?? head.minY
+            return HeadAnchor(eye: eye.applying(t), top: CGPoint(x: (head.midX + eye.x) / 2, y: crown).applying(t),
+                              width: head.width * scale, tilt: tilt)
+        }
+        let top = CGPoint(x: bounds.midX + bounds.width * 0.12, y: bounds.minY)
+        let eye = CGPoint(x: top.x + bounds.width * 0.1, y: bounds.minY + bounds.height * 0.28)
+        return HeadAnchor(eye: eye.applying(t), top: top.applying(t), width: bounds.width * 0.45 * scale, tilt: tilt)
+    }
+
     /// 변형한 몸이 `range`(설계 y) 위아래로 나가면 줄이고 옮겨 안에 넣는다.
     mutating func fit(verticallyIn range: ClosedRange<CGFloat>) {
         fit = .identity
